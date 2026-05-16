@@ -11,9 +11,17 @@ import (
 )
 
 type Config struct {
-	APIURL       string `json:"apiUrl"`
-	Token        string `json:"token"`
-	RefreshToken string `json:"refreshToken,omitempty"`
+	APIURL              string `json:"apiUrl"`
+	Token               string `json:"token"`
+	RefreshToken        string `json:"refreshToken,omitempty"`
+	LastProjectID       string `json:"lastProjectId,omitempty"`
+	LastProjectSlug     string `json:"lastProjectSlug,omitempty"`
+	MutagenDestination  string `json:"mutagenDestination,omitempty"`
+	MutagenSessionName  string `json:"mutagenSessionName,omitempty"`
+	LastVMName          string `json:"lastVmName,omitempty"`
+	LastVMHTTPSURL      string `json:"lastVmHttpsUrl,omitempty"`
+	LastVMSshDest       string `json:"lastVmSshDest,omitempty"`
+	ProjectAPIToken     string `json:"projectApiToken,omitempty"`
 }
 
 func Resolve(apiURLFlag, tokenFlag string) (Config, error) {
@@ -23,6 +31,14 @@ func Resolve(apiURLFlag, tokenFlag string) (Config, error) {
 	cfg.APIURL = strings.TrimSpace(fileCfg.APIURL)
 	cfg.Token = strings.TrimSpace(fileCfg.Token)
 	cfg.RefreshToken = strings.TrimSpace(fileCfg.RefreshToken)
+	cfg.LastProjectID = strings.TrimSpace(fileCfg.LastProjectID)
+	cfg.LastProjectSlug = strings.TrimSpace(fileCfg.LastProjectSlug)
+	cfg.MutagenDestination = strings.TrimSpace(fileCfg.MutagenDestination)
+	cfg.MutagenSessionName = strings.TrimSpace(fileCfg.MutagenSessionName)
+	cfg.LastVMName = strings.TrimSpace(fileCfg.LastVMName)
+	cfg.LastVMHTTPSURL = strings.TrimSpace(fileCfg.LastVMHTTPSURL)
+	cfg.LastVMSshDest = strings.TrimSpace(fileCfg.LastVMSshDest)
+	cfg.ProjectAPIToken = strings.TrimSpace(fileCfg.ProjectAPIToken)
 
 	if envAPI := strings.TrimSpace(os.Getenv("EINAR_API_URL")); envAPI != "" {
 		cfg.APIURL = envAPI

@@ -48,12 +48,19 @@ type createProjectRequest struct {
 }
 
 type CreateProjectResponse struct {
-	ProjectID string `json:"projectId"`
-	Name      string `json:"name"`
-	Slug      string `json:"slug"`
-	Path      string `json:"path"`
-	Subdomain string `json:"subdomain"`
-	Status    string `json:"status"`
+	ProjectID          string `json:"projectId"`
+	Name               string `json:"name"`
+	Slug               string `json:"slug"`
+	Path               string `json:"path"`
+	Subdomain          string `json:"subdomain"`
+	Status             string `json:"status"`
+	MutagenDestination string `json:"mutagenDestination,omitempty"`
+	MutagenSessionName string `json:"mutagenSessionName,omitempty"`
+	VMName             string `json:"vmName,omitempty"`
+	VMHTTPSURL         string `json:"vmHttpsUrl,omitempty"`
+	VMSshDest          string `json:"vmSshDest,omitempty"`
+	VMSshPrivateKey    string `json:"vmSshPrivateKey,omitempty"`
+	ProjectAPIToken    string `json:"projectApiToken,omitempty"`
 }
 
 func (c *Client) CreateProject(ctx context.Context, name string) (*CreateProjectResponse, error) {
