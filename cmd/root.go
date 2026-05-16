@@ -13,6 +13,7 @@ var (
 	apiURLFlag string
 	tokenFlag  string
 	jsonOutput bool
+	debugHTTP  bool
 )
 
 var rootCmd = &cobra.Command{
@@ -34,4 +35,5 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&apiURLFlag, "api-url", "", "Base URL de la API (fallback: EINAR_API_URL)")
 	rootCmd.PersistentFlags().StringVar(&tokenFlag, "token", "", "PAT de Einar (fallback: EINAR_TOKEN)")
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Salida JSON")
+	rootCmd.PersistentFlags().BoolVar(&debugHTTP, "debug-http", false, "Imprime detalle de requests/responses HTTP")
 }
