@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,10 +25,11 @@ import (
 )
 
 var (
-	skipMutagenCheck     bool
+	skipMutagenCheck      bool
 	initMutagenDestination string
 	initMutagenName        string
-	skipMutagenStart      bool
+	skipMutagenStart       bool
+	skipAirAutoStart       bool
 )
 
 var initCmd = &cobra.Command{
@@ -103,6 +106,13 @@ var initCmd = &cobra.Command{
 			return fmt.Errorf("no se pudo entrar a la carpeta local del proyecto: %w", err)
 		}
 
+		if err := ensureGoProjectScaffold(strings.TrimSpace(resp.Slug)); err != nil {
+			return fmt.Errorf("no se pudo preparar scaffold Go base: %w", err)
+		}
+		if err := ensureLocalAirConfig(); err != nil {
+			return fmt.Errorf("no se pudo preparar .air.toml base: %w", err)
+		}
+
 		cfg.LastProjectID = strings.TrimSpace(resp.ProjectID)
 		cfg.LastProjectSlug = strings.TrimSpace(resp.Slug)
 		if strings.TrimSpace(resp.MutagenDestination) != "" {
@@ -171,6 +181,11 @@ var initCmd = &cobra.Command{
 				if err := setupAndStartMutagen(&cfg); err != nil {
 					fmt.Printf("⚠️  Mutagen disponible, pero no se pudo auto-configurar/start: %v\n", err)
 					fmt.Printf("   Puedes correr manualmente: %s daemon start && %s project start\n", mutagenHintCommand(), mutagenHintCommand())
+				} else if !skipAirAutoStart {
+					if err := setupAndStartRemoteAir(&cfg); err != nil {
+						fmt.Printf("⚠️  Proyecto creado y sincronizado, pero no se pudo iniciar Air automáticamente: %v\n", err)
+						fmt.Println("   Puedes iniciar manualmente con: einarc dev start (pendiente) o por SSH en la VM")
+					}
 				}
 			}
 		}
@@ -211,6 +226,131 @@ func mapAPIError(err error) string {
 	default:
 		return fmt.Sprintf("Error API (%d): %s", ae.StatusCode, ae.Message)
 	}
+}
+
+func ensureGoProjectScaffold(slug string) error {
+	s := strings.TrimSpace(slug)
+	if s == "" {
+		s = "app"
+	}
+
+	if _, err := os.Stat("go.mod"); os.IsNotExist(err) {
+		goMod := fmt.Sprintf("module %s\n\ngo 1.22\n", s)
+		if werr := os.WriteFile("go.mod", []byte(goMod), 0o644); werr != nil {
+			return werr
+		}
+		fmt.Println("✅ go.mod generado")
+	}
+
+	if _, err := os.Stat("main.go"); os.IsNotExist(err) {
+		mainGo := `package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+)
+
+func main() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8000"
+	}
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "ok: %s\\n", r.URL.Path)
+	})
+
+	addr := ":" + port
+	log.Printf("server listening on %s", addr)
+	if err := http.ListenAndServe(addr, nil); err != nil {
+		log.Fatal(err)
+	}
+}
+`
+		if werr := os.WriteFile("main.go", []byte(mainGo), 0o644); werr != nil {
+			return werr
+		}
+		fmt.Println("✅ main.go generado")
+	}
+
+	return nil
+}
+
+func airTomlContent() string {
+	return `root = "."
+
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/main ."
+  bin = "./tmp/main"
+  include_ext = ["go", "tpl", "tmpl", "html"]
+  exclude_dir = ["assets", "tmp", "vendor", "node_modules", ".git", ".einar"]
+  delay = 500
+
+[log]
+  time = true
+`
+}
+
+func ensureLocalAirConfig() error {
+	if _, err := os.Stat(".air.toml"); err == nil {
+		return nil
+	}
+	if err := os.WriteFile(".air.toml", []byte(airTomlContent()), 0o644); err != nil {
+		return err
+	}
+	fmt.Println("✅ .air.toml generado")
+	return nil
+}
+
+func setupAndStartRemoteAir(cfg *config.Config) error {
+	if err := ensureLocalAirConfig(); err != nil {
+		return err
+	}
+	destination := strings.TrimSpace(initMutagenDestination)
+	if destination == "" {
+		destination = strings.TrimSpace(cfg.MutagenDestination)
+	}
+	destination = normalizeMutagenDestinationForProject(destination)
+	target, remotePath, ok := sshTargetAndPathFromMutagenDestination(destination)
+	if !ok {
+		return fmt.Errorf("no se pudo resolver destino remoto para air")
+	}
+
+	installCmd := `if ! command -v go >/dev/null 2>&1; then echo "missing go"; exit 21; fi; if ! command -v air >/dev/null 2>&1 && [ ! -x "$HOME/go/bin/air" ]; then go install github.com/air-verse/air@latest; fi; if command -v air >/dev/null 2>&1; then echo "air ready: $(command -v air)"; elif [ -x "$HOME/go/bin/air" ]; then echo "air ready: $HOME/go/bin/air"; else echo "missing air after install"; exit 22; fi`
+	msg, err := runSSHScript(target, installCmd)
+	if err != nil {
+		if msg != "" {
+			if strings.Contains(msg, "missing go") {
+				return fmt.Errorf("la VM no tiene Go instalado; instala Go y reintenta")
+			}
+			return fmt.Errorf("falló instalación/verificación de air: %s", msg)
+		}
+		return fmt.Errorf("falló instalación/verificación de air: %w", err)
+	}
+
+	remoteEnsureAirToml := fmt.Sprintf("cd %q && if [ ! -f .air.toml ]; then cat > .air.toml <<'EOF'\n%s\nEOF\n echo 'generated .air.toml remotely'; fi", remotePath, airTomlContent())
+	msg, err = runSSHScript(target, remoteEnsureAirToml)
+	if err != nil {
+		if msg != "" {
+			return fmt.Errorf("falló preparación remota de .air.toml: %s", msg)
+		}
+		return fmt.Errorf("falló preparación remota de .air.toml: %w", err)
+	}
+
+	startCmd := fmt.Sprintf(`cd %q && mkdir -p tmp && AIR_BIN="$(command -v air || echo $HOME/go/bin/air)" && if [ ! -f .air.toml ]; then echo "missing .air.toml"; exit 12; fi && if [ -f .air.pid ] && kill -0 "$(cat .air.pid)" 2>/dev/null; then echo "air ya corriendo"; exit 0; fi && nohup "$AIR_BIN" -c .air.toml > .air.log 2>&1 & echo $! > .air.pid && sleep 1 && if [ -f .air.pid ] && kill -0 "$(cat .air.pid)" 2>/dev/null; then echo "air started pid=$(cat .air.pid)"; else echo "air exited"; tail -n 120 .air.log 2>/dev/null || true; exit 13; fi`, remotePath)
+	msg, err = runSSHScript(target, startCmd)
+	if err != nil {
+		if msg != "" {
+			return fmt.Errorf("falló inicio de air remoto: %s", msg)
+		}
+		return fmt.Errorf("falló inicio de air remoto: %w", err)
+	}
+	fmt.Printf("✅ Air iniciado automáticamente en %s:%s\n", target, remotePath)
+	return nil
 }
 
 func ensureMutagenOnWindows() error {
@@ -287,7 +427,9 @@ func setupAndStartMutagen(cfg *config.Config) error {
 		sessionName = strings.TrimSpace(cfg.MutagenSessionName)
 	}
 	if sessionName == "" {
-		sessionName = "dev-sync"
+		sessionName = defaultMutagenSessionName(cfg.LastProjectSlug)
+		cfg.MutagenSessionName = sessionName
+		_ = config.Save(*cfg)
 	}
 
 	if _, err := os.Stat("mutagen.yml"); os.IsNotExist(err) {
@@ -355,6 +497,9 @@ func setupAndStartMutagen(cfg *config.Config) error {
 		lowOut := strings.ToLower(output)
 		if strings.Contains(lowOut, "project already running") {
 			fmt.Println("✅ Mutagen ya estaba corriendo para este proyecto")
+			if err := ensureInitialSyncHealthy(mutagenBin, sessionName, destination); err != nil {
+				fmt.Printf("⚠️  Sync aún no está saludable (continuando): %v\n", err)
+			}
 			return nil
 		}
 		if strings.Contains(lowOut, "unable to connect to daemon") || strings.Contains(lowOut, "connection timed out") {
@@ -386,6 +531,9 @@ func setupAndStartMutagen(cfg *config.Config) error {
 				fmt.Println(rMsg)
 			}
 			fmt.Println("✅ Mutagen sync iniciado (mutagen project start)")
+			if err := ensureInitialSyncHealthy(mutagenBin, sessionName, destination); err != nil {
+				fmt.Printf("⚠️  Sync aún no está saludable (continuando): %v\n", err)
+			}
 			printMutagenPostInitChecklist(destination, sessionName)
 			return nil
 		}
@@ -398,6 +546,9 @@ func setupAndStartMutagen(cfg *config.Config) error {
 		fmt.Println(output)
 	}
 	fmt.Println("✅ Mutagen sync iniciado (mutagen project start)")
+	if err := ensureInitialSyncHealthy(mutagenBin, sessionName, destination); err != nil {
+		fmt.Printf("⚠️  Sync aún no está saludable (continuando): %v\n", err)
+	}
 	printMutagenPostInitChecklist(destination, sessionName)
 	return nil
 }
@@ -428,6 +579,94 @@ func mutagenHintCommand() string {
 		return p
 	}
 	return "mutagen"
+}
+
+func defaultMutagenSessionName(slug string) string {
+	s := strings.TrimSpace(slug)
+	if s == "" {
+		s = "project"
+	}
+	s = strings.ToLower(s)
+	s = strings.ReplaceAll(s, " ", "-")
+	s = strings.ReplaceAll(s, "_", "-")
+	if len(s) > 30 {
+		s = s[:30]
+	}
+	b := make([]byte, 3)
+	if _, err := rand.Read(b); err != nil {
+		return "dev-sync-" + s
+	}
+	return fmt.Sprintf("dev-sync-%s-%s", s, hex.EncodeToString(b))
+}
+
+func ensureInitialSyncHealthy(mutagenBin, sessionName, destination string) error {
+	fmt.Println("🔄 Verificando sincronización inicial...")
+	target, remotePath, ok := sshTargetAndPathFromMutagenDestination(destination)
+	if !ok {
+		return fmt.Errorf("no se pudo resolver destino remoto de mutagen")
+	}
+
+	maxAttempts := 3
+	for i := 1; i <= maxAttempts; i++ {
+		flush := exec.Command(mutagenBin, "sync", "flush", sessionName)
+		if out, err := flush.CombinedOutput(); err != nil {
+			msg := strings.TrimSpace(string(out))
+			if msg != "" {
+				fmt.Printf("⚠️  flush intento %d/%d: %s\n", i, maxAttempts, msg)
+			}
+		} else {
+			_ = out
+		}
+
+		if err := remoteFilesPresent(target, remotePath, []string{"main.go", ".air.toml"}); err == nil {
+			fmt.Println("✅ Sync healthy: archivos críticos presentes en VM")
+			return nil
+		} else {
+			fmt.Printf("⚠️  Verificación remota intento %d/%d: %v\n", i, maxAttempts, err)
+		}
+		time.Sleep(time.Duration(i) * time.Second)
+	}
+
+	return fmt.Errorf("sync no quedó saludable tras reintentos (faltan archivos críticos en VM)")
+}
+
+func remoteFilesPresent(target, remotePath string, files []string) error {
+	names := make([]string, 0, len(files))
+	for _, f := range files {
+		name := strings.TrimSpace(f)
+		if name == "" {
+			continue
+		}
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return nil
+	}
+
+	cleanRoot := strings.TrimSpace(remotePath)
+	cleanRoot = strings.TrimSuffix(cleanRoot, "/")
+	if cleanRoot == "" {
+		cleanRoot = "/"
+	}
+
+	checks := make([]string, 0, len(names))
+	for _, n := range names {
+		abs := cleanRoot + "/" + strings.TrimPrefix(n, "/")
+		checks = append(checks, fmt.Sprintf("if [ ! -f %q ]; then echo missing:%q; fi", abs, n))
+	}
+	cmdText := fmt.Sprintf("%s; ls -la %q", strings.Join(checks, "; "), cleanRoot)
+	msg, err := runSSHScript(target, cmdText)
+	if err != nil {
+		if msg != "" {
+			return fmt.Errorf("remote check error (%s): %s", cleanRoot, msg)
+		}
+		return err
+	}
+
+	if strings.Contains(msg, "missing:") {
+		return fmt.Errorf("archivos críticos faltantes en VM (%s:%s):\n%s", target, cleanRoot, msg)
+	}
+	return nil
 }
 
 func ensureSSHTrustInteractive(destination string) error {
@@ -532,9 +771,8 @@ func ensureRemoteMutagenRoot(destination string) error {
 	if remotePath == "" || remotePath == "/" {
 		return nil
 	}
-	mkdir := exec.Command("ssh", target, "mkdir", "-p", remotePath)
-	if out, err := mkdir.CombinedOutput(); err != nil {
-		msg := strings.TrimSpace(string(out))
+	msg, err := runSSHScript(target, fmt.Sprintf("mkdir -p %q", remotePath))
+	if err != nil {
 		if msg != "" {
 			return fmt.Errorf("no se pudo crear carpeta remota %s en %s: %s", remotePath, target, msg)
 		}
@@ -793,7 +1031,8 @@ func resolveLatestMutagenAssetURL() (string, error) {
 func init() {
 	initCmd.Flags().BoolVar(&skipMutagenCheck, "skip-mutagen-check", false, "No verifica/instala Mutagen automáticamente")
 	initCmd.Flags().StringVar(&initMutagenDestination, "mutagen-destination", "", "Destino remoto Mutagen (ej: docker://mi-contenedor/var/www)")
-	initCmd.Flags().StringVar(&initMutagenName, "mutagen-name", "dev-sync", "Nombre de sesión en mutagen.yml")
+	initCmd.Flags().StringVar(&initMutagenName, "mutagen-name", "", "Nombre de sesión en mutagen.yml (por defecto: dev-sync-<slug>-<shortid>)")
 	initCmd.Flags().BoolVar(&skipMutagenStart, "skip-mutagen-start", false, "No ejecuta 'mutagen project start'")
+	initCmd.Flags().BoolVar(&skipAirAutoStart, "skip-air-auto-start", false, "No inicia Air automáticamente en la VM")
 	rootCmd.AddCommand(initCmd)
 }
