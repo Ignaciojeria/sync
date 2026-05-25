@@ -172,6 +172,13 @@ var initCmd = &cobra.Command{
 			fmt.Printf("Mutagen destination: %s\n", cfg.MutagenDestination)
 		}
 
+		airStarted := false
+		mutagenReady := false
+		httpChecked := false
+		httpReady := false
+		httpCode := 0
+		var airErr error
+
 		if !skipMutagenCheck {
 			if err := ensureMutagenOnWindows(); err != nil {
 				fmt.Printf("⚠️  Proyecto creado, pero no se pudo verificar/instalar Mutagen: %v\n", err)
@@ -181,13 +188,94 @@ var initCmd = &cobra.Command{
 				if err := setupAndStartMutagen(&cfg); err != nil {
 					fmt.Printf("⚠️  Mutagen disponible, pero no se pudo auto-configurar/start: %v\n", err)
 					fmt.Printf("   Puedes correr manualmente: %s daemon start && %s project start\n", mutagenHintCommand(), mutagenHintCommand())
-				} else if !skipAirAutoStart {
-					if err := setupAndStartRemoteAir(&cfg); err != nil {
-						fmt.Printf("⚠️  Proyecto creado y sincronizado, pero no se pudo iniciar Air automáticamente: %v\n", err)
-						fmt.Println("   Puedes iniciar manualmente con: einarc dev start (pendiente) o por SSH en la VM")
+				} else {
+					mutagenReady = true
+					if !skipAirAutoStart {
+						fmt.Println("🚀 Iniciando Air (mandatorio)...")
+						maxAirAttempts := 6
+						for i := 1; i <= maxAirAttempts; i++ {
+							if i == 1 {
+								fmt.Println("ℹ️  Preparando/verificando Air en VM...")
+							}
+							if err := setupAndStartRemoteAir(&cfg); err != nil {
+								airErr = err
+								errMsg := strings.ToLower(err.Error())
+								if strings.Contains(errMsg, "downloading") || strings.Contains(errMsg, "timeout") {
+									fmt.Printf("ℹ️  Air intento %d/%d: aún preparando dependencias (%v)\n", i, maxAirAttempts, err)
+								} else {
+									fmt.Printf("⚠️  Air intento %d/%d: %v\n", i, maxAirAttempts, err)
+								}
+								time.Sleep(time.Duration(i) * 2 * time.Second)
+								continue
+							}
+							airStarted = true
+							fmt.Println("✅ Air iniciado")
+							break
+						}
+						if !airStarted {
+							fmt.Println("❌ No se pudo iniciar Air automáticamente tras varios intentos")
+							fmt.Println("   Revisa logs con: einarc dev logs -f")
+						}
 					}
 				}
 			}
+		}
+
+		if strings.TrimSpace(cfg.LastVMHTTPSURL) != "" {
+			httpChecked = true
+			if airStarted {
+				fmt.Printf("🌐 Verificando endpoint HTTP: %s\n", strings.TrimSpace(cfg.LastVMHTTPSURL))
+				if code, err := waitForHTTPReady(strings.TrimSpace(cfg.LastVMHTTPSURL), 45*time.Second); err != nil {
+					if code > 0 {
+						httpCode = code
+					}
+					fmt.Printf("⚠️  HTTP aún no listo: %v\n", err)
+					fmt.Println("   Puedes revisar con: einarc dev logs -f")
+				} else {
+					httpReady = true
+					httpCode = code
+					fmt.Printf("✅ App lista (%d): %s\n", code, strings.TrimSpace(cfg.LastVMHTTPSURL))
+				}
+			} else {
+				fmt.Printf("⚠️  HTTP no verificable porque Air no inició: %s\n", strings.TrimSpace(cfg.LastVMHTTPSURL))
+			}
+		}
+
+		fmt.Println("\n📌 Resumen final")
+		if mutagenReady {
+			fmt.Println("   - Sync: ✅")
+		} else if skipMutagenCheck {
+			fmt.Println("   - Sync: ⏭️  omitido (--skip-mutagen-check)")
+		} else {
+			fmt.Println("   - Sync: ⚠️")
+		}
+		if airStarted {
+			fmt.Println("   - Air: ✅")
+		} else if skipAirAutoStart {
+			fmt.Println("   - Air: ⏭️  omitido (--skip-air-auto-start)")
+		} else {
+			fmt.Println("   - Air: ⚠️")
+		}
+		if !httpChecked {
+			fmt.Println("   - HTTP: ⏭️  sin URL")
+		} else if httpReady {
+			fmt.Printf("   - HTTP: ✅ (%d)\n", httpCode)
+		} else if httpCode > 0 {
+			fmt.Printf("   - HTTP: ⚠️  (%d)\n", httpCode)
+		} else {
+			fmt.Println("   - HTTP: ⚠️")
+		}
+		if strings.TrimSpace(cfg.LastVMHTTPSURL) != "" {
+			fmt.Printf("   - URL: %s\n", strings.TrimSpace(cfg.LastVMHTTPSURL))
+		}
+		if !airStarted || !httpReady {
+			fmt.Println("   - Siguiente paso: einarc dev logs -f")
+		}
+		if !skipAirAutoStart && !airStarted {
+			if airErr != nil {
+				return fmt.Errorf("init incompleto: Air es mandatorio y no inició (%v)", airErr)
+			}
+			return fmt.Errorf("init incompleto: Air es mandatorio y no inició")
 		}
 		return nil
 	},
@@ -321,7 +409,7 @@ func setupAndStartRemoteAir(cfg *config.Config) error {
 	}
 
 	installCmd := `if ! command -v go >/dev/null 2>&1; then echo "missing go"; exit 21; fi; if ! command -v air >/dev/null 2>&1 && [ ! -x "$HOME/go/bin/air" ]; then go install github.com/air-verse/air@latest; fi; if command -v air >/dev/null 2>&1; then echo "air ready: $(command -v air)"; elif [ -x "$HOME/go/bin/air" ]; then echo "air ready: $HOME/go/bin/air"; else echo "missing air after install"; exit 22; fi`
-	msg, err := runSSHScript(target, installCmd)
+	msg, err := runSSHScriptWithTimeout(target, installCmd, 4*time.Minute)
 	if err != nil {
 		if msg != "" {
 			if strings.Contains(msg, "missing go") {
@@ -333,7 +421,7 @@ func setupAndStartRemoteAir(cfg *config.Config) error {
 	}
 
 	remoteEnsureAirToml := fmt.Sprintf("cd %q && if [ ! -f .air.toml ]; then cat > .air.toml <<'EOF'\n%s\nEOF\n echo 'generated .air.toml remotely'; fi", remotePath, airTomlContent())
-	msg, err = runSSHScript(target, remoteEnsureAirToml)
+	msg, err = runSSHScriptWithTimeout(target, remoteEnsureAirToml, 45*time.Second)
 	if err != nil {
 		if msg != "" {
 			return fmt.Errorf("falló preparación remota de .air.toml: %s", msg)
@@ -342,8 +430,14 @@ func setupAndStartRemoteAir(cfg *config.Config) error {
 	}
 
 	startCmd := fmt.Sprintf(`cd %q && mkdir -p tmp && AIR_BIN="$(command -v air || echo $HOME/go/bin/air)" && if [ ! -f .air.toml ]; then echo "missing .air.toml"; exit 12; fi && if [ -f .air.pid ] && kill -0 "$(cat .air.pid)" 2>/dev/null; then echo "air ya corriendo"; exit 0; fi && nohup "$AIR_BIN" -c .air.toml > .air.log 2>&1 & echo $! > .air.pid && sleep 1 && if [ -f .air.pid ] && kill -0 "$(cat .air.pid)" 2>/dev/null; then echo "air started pid=$(cat .air.pid)"; else echo "air exited"; tail -n 120 .air.log 2>/dev/null || true; exit 13; fi`, remotePath)
-	msg, err = runSSHScript(target, startCmd)
+	msg, err = runSSHScriptWithTimeout(target, startCmd, 60*time.Second)
 	if err != nil {
+		low := strings.ToLower(msg)
+		if strings.Contains(low, "air started pid=") || strings.Contains(low, "air ya corriendo") {
+			fmt.Printf("ℹ️  Air reportó estado saludable: %s\n", msg)
+			fmt.Printf("✅ Air iniciado automáticamente en %s:%s\n", target, remotePath)
+			return nil
+		}
 		if msg != "" {
 			return fmt.Errorf("falló inicio de air remoto: %s", msg)
 		}
@@ -534,7 +628,7 @@ func setupAndStartMutagen(cfg *config.Config) error {
 			if err := ensureInitialSyncHealthy(mutagenBin, sessionName, destination); err != nil {
 				fmt.Printf("⚠️  Sync aún no está saludable (continuando): %v\n", err)
 			}
-			printMutagenPostInitChecklist(destination, sessionName)
+			printMutagenPostInitChecklist(destination, sessionName, strings.TrimSpace(cfg.LastVMHTTPSURL))
 			return nil
 		}
 		if output != "" {
@@ -549,11 +643,11 @@ func setupAndStartMutagen(cfg *config.Config) error {
 	if err := ensureInitialSyncHealthy(mutagenBin, sessionName, destination); err != nil {
 		fmt.Printf("⚠️  Sync aún no está saludable (continuando): %v\n", err)
 	}
-	printMutagenPostInitChecklist(destination, sessionName)
+	printMutagenPostInitChecklist(destination, sessionName, strings.TrimSpace(cfg.LastVMHTTPSURL))
 	return nil
 }
 
-func printMutagenPostInitChecklist(destination, sessionName string) {
+func printMutagenPostInitChecklist(destination, sessionName, vmURL string) {
 	target, remotePath, ok := sshTargetAndPathFromMutagenDestination(destination)
 	if !ok {
 		fmt.Println("ℹ️  Verificación manual sugerida: mutagen sync list --long")
@@ -568,6 +662,9 @@ func printMutagenPostInitChecklist(destination, sessionName string) {
 	fmt.Printf("   - Destino remoto: %s:%s\n", target, remotePath)
 	fmt.Printf("   - Estado: ejecuta '%s sync list --long'\n", hint)
 	fmt.Printf("   - VM check: ssh %s \"ls -la %s\"\n", target, remotePath)
+	if strings.TrimSpace(vmURL) != "" {
+		fmt.Printf("   - HTTP check: curl -I %s\n", strings.TrimSpace(vmURL))
+	}
 }
 
 func mutagenHintCommand() string {
@@ -667,6 +764,36 @@ func remoteFilesPresent(target, remotePath string, files []string) error {
 		return fmt.Errorf("archivos críticos faltantes en VM (%s:%s):\n%s", target, cleanRoot, msg)
 	}
 	return nil
+}
+
+func waitForHTTPReady(url string, timeout time.Duration) (int, error) {
+	deadline := time.Now().Add(timeout)
+	client := &http.Client{Timeout: 5 * time.Second}
+	lastErr := ""
+	lastCode := 0
+
+	for time.Now().Before(deadline) {
+		resp, err := client.Get(url)
+		if err == nil {
+			lastCode = resp.StatusCode
+			_ = resp.Body.Close()
+			if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+				return resp.StatusCode, nil
+			}
+			lastErr = fmt.Sprintf("status HTTP %d", resp.StatusCode)
+		} else {
+			lastErr = err.Error()
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	if lastCode != 0 {
+		return lastCode, fmt.Errorf("timeout esperando 2xx/3xx (último status: %d)", lastCode)
+	}
+	if strings.TrimSpace(lastErr) == "" {
+		lastErr = "sin respuesta"
+	}
+	return 0, fmt.Errorf("timeout esperando respuesta HTTP (%s)", lastErr)
 }
 
 func ensureSSHTrustInteractive(destination string) error {
