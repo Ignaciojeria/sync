@@ -170,7 +170,7 @@ var initCmd = &cobra.Command{
 				fmt.Println("✅ Mutagen disponible en esta máquina")
 				if err := setupAndStartMutagen(&cfg); err != nil {
 					fmt.Printf("⚠️  Mutagen disponible, pero no se pudo auto-configurar/start: %v\n", err)
-					fmt.Println("   Puedes correr manualmente: .einar\\bin\\mutagen.exe daemon start && .einar\\bin\\mutagen.exe project start")
+					fmt.Printf("   Puedes correr manualmente: %s daemon start && %s project start\n", mutagenHintCommand(), mutagenHintCommand())
 				}
 			}
 		}
@@ -411,11 +411,23 @@ func printMutagenPostInitChecklist(destination, sessionName string) {
 	if strings.TrimSpace(sessionName) == "" {
 		sessionName = "dev-sync"
 	}
+	hint := mutagenHintCommand()
 	fmt.Println("📋 Checklist de verificación")
 	fmt.Printf("   - Sesión: %s\n", sessionName)
 	fmt.Printf("   - Destino remoto: %s:%s\n", target, remotePath)
-	fmt.Printf("   - Estado: ejecuta '.einar/bin/mutagen sync list --long' (o '.einar\\bin\\mutagen.exe sync list --long' en Windows)\n")
+	fmt.Printf("   - Estado: ejecuta '%s sync list --long'\n", hint)
 	fmt.Printf("   - VM check: ssh %s \"ls -la %s\"\n", target, remotePath)
+}
+
+func mutagenHintCommand() string {
+	p, err := localMutagenPath()
+	if err == nil && strings.TrimSpace(p) != "" {
+		if runtime.GOOS == "windows" {
+			return p
+		}
+		return p
+	}
+	return "mutagen"
 }
 
 func ensureSSHTrustInteractive(destination string) error {
@@ -620,13 +632,23 @@ func resolveMutagenBinary() (string, error) {
 }
 
 func localMutagenPath() (string, error) {
-	cfgPath, err := config.ConfigPath()
-	if err != nil {
-		return "", err
-	}
 	binName := "mutagen"
 	if runtime.GOOS == "windows" {
 		binName = "mutagen.exe"
+	}
+	// Binario compartido junto al CLI (no por proyecto)
+	exePath, err := os.Executable()
+	if err == nil && strings.TrimSpace(exePath) != "" {
+		exeDir := filepath.Dir(exePath)
+		if strings.TrimSpace(exeDir) != "" {
+			return filepath.Join(exeDir, ".einar", "bin", binName), nil
+		}
+	}
+
+	// Fallback defensivo al esquema local si no se puede resolver el ejecutable.
+	cfgPath, err := config.ConfigPath()
+	if err != nil {
+		return "", err
 	}
 	return filepath.Join(filepath.Dir(cfgPath), "bin", binName), nil
 }
