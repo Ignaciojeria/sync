@@ -170,7 +170,7 @@ var initCmd = &cobra.Command{
 				fmt.Println("✅ Mutagen disponible en esta máquina")
 				if err := setupAndStartMutagen(&cfg); err != nil {
 					fmt.Printf("⚠️  Mutagen disponible, pero no se pudo auto-configurar/start: %v\n", err)
-					fmt.Println("   Puedes correr manualmente: einarc mutagen --destination <destino> && mutagen project start")
+					fmt.Println("   Puedes correr manualmente: .einar\\bin\\mutagen.exe daemon start && .einar\\bin\\mutagen.exe project start")
 				}
 			}
 		}
@@ -295,6 +295,7 @@ func setupAndStartMutagen(cfg *config.Config) error {
 			return fmt.Errorf("falta destino mutagen (usa --mutagen-destination o configura PROJECTS_SYNC_SSH_* en backend)")
 		}
 		destination = normalizeMutagenDestinationForProject(destination)
+		fmt.Printf("ℹ️  Mutagen destination normalizado: %s\n", destination)
 		alpha := "."
 		if runtime.GOOS != "windows" {
 			source, err := os.Getwd()
@@ -337,6 +338,12 @@ func setupAndStartMutagen(cfg *config.Config) error {
 	if err := ensureSSHTrustInteractive(destination); err != nil {
 		return err
 	}
+	if err := preflightSSHConnection(destination); err != nil {
+		return err
+	}
+	if err := ensureRemoteMutagenRoot(destination); err != nil {
+		return err
+	}
 
 	// Evita usar un daemon viejo iniciado con otro binario/carpeta de agentes.
 	_ = exec.Command(mutagenBin, "daemon", "stop").Run()
@@ -345,8 +352,41 @@ func setupAndStartMutagen(cfg *config.Config) error {
 	out, err := cmd.CombinedOutput()
 	output := strings.TrimSpace(string(out))
 	if err != nil {
-		if strings.Contains(strings.ToLower(output), "project already running") {
+		lowOut := strings.ToLower(output)
+		if strings.Contains(lowOut, "project already running") {
 			fmt.Println("✅ Mutagen ya estaba corriendo para este proyecto")
+			return nil
+		}
+		if strings.Contains(lowOut, "unable to connect to daemon") || strings.Contains(lowOut, "connection timed out") {
+			fmt.Println("ℹ️  Reintentando: iniciando daemon Mutagen y relanzando project start...")
+			startDaemon := exec.Command(mutagenBin, "daemon", "start")
+			if dOut, dErr := startDaemon.CombinedOutput(); dErr != nil {
+				daemonMsg := strings.TrimSpace(string(dOut))
+				if daemonMsg != "" {
+					fmt.Println(daemonMsg)
+				}
+				if output != "" {
+					fmt.Println(output)
+				}
+				return dErr
+			}
+			retry := exec.Command(mutagenBin, "project", "start")
+			rOut, rErr := retry.CombinedOutput()
+			rMsg := strings.TrimSpace(string(rOut))
+			if rErr != nil {
+				if rMsg != "" {
+					fmt.Println(rMsg)
+				}
+				if output != "" {
+					fmt.Println(output)
+				}
+				return rErr
+			}
+			if rMsg != "" {
+				fmt.Println(rMsg)
+			}
+			fmt.Println("✅ Mutagen sync iniciado (mutagen project start)")
+			printMutagenPostInitChecklist(destination, sessionName)
 			return nil
 		}
 		if output != "" {
@@ -358,7 +398,24 @@ func setupAndStartMutagen(cfg *config.Config) error {
 		fmt.Println(output)
 	}
 	fmt.Println("✅ Mutagen sync iniciado (mutagen project start)")
+	printMutagenPostInitChecklist(destination, sessionName)
 	return nil
+}
+
+func printMutagenPostInitChecklist(destination, sessionName string) {
+	target, remotePath, ok := sshTargetAndPathFromMutagenDestination(destination)
+	if !ok {
+		fmt.Println("ℹ️  Verificación manual sugerida: mutagen sync list --long")
+		return
+	}
+	if strings.TrimSpace(sessionName) == "" {
+		sessionName = "dev-sync"
+	}
+	fmt.Println("📋 Checklist de verificación")
+	fmt.Printf("   - Sesión: %s\n", sessionName)
+	fmt.Printf("   - Destino remoto: %s:%s\n", target, remotePath)
+	fmt.Printf("   - Estado: ejecuta '.einar/bin/mutagen sync list --long' (o '.einar\\bin\\mutagen.exe sync list --long' en Windows)\n")
+	fmt.Printf("   - VM check: ssh %s \"ls -la %s\"\n", target, remotePath)
 }
 
 func ensureSSHTrustInteractive(destination string) error {
@@ -391,63 +448,163 @@ func ensureSSHTrustInteractive(destination string) error {
 }
 
 func sshTargetFromMutagenDestination(destination string) (string, bool) {
+	target, _, ok := sshTargetAndPathFromMutagenDestination(destination)
+	return target, ok
+}
+
+func sshTargetAndPathFromMutagenDestination(destination string) (string, string, bool) {
 	d := strings.TrimSpace(destination)
 	if d == "" {
-		return "", false
+		return "", "", false
 	}
 	if strings.HasPrefix(strings.ToLower(d), "ssh://") {
 		u, err := url.Parse(d)
 		if err != nil || u.Host == "" {
-			return "", false
+			return "", "", false
 		}
 		host := u.Hostname()
 		if host == "" {
-			return "", false
+			return "", "", false
 		}
 		user := ""
 		if u.User != nil {
 			user = u.User.Username()
 		}
-		if user != "" {
-			return user + "@" + host, true
+		remotePath := u.Path
+		if strings.TrimSpace(remotePath) == "" {
+			remotePath = "/"
 		}
-		return host, true
+		if user != "" {
+			return user + "@" + host, remotePath, true
+		}
+		return host, remotePath, true
 	}
 	if strings.Contains(d, "@") && strings.Contains(d, ":") {
 		parts := strings.SplitN(d, ":", 2)
-		if strings.TrimSpace(parts[0]) == "" {
-			return "", false
+		target := strings.TrimSpace(parts[0])
+		remotePath := strings.TrimSpace(parts[1])
+		if target == "" {
+			return "", "", false
 		}
-		return strings.TrimSpace(parts[0]), true
+		if remotePath == "" {
+			remotePath = "/"
+		}
+		return target, remotePath, true
 	}
-	return "", false
+	return "", "", false
+}
+
+func preflightSSHConnection(destination string) error {
+	target, _, ok := sshTargetAndPathFromMutagenDestination(destination)
+	if !ok {
+		return nil
+	}
+	check := exec.Command("ssh", "-o", "BatchMode=yes", target, "echo", "ok")
+	if out, err := check.CombinedOutput(); err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg != "" {
+			return fmt.Errorf("SSH no disponible para %s: %s", target, msg)
+		}
+		return fmt.Errorf("SSH no disponible para %s: %w", target, err)
+	}
+	fmt.Printf("✅ SSH operativo: %s\n", target)
+	return nil
+}
+
+func ensureRemoteMutagenRoot(destination string) error {
+	target, remotePath, ok := sshTargetAndPathFromMutagenDestination(destination)
+	if !ok {
+		return nil
+	}
+	remotePath = strings.TrimSpace(remotePath)
+	if remotePath == "" || remotePath == "/" {
+		return nil
+	}
+	mkdir := exec.Command("ssh", target, "mkdir", "-p", remotePath)
+	if out, err := mkdir.CombinedOutput(); err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg != "" {
+			return fmt.Errorf("no se pudo crear carpeta remota %s en %s: %s", remotePath, target, msg)
+		}
+		return fmt.Errorf("no se pudo crear carpeta remota %s en %s: %w", remotePath, target, err)
+	}
+	fmt.Printf("✅ Carpeta remota lista: %s (%s)\n", remotePath, target)
+	return nil
 }
 
 func normalizeMutagenDestinationForProject(raw string) string {
 	v := strings.TrimSpace(raw)
-	if !strings.HasPrefix(strings.ToLower(v), "ssh://") {
+	if v == "" {
 		return v
 	}
-	u, err := url.Parse(v)
-	if err != nil || u.Host == "" {
-		return v
+
+	// Soporte ssh://user@host/path -> user@host:/path
+	if strings.HasPrefix(strings.ToLower(v), "ssh://") {
+		u, err := url.Parse(v)
+		if err != nil || u.Host == "" {
+			return v
+		}
+		host := u.Hostname()
+		if host == "" {
+			return v
+		}
+		user := ""
+		if u.User != nil {
+			user = u.User.Username()
+		}
+		remotePath := u.EscapedPath()
+		if remotePath == "" {
+			remotePath = "/"
+		}
+		user, remotePath = normalizeExeDevRemoteTarget(user, remotePath)
+		if user != "" {
+			return fmt.Sprintf("%s@%s:%s", user, host, remotePath)
+		}
+		return fmt.Sprintf("%s:%s", host, remotePath)
 	}
-	host := u.Hostname()
-	if host == "" {
-		return v
+
+	// Soporte user@host:/path (SCP-style)
+	if strings.Contains(v, "@") && strings.Contains(v, ":") {
+		parts := strings.SplitN(v, ":", 2)
+		left := strings.TrimSpace(parts[0])
+		remotePath := strings.TrimSpace(parts[1])
+		if left == "" || remotePath == "" {
+			return v
+		}
+		user := ""
+		host := left
+		if at := strings.Index(left, "@"); at >= 0 {
+			user = strings.TrimSpace(left[:at])
+			host = strings.TrimSpace(left[at+1:])
+		}
+		if host == "" {
+			return v
+		}
+		user, remotePath = normalizeExeDevRemoteTarget(user, remotePath)
+		if user != "" {
+			return fmt.Sprintf("%s@%s:%s", user, host, remotePath)
+		}
+		return fmt.Sprintf("%s:%s", host, remotePath)
 	}
-	user := ""
-	if u.User != nil {
-		user = u.User.Username()
+
+	return v
+}
+
+func normalizeExeDevRemoteTarget(user, remotePath string) (string, string) {
+	p := strings.TrimSpace(remotePath)
+	if p == "" {
+		return user, remotePath
 	}
-	path := u.EscapedPath()
-	if path == "" {
-		path = "/"
+	// Estandarizamos proyectos en /home/exedev/workspace/<slug> cuando backend devuelve /app/projects/<slug>
+	if strings.HasPrefix(p, "/app/projects/") {
+		slug := strings.TrimPrefix(p, "/app/projects/")
+		slug = strings.Trim(slug, "/")
+		if slug == "" {
+			return "exedev", "/home/exedev/workspace"
+		}
+		return "exedev", "/home/exedev/workspace/" + slug
 	}
-	if user != "" {
-		return fmt.Sprintf("%s@%s:%s", user, host, path)
-	}
-	return fmt.Sprintf("%s:%s", host, path)
+	return user, remotePath
 }
 
 func resolveMutagenBinary() (string, error) {
