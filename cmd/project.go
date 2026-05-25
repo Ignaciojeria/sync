@@ -54,7 +54,7 @@ var initCmd = &cobra.Command{
 			fmt.Println("[debug] HTTP request")
 			fmt.Printf("[debug] POST %s/api/projects\n", cfg.APIURL)
 			fmt.Printf("[debug] Authorization: Bearer %s\n", config.MaskToken(cfg.Token))
-			fmt.Printf("[debug] Body: {\"name\":%q}\n", name)
+			fmt.Printf("[debug] Body: {\"name\":%q,\"public\":true,\"visibility\":\"public\"}\n", name)
 		}
 
 		client := api.NewClient(cfg.APIURL, cfg.Token, 10*time.Second)
@@ -225,7 +225,7 @@ var initCmd = &cobra.Command{
 			httpChecked = true
 			if airStarted {
 				fmt.Printf("🌐 Verificando endpoint HTTP: %s\n", strings.TrimSpace(cfg.LastVMHTTPSURL))
-				if code, err := waitForHTTPReady(strings.TrimSpace(cfg.LastVMHTTPSURL), 45*time.Second); err != nil {
+				if code, err := waitForHTTPReady(strings.TrimSpace(cfg.LastVMHTTPSURL), 20*time.Second); err != nil {
 					if code > 0 {
 						httpCode = code
 					}
@@ -780,11 +780,14 @@ func waitForHTTPReady(url string, timeout time.Duration) (int, error) {
 			if resp.StatusCode >= 200 && resp.StatusCode < 400 {
 				return resp.StatusCode, nil
 			}
+			if resp.StatusCode == 401 || resp.StatusCode == 403 {
+				return resp.StatusCode, fmt.Errorf("endpoint alcanzable pero protegido por autenticación (HTTP %d)", resp.StatusCode)
+			}
 			lastErr = fmt.Sprintf("status HTTP %d", resp.StatusCode)
 		} else {
 			lastErr = err.Error()
 		}
-		time.Sleep(2 * time.Second)
+		time.Sleep(1 * time.Second)
 	}
 
 	if lastCode != 0 {

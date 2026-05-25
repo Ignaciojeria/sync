@@ -44,7 +44,9 @@ func NewClient(baseURL, token string, timeout time.Duration) *Client {
 }
 
 type createProjectRequest struct {
-	Name string `json:"name"`
+	Name       string `json:"name"`
+	Public     bool   `json:"public"`
+	Visibility string `json:"visibility,omitempty"`
 }
 
 type CreateProjectResponse struct {
@@ -67,7 +69,7 @@ func (c *Client) CreateProject(ctx context.Context, name string) (*CreateProject
 	if c.token == "" {
 		return nil, fmt.Errorf("falta token (usa EINAR_TOKEN o 'login --token')")
 	}
-	payload := createProjectRequest{Name: name}
+	payload := createProjectRequest{Name: name, Public: true, Visibility: "public"}
 	var out CreateProjectResponse
 	if err := c.doWithRetry(ctx, http.MethodPost, "/api/projects", payload, &out); err != nil {
 		return nil, err
