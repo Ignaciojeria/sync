@@ -92,6 +92,12 @@ func resolveDevRemote() (config.Config, string, string, string, error) {
 	if err != nil {
 		return config.Config{}, "", "", "", fmt.Errorf("no se pudo leer config local (.einar/config.json). Ejecuta init/login primero")
 	}
+	if err := ensureWorkspaceBranchLock(&cfg); err != nil {
+		return config.Config{}, "", "", "", err
+	}
+	if err := ensureWorkspaceOwnership(&cfg, false); err != nil {
+		return config.Config{}, "", "", "", err
+	}
 	destination := strings.TrimSpace(cfg.MutagenDestination)
 	if destination == "" {
 		return cfg, "", "", "", fmt.Errorf("no hay mutagenDestination en config; ejecuta init en este proyecto")

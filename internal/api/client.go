@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -56,13 +57,66 @@ type CreateProjectResponse struct {
 	Path               string `json:"path"`
 	Subdomain          string `json:"subdomain"`
 	Status             string `json:"status"`
-	MutagenDestination string `json:"mutagenDestination,omitempty"`
-	MutagenSessionName string `json:"mutagenSessionName,omitempty"`
-	VMName             string `json:"vmName,omitempty"`
-	VMHTTPSURL         string `json:"vmHttpsUrl,omitempty"`
-	VMSshDest          string `json:"vmSshDest,omitempty"`
-	VMSshPrivateKey    string `json:"vmSshPrivateKey,omitempty"`
-	ProjectAPIToken    string `json:"projectApiToken,omitempty"`
+	VMSshPrivateKey string `json:"vmSshPrivateKey,omitempty"`
+	ProjectAPIToken string `json:"projectApiToken,omitempty"`
+
+	Workspace struct {
+		Branch string `json:"branch"`
+		Mode   string `json:"mode"`
+	} `json:"workspace"`
+	VM struct {
+		Name              string `json:"name"`
+		HTTPSURL          string `json:"httpsUrl"`
+		SSHDestination    string `json:"sshDestination"`
+		RemoteProjectPath string `json:"remoteProjectPath"`
+	} `json:"vm"`
+	Sync struct {
+		Provider    string `json:"provider"`
+		Destination string `json:"destination"`
+		SessionName string `json:"sessionName"`
+		IgnoreVCS   bool   `json:"ignoreVCS"`
+	} `json:"sync"`
+	Database struct {
+		Name              string `json:"name"`
+		User              string `json:"user"`
+		Host              string `json:"host"`
+		Port              int    `json:"port"`
+		PasswordSecretRef string `json:"passwordSecretRef"`
+	} `json:"database"`
+
+}
+
+type ProjectPublicConfig struct {
+	Version   int    `json:"version"`
+	ProjectID string `json:"projectId"`
+	Slug      string `json:"slug"`
+	Workspace struct {
+		Branch string `json:"branch"`
+		Mode   string `json:"mode"`
+	} `json:"workspace"`
+	VM struct {
+		Name              string `json:"name"`
+		HTTPSURL          string `json:"httpsUrl"`
+		SSHDestination    string `json:"sshDestination"`
+		RemoteProjectPath string `json:"remoteProjectPath"`
+	} `json:"vm"`
+	Sync struct {
+		Provider    string `json:"provider"`
+		Destination string `json:"destination"`
+		SessionName string `json:"sessionName"`
+		IgnoreVCS   bool   `json:"ignoreVCS"`
+	} `json:"sync"`
+	Database struct {
+		Name              string `json:"name"`
+		User              string `json:"user"`
+		Host              string `json:"host"`
+		Port              int    `json:"port"`
+		PasswordSecretRef string `json:"passwordSecretRef"`
+	} `json:"database"`
+	Metadata struct {
+		CreatedAt string `json:"createdAt"`
+		UpdatedAt string `json:"updatedAt"`
+	} `json:"metadata"`
 }
 
 func (c *Client) CreateProject(ctx context.Context, name string) (*CreateProjectResponse, error) {
@@ -72,6 +126,21 @@ func (c *Client) CreateProject(ctx context.Context, name string) (*CreateProject
 	payload := createProjectRequest{Name: name, Public: true, Visibility: "public"}
 	var out CreateProjectResponse
 	if err := c.doWithRetry(ctx, http.MethodPost, "/api/projects", payload, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) GetProjectBySlug(ctx context.Context, slug string) (*ProjectPublicConfig, error) {
+	if c.token == "" {
+		return nil, fmt.Errorf("falta token (usa EINAR_TOKEN o 'login --token')")
+	}
+	if slug == "" {
+		return nil, fmt.Errorf("slug requerido")
+	}
+	escaped := url.PathEscape(slug)
+	var out ProjectPublicConfig
+	if err := c.doWithRetry(ctx, http.MethodGet, "/api/projects/by-slug/"+escaped, nil, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

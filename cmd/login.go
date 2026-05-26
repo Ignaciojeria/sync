@@ -52,13 +52,13 @@ var loginCmd = &cobra.Command{
 
 		cfg.Token = idToken
 		cfg.RefreshToken = refreshToken
-		if err := config.Save(cfg); err != nil {
+		if err := config.SaveGlobal(cfg); err != nil {
 			return err
 		}
 		if err := ensureGitIgnoreHasEinar(); err != nil {
 			return err
 		}
-		path, _ := config.ConfigPath()
+		path, _ := config.GlobalConfigPath()
 		fmt.Printf("✅ Login completado en %s\n", path)
 		fmt.Printf("Token: %s\n", config.MaskToken(idToken))
 		return nil
@@ -72,13 +72,13 @@ func saveManualToken(token string) error {
 	}
 	cfg.Token = token
 	cfg.RefreshToken = ""
-	if err := config.Save(cfg); err != nil {
+	if err := config.SaveGlobal(cfg); err != nil {
 		return err
 	}
 	if err := ensureGitIgnoreHasEinar(); err != nil {
 		return err
 	}
-	path, _ := config.ConfigPath()
+	path, _ := config.GlobalConfigPath()
 	fmt.Printf("✅ Login guardado en %s\n", path)
 	fmt.Printf("Token: %s\n", config.MaskToken(token))
 	return nil
@@ -128,7 +128,7 @@ func tryRefreshAndSave(cfg *config.Config) (bool, error) {
 	if refreshToken != "" {
 		cfg.RefreshToken = refreshToken
 	}
-	if err := config.Save(*cfg); err != nil {
+	if err := config.SaveGlobal(*cfg); err != nil {
 		return false, err
 	}
 	return true, nil

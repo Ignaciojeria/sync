@@ -22,23 +22,39 @@ type Config struct {
 	LastVMHTTPSURL      string `json:"lastVmHttpsUrl,omitempty"`
 	LastVMSshDest       string `json:"lastVmSshDest,omitempty"`
 	ProjectAPIToken     string `json:"projectApiToken,omitempty"`
+	ProjectDBName       string `json:"projectDbName,omitempty"`
+	ProjectDBUser       string `json:"projectDbUser,omitempty"`
+	ProjectDBPassword   string `json:"projectDbPassword,omitempty"`
+	ProjectDBHost       string `json:"projectDbHost,omitempty"`
+	ProjectDBPort       int    `json:"projectDbPort,omitempty"`
+	WorkspaceBranch     string `json:"workspaceBranch,omitempty"`
 }
 
 func Resolve(apiURLFlag, tokenFlag string) (Config, error) {
 	cfg := Config{}
-	fileCfg, _ := Load()
+	globalCfg, _ := LoadGlobal()
+	projectCfg, _ := Load()
 
-	cfg.APIURL = strings.TrimSpace(fileCfg.APIURL)
-	cfg.Token = strings.TrimSpace(fileCfg.Token)
-	cfg.RefreshToken = strings.TrimSpace(fileCfg.RefreshToken)
-	cfg.LastProjectID = strings.TrimSpace(fileCfg.LastProjectID)
-	cfg.LastProjectSlug = strings.TrimSpace(fileCfg.LastProjectSlug)
-	cfg.MutagenDestination = strings.TrimSpace(fileCfg.MutagenDestination)
-	cfg.MutagenSessionName = strings.TrimSpace(fileCfg.MutagenSessionName)
-	cfg.LastVMName = strings.TrimSpace(fileCfg.LastVMName)
-	cfg.LastVMHTTPSURL = strings.TrimSpace(fileCfg.LastVMHTTPSURL)
-	cfg.LastVMSshDest = strings.TrimSpace(fileCfg.LastVMSshDest)
-	cfg.ProjectAPIToken = strings.TrimSpace(fileCfg.ProjectAPIToken)
+	// Credenciales/API desde config global del CLI
+	cfg.APIURL = strings.TrimSpace(globalCfg.APIURL)
+	cfg.Token = strings.TrimSpace(globalCfg.Token)
+	cfg.RefreshToken = strings.TrimSpace(globalCfg.RefreshToken)
+
+	// Estado de workspace/proyecto desde config local del repo
+	cfg.LastProjectID = strings.TrimSpace(projectCfg.LastProjectID)
+	cfg.LastProjectSlug = strings.TrimSpace(projectCfg.LastProjectSlug)
+	cfg.MutagenDestination = strings.TrimSpace(projectCfg.MutagenDestination)
+	cfg.MutagenSessionName = strings.TrimSpace(projectCfg.MutagenSessionName)
+	cfg.LastVMName = strings.TrimSpace(projectCfg.LastVMName)
+	cfg.LastVMHTTPSURL = strings.TrimSpace(projectCfg.LastVMHTTPSURL)
+	cfg.LastVMSshDest = strings.TrimSpace(projectCfg.LastVMSshDest)
+	cfg.ProjectAPIToken = strings.TrimSpace(projectCfg.ProjectAPIToken)
+	cfg.ProjectDBName = strings.TrimSpace(projectCfg.ProjectDBName)
+	cfg.ProjectDBUser = strings.TrimSpace(projectCfg.ProjectDBUser)
+	cfg.ProjectDBPassword = strings.TrimSpace(projectCfg.ProjectDBPassword)
+	cfg.ProjectDBHost = strings.TrimSpace(projectCfg.ProjectDBHost)
+	cfg.ProjectDBPort = projectCfg.ProjectDBPort
+	cfg.WorkspaceBranch = strings.TrimSpace(projectCfg.WorkspaceBranch)
 
 	if envAPI := strings.TrimSpace(os.Getenv("EINAR_API_URL")); envAPI != "" {
 		cfg.APIURL = envAPI
@@ -58,7 +74,7 @@ func Resolve(apiURLFlag, tokenFlag string) (Config, error) {
 	}
 
 	if cfg.APIURL == "" {
-		return cfg, errors.New("falta EINAR_API_URL (flag --api-url, env EINAR_API_URL o config local)")
+		return cfg, errors.New("falta EINAR_API_URL (flag --api-url, env EINAR_API_URL o config global del CLI)")
 	}
 
 	u, err := url.Parse(cfg.APIURL)
@@ -76,6 +92,23 @@ func ConfigPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(wd, ".einar", "config.json"), nil
+}
+
+func GlobalConfigPath() (string, error) {
+	execPath, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	execDir := filepath.Dir(execPath)
+	return filepath.Join(execDir, ".einar", "config.json"), nil
+}
+
+func homeGlobalConfigPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".einar", "cli-config.json"), nil
 }
 
 func Load() (Config, error) {
@@ -103,6 +136,62 @@ func Save(cfg Config) error {
 		return err
 	}
 	b, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		return err
+	}
+	return nil
+}
+
+func LoadGlobal() (Config, error) {
+	path, err := GlobalConfigPath()
+	if err != nil {
+		return Config{}, err
+	}
+	b, err := os.ReadFile(path)
+	if err == nil {
+		var cfg Config
+		if err := json.Unmarshal(b, &cfg); err != nil {
+			return Config{}, err
+		}
+		return cfg, nil
+	}
+	if !os.IsNotExist(err) {
+		return Config{}, err
+	}
+
+	// Compatibilidad: fallback a config global en HOME
+	homePath, herr := homeGlobalConfigPath()
+	if herr != nil {
+		return Config{}, err
+	}
+	hb, herr := os.ReadFile(homePath)
+	if herr != nil {
+		return Config{}, err
+	}
+	var cfg Config
+	if err := json.Unmarshal(hb, &cfg); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
+}
+
+func SaveGlobal(cfg Config) error {
+	path, err := GlobalConfigPath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	onDisk := Config{
+		APIURL:       strings.TrimSpace(cfg.APIURL),
+		Token:        strings.TrimSpace(cfg.Token),
+		RefreshToken: strings.TrimSpace(cfg.RefreshToken),
+	}
+	b, err := json.MarshalIndent(onDisk, "", "  ")
 	if err != nil {
 		return err
 	}

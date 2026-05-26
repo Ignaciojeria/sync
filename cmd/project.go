@@ -25,11 +25,13 @@ import (
 )
 
 var (
-	skipMutagenCheck      bool
+	skipMutagenCheck       bool
 	initMutagenDestination string
 	initMutagenName        string
 	skipMutagenStart       bool
 	skipAirAutoStart       bool
+	skipInitialCommit      bool
+	forceWorkspaceTakeover bool
 )
 
 var initCmd = &cobra.Command{
@@ -91,11 +93,13 @@ var initCmd = &cobra.Command{
 				fmt.Printf("[debug] Response body:\n%s\n", string(b))
 			}
 		}
-		if strings.TrimSpace(resp.ProjectID) == "" || strings.TrimSpace(resp.Slug) == "" {
-			return fmt.Errorf("respuesta inválida del backend: projectId/slug vacíos (status=%q)", strings.TrimSpace(resp.Status))
+		projectID := strings.TrimSpace(resp.ProjectID)
+		slug := strings.TrimSpace(resp.Slug)
+		if projectID == "" || slug == "" {
+			return fmt.Errorf("respuesta inválida del backend canonical: projectId/slug vacíos")
 		}
 
-		localProjectDir := strings.TrimSpace(resp.Slug)
+		localProjectDir := slug
 		if localProjectDir == "" {
 			localProjectDir = strings.TrimSpace(name)
 		}
@@ -106,41 +110,76 @@ var initCmd = &cobra.Command{
 			return fmt.Errorf("no se pudo entrar a la carpeta local del proyecto: %w", err)
 		}
 
-		if err := ensureGoProjectScaffold(strings.TrimSpace(resp.Slug)); err != nil {
+		if err := ensureGoProjectScaffold(slug); err != nil {
 			return fmt.Errorf("no se pudo preparar scaffold Go base: %w", err)
+		}
+		if err := ensureProjectGitRepository(); err != nil {
+			return fmt.Errorf("no se pudo inicializar repositorio git del proyecto: %w", err)
 		}
 		if err := ensureLocalAirConfig(); err != nil {
 			return fmt.Errorf("no se pudo preparar .air.toml base: %w", err)
 		}
+		if err := ensureWorkspaceConfig(slug); err != nil {
+			return fmt.Errorf("no se pudo preparar workspaces.yaml base: %w", err)
+		}
+		if err := ensureProjectGitIgnore(); err != nil {
+			return fmt.Errorf("no se pudo preparar .gitignore base: %w", err)
+		}
+		if err := ensureGitHooksForWorkspaceLock(); err != nil {
+			return fmt.Errorf("no se pudo preparar hooks git de workspace lock: %w", err)
+		}
+		if err := ensureInitialGitCommit(skipInitialCommit); err != nil {
+			return fmt.Errorf("no se pudo crear commit inicial del proyecto: %w", err)
+		}
+		if currentBranch, ok := currentGitBranch(); ok {
+			cfg.WorkspaceBranch = currentBranch
+		} else if strings.TrimSpace(cfg.WorkspaceBranch) == "" {
+			cfg.WorkspaceBranch = "main"
+		}
+		fmt.Println("ℹ️  Workspaces base configurados en workspaces.yaml (prod/main y develop/develop)")
+		if isGitRepository() && !gitBranchExists("develop") {
+			fmt.Println("ℹ️  Recomendación: crea la branch 'develop' si usarás flujo GitFlow")
+		}
 
-		cfg.LastProjectID = strings.TrimSpace(resp.ProjectID)
-		cfg.LastProjectSlug = strings.TrimSpace(resp.Slug)
-		if strings.TrimSpace(resp.MutagenDestination) != "" {
-			cfg.MutagenDestination = strings.TrimSpace(resp.MutagenDestination)
-		} else if strings.TrimSpace(resp.VMSshDest) != "" {
-			cfg.MutagenDestination = strings.TrimSpace(resp.VMSshDest)
-		}
-		if strings.TrimSpace(resp.MutagenSessionName) != "" {
-			cfg.MutagenSessionName = strings.TrimSpace(resp.MutagenSessionName)
-		}
-		if strings.TrimSpace(resp.VMName) != "" {
-			cfg.LastVMName = strings.TrimSpace(resp.VMName)
-		}
-		if strings.TrimSpace(resp.VMHTTPSURL) != "" {
-			cfg.LastVMHTTPSURL = strings.TrimSpace(resp.VMHTTPSURL)
-		}
-		if strings.TrimSpace(resp.VMSshDest) != "" {
-			cfg.LastVMSshDest = strings.TrimSpace(resp.VMSshDest)
-		}
+		cfg.LastProjectID = projectID
+		cfg.LastProjectSlug = slug
+		cfg.MutagenDestination = strings.TrimSpace(resp.Sync.Destination)
+		cfg.MutagenSessionName = strings.TrimSpace(resp.Sync.SessionName)
+		cfg.LastVMName = strings.TrimSpace(resp.VM.Name)
+		cfg.LastVMHTTPSURL = strings.TrimSpace(resp.VM.HTTPSURL)
+		cfg.LastVMSshDest = strings.TrimSpace(resp.VM.SSHDestination)
+		cfg.WorkspaceBranch = strings.TrimSpace(resp.Workspace.Branch)
 		if strings.TrimSpace(resp.ProjectAPIToken) != "" {
 			cfg.ProjectAPIToken = strings.TrimSpace(resp.ProjectAPIToken)
+		}
+		cfg.ProjectDBName = strings.TrimSpace(resp.Database.Name)
+		cfg.ProjectDBUser = strings.TrimSpace(resp.Database.User)
+		cfg.ProjectDBHost = strings.TrimSpace(resp.Database.Host)
+		if resp.Database.Port > 0 {
+			cfg.ProjectDBPort = resp.Database.Port
 		}
 		if strings.TrimSpace(resp.VMSshPrivateKey) != "" {
 			if err := writeSSHPrivateKey(resp.VMSshPrivateKey); err != nil {
 				return fmt.Errorf("no se pudo guardar clave SSH privada: %w", err)
 			}
 		}
-		if err := config.Save(cfg); err != nil {
+		if strings.TrimSpace(cfg.MutagenDestination) == "" {
+			return fmt.Errorf("respuesta inválida del backend canonical: sync.destination vacío")
+		}
+		if strings.TrimSpace(cfg.MutagenSessionName) == "" {
+			return fmt.Errorf("respuesta inválida del backend canonical: sync.sessionName vacío")
+		}
+		if strings.TrimSpace(cfg.LastVMSshDest) == "" {
+			return fmt.Errorf("respuesta inválida del backend canonical: vm.sshDestination vacío")
+		}
+		if strings.TrimSpace(cfg.WorkspaceBranch) == "" {
+			return fmt.Errorf("respuesta inválida del backend canonical: workspace.branch vacío")
+		}
+
+		if err := ensureWorkspaceOwnership(&cfg, forceWorkspaceTakeover); err != nil {
+			return err
+		}
+		if err := saveProjectConfig(cfg); err != nil {
 			return fmt.Errorf("no se pudo guardar config local: %w", err)
 		}
 
@@ -151,9 +190,9 @@ var initCmd = &cobra.Command{
 		}
 
 		fmt.Println("✅ Proyecto creado")
-		fmt.Printf("ID: %s\n", resp.ProjectID)
+		fmt.Printf("ID: %s\n", projectID)
 		fmt.Printf("Name: %s\n", resp.Name)
-		fmt.Printf("Slug: %s\n", resp.Slug)
+		fmt.Printf("Slug: %s\n", slug)
 		fmt.Printf("Subdomain: %s\n", resp.Subdomain)
 		fmt.Printf("Status: %s\n", resp.Status)
 		if wd, werr := os.Getwd(); werr == nil {
@@ -170,6 +209,16 @@ var initCmd = &cobra.Command{
 		}
 		if strings.TrimSpace(cfg.MutagenDestination) != "" {
 			fmt.Printf("Mutagen destination: %s\n", cfg.MutagenDestination)
+		}
+		if strings.TrimSpace(cfg.ProjectDBName) != "" {
+			fmt.Println("DB credentials:")
+			fmt.Printf("  dbName: %s\n", cfg.ProjectDBName)
+			fmt.Printf("  dbUser: %s\n", cfg.ProjectDBUser)
+			fmt.Printf("  dbPassword: %s\n", cfg.ProjectDBPassword)
+			fmt.Printf("  dbHost: %s\n", cfg.ProjectDBHost)
+			if cfg.ProjectDBPort > 0 {
+				fmt.Printf("  dbPort: %d\n", cfg.ProjectDBPort)
+			}
 		}
 
 		airStarted := false
@@ -394,7 +443,446 @@ func ensureLocalAirConfig() error {
 	return nil
 }
 
+func workspaceYAMLContent(slug string) string {
+	slug = strings.TrimSpace(slug)
+	if slug == "" {
+		slug = "unknown-project"
+	}
+	return fmt.Sprintf(`version: 1
+
+project:
+  slug: %s
+
+defaults:
+  baseBranch: main
+  portStart: 3000
+  portStrategy: sequential # sequential | hash
+  runtime: air
+  sync: mutagen
+  previewDomain: project.dev
+
+templates:
+  prod:
+    branch: main
+    port: 3000
+    persistent: true
+    runtime: air
+
+  develop:
+    branch: develop
+    port: 3001
+    persistent: true
+    runtime: air
+
+rules:
+  - pattern: "feature/*"
+    persistent: false
+    runtime: air
+
+  - pattern: "issue/*"
+    persistent: false
+    runtime: air
+
+  - pattern: "agent/*"
+    persistent: false
+    runtime: air
+`, slug)
+}
+
+func ensureWorkspaceConfig(slug string) error {
+	if _, err := os.Stat("workspaces.yaml"); err == nil {
+		return nil
+	}
+	if err := os.WriteFile("workspaces.yaml", []byte(workspaceYAMLContent(slug)), 0o644); err != nil {
+		return err
+	}
+	fmt.Println("✅ workspaces.yaml generado")
+	return nil
+}
+
+func ensureProjectGitIgnore() error {
+	const path = ".gitignore"
+	required := []string{
+		".einar/",
+		"tmp/",
+		".air.log",
+		".air.pid",
+		"mutagen.yml.lock",
+	}
+
+	existing := ""
+	if b, err := os.ReadFile(path); err == nil {
+		existing = string(b)
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	toAdd := make([]string, 0, len(required))
+	for _, rule := range required {
+		if !strings.Contains(existing, rule) {
+			toAdd = append(toAdd, rule)
+		}
+	}
+	if len(toAdd) == 0 {
+		return nil
+	}
+
+	var sb strings.Builder
+	sb.WriteString(existing)
+	if strings.TrimSpace(existing) != "" && !strings.HasSuffix(existing, "\n") {
+		sb.WriteString("\n")
+	}
+	sb.WriteString("\n# Einar local runtime files\n")
+	for _, rule := range toAdd {
+		sb.WriteString(rule)
+		sb.WriteString("\n")
+	}
+
+	if err := os.WriteFile(path, []byte(sb.String()), 0o644); err != nil {
+		return err
+	}
+	fmt.Println("✅ .gitignore actualizado")
+	return nil
+}
+
+func ensureGitHooksForWorkspaceLock() error {
+	if !isGitRepository() {
+		return nil
+	}
+	if err := os.MkdirAll(".githooks", 0o755); err != nil {
+		return err
+	}
+
+	hookPath := filepath.Join(".githooks", "post-checkout")
+	hookContent := `#!/usr/bin/env sh
+set -eu
+
+if [ "${EINAR_HOOK_BYPASS:-}" = "1" ]; then
+  exit 0
+fi
+
+if [ ! -f ".einar/config.json" ]; then
+  exit 0
+fi
+
+locked_branch=$(grep -o '"workspaceBranch"[[:space:]]*:[[:space:]]*"[^"]*"' .einar/config.json | sed 's/.*"workspaceBranch"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+if [ -z "${locked_branch:-}" ]; then
+  exit 0
+fi
+
+current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+if [ -z "${current_branch:-}" ] || [ "$current_branch" = "HEAD" ]; then
+  exit 0
+fi
+
+if [ "$current_branch" != "$locked_branch" ]; then
+  echo "❌ Checkout bloqueado por Einar workspace lock"
+  echo "   workspaceBranch: $locked_branch"
+  echo "   branch actual:    $current_branch"
+  echo "   Revirtiendo checkout para evitar context switch..."
+  EINAR_HOOK_BYPASS=1 git checkout -q "$locked_branch" || {
+    echo "⚠️  No se pudo revertir automáticamente. Vuelve manualmente: git checkout $locked_branch"
+    exit 1
+  }
+  echo "✅ Workspace restaurado en '$locked_branch'"
+  exit 1
+fi
+
+exit 0
+`
+
+	if err := os.WriteFile(hookPath, []byte(hookContent), 0o755); err != nil {
+		return err
+	}
+
+	cmd := exec.Command("git", "config", "core.hooksPath", ".githooks")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg != "" {
+			return fmt.Errorf("git config core.hooksPath falló: %s", msg)
+		}
+		return err
+	}
+
+	fmt.Println("✅ Hook git instalado para bloquear checkout/switch en workspace")
+	return nil
+}
+
+func isGitRepository() bool {
+	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) == "true"
+}
+
+func ensureProjectGitRepository() error {
+	wd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	wd = filepath.Clean(wd)
+
+	if isGitRepository() {
+		cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+		out, err := cmd.CombinedOutput()
+		if err == nil {
+			top := filepath.Clean(strings.TrimSpace(string(out)))
+			if top == wd {
+				return nil
+			}
+		}
+		// Está dentro de otro repo: creamos repo propio anidado para aislar workspace.
+	}
+
+	init := exec.Command("git", "init", "-b", "main")
+	if out, err := init.CombinedOutput(); err != nil {
+		// Fallback para versiones viejas de git sin -b
+		fallback := exec.Command("git", "init")
+		if fbOut, fbErr := fallback.CombinedOutput(); fbErr != nil {
+			msg := strings.TrimSpace(string(out))
+			if msg == "" {
+				msg = strings.TrimSpace(string(fbOut))
+			}
+			if msg != "" {
+				return fmt.Errorf("git init falló: %s", msg)
+			}
+			return fbErr
+		}
+		checkout := exec.Command("git", "checkout", "-b", "main")
+		_ = checkout.Run()
+		fmt.Println("✅ Repositorio Git inicializado en main (fallback)")
+		return nil
+	}
+
+	fmt.Println("✅ Repositorio Git inicializado en main")
+	return nil
+}
+
+func currentGitBranch() (string, bool) {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", false
+	}
+	branch := strings.TrimSpace(string(out))
+	if branch == "" || branch == "HEAD" {
+		return "", false
+	}
+	return branch, true
+}
+
+func ensureInitialGitCommit(skip bool) error {
+	if skip || !isGitRepository() {
+		return nil
+	}
+
+	if err := exec.Command("git", "rev-parse", "--verify", "HEAD").Run(); err == nil {
+		return nil
+	}
+
+	add := exec.Command("git", "add", ".")
+	if out, err := add.CombinedOutput(); err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg != "" {
+			return fmt.Errorf("git add falló: %s", msg)
+		}
+		return err
+	}
+
+	commit := exec.Command("git", "commit", "-m", "chore: initial scaffold by einarc")
+	if out, err := commit.CombinedOutput(); err != nil {
+		msg := strings.TrimSpace(string(out))
+		if strings.Contains(strings.ToLower(msg), "author identity unknown") || strings.Contains(strings.ToLower(msg), "please tell me who you are") {
+			return fmt.Errorf("git commit requiere user.name/user.email configurados")
+		}
+		if msg != "" {
+			return fmt.Errorf("git commit inicial falló: %s", msg)
+		}
+		return err
+	}
+
+	fmt.Println("✅ Commit inicial Git creado")
+	return nil
+}
+
+func ensureWorkspaceBranchLock(cfg *config.Config) error {
+	if cfg == nil {
+		return nil
+	}
+	currentBranch, ok := currentGitBranch()
+	if !ok {
+		return nil
+	}
+	locked := strings.TrimSpace(cfg.WorkspaceBranch)
+	if locked == "" {
+		cfg.WorkspaceBranch = currentBranch
+		if err := saveProjectConfig(*cfg); err != nil {
+			return fmt.Errorf("no se pudo persistir workspaceBranch: %w", err)
+		}
+		return nil
+	}
+	if locked != currentBranch {
+		return fmt.Errorf("branch inválida para este workspace: esperada=%q actual=%q. Evita git switch/checkout en este workspace", locked, currentBranch)
+	}
+	return nil
+}
+
+type workspaceStateEntry struct {
+	ProjectSlug         string `json:"projectSlug"`
+	WorkspaceBranch     string `json:"workspaceBranch"`
+	MutagenDestination  string `json:"mutagenDestination,omitempty"`
+	MutagenSessionName  string `json:"mutagenSessionName,omitempty"`
+	OwnerID             string `json:"ownerId"`
+	UpdatedAt           string `json:"updatedAt"`
+}
+
+type workspaceStateFile struct {
+	Entries []workspaceStateEntry `json:"entries"`
+}
+
+func workspaceStatePath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".einar", "workspaces-state.json"), nil
+}
+
+func currentWorkspaceOwnerID() string {
+	host, _ := os.Hostname()
+	user := os.Getenv("USERNAME")
+	if strings.TrimSpace(user) == "" {
+		user = os.Getenv("USER")
+	}
+	if strings.TrimSpace(host) == "" {
+		host = "unknown-host"
+	}
+	if strings.TrimSpace(user) == "" {
+		user = "unknown-user"
+	}
+	return user + "@" + host
+}
+
+func loadWorkspaceState() (workspaceStateFile, string, error) {
+	path, err := workspaceStatePath()
+	if err != nil {
+		return workspaceStateFile{}, "", err
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return workspaceStateFile{}, path, nil
+		}
+		return workspaceStateFile{}, path, err
+	}
+	var st workspaceStateFile
+	if len(strings.TrimSpace(string(b))) == 0 {
+		return workspaceStateFile{}, path, nil
+	}
+	if err := json.Unmarshal(b, &st); err != nil {
+		return workspaceStateFile{}, path, err
+	}
+	return st, path, nil
+}
+
+func saveWorkspaceState(path string, st workspaceStateFile) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(st, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, b, 0o600)
+}
+
+func ensureWorkspaceOwnership(cfg *config.Config, forceTakeover bool) error {
+	if cfg == nil {
+		return nil
+	}
+	project := strings.TrimSpace(cfg.LastProjectSlug)
+	branch := strings.TrimSpace(cfg.WorkspaceBranch)
+	if project == "" || branch == "" {
+		return nil
+	}
+	owner := currentWorkspaceOwnerID()
+	state, statePath, err := loadWorkspaceState()
+	if err != nil {
+		return fmt.Errorf("no se pudo leer estado global de workspaces: %w", err)
+	}
+
+	destination := strings.TrimSpace(cfg.MutagenDestination)
+	session := strings.TrimSpace(cfg.MutagenSessionName)
+	idx := -1
+	for i := range state.Entries {
+		e := state.Entries[i]
+		if e.ProjectSlug == project && e.WorkspaceBranch == branch {
+			idx = i
+			continue
+		}
+		if destination != "" && strings.EqualFold(strings.TrimSpace(e.MutagenDestination), destination) {
+			if !forceTakeover {
+				return fmt.Errorf("workspace en uso: mutagen destination ya reservado por %s (%s/%s). Usa --force-workspace-takeover", e.OwnerID, e.ProjectSlug, e.WorkspaceBranch)
+			}
+		}
+		if session != "" && strings.EqualFold(strings.TrimSpace(e.MutagenSessionName), session) {
+			if !forceTakeover {
+				return fmt.Errorf("workspace en uso: mutagen session ya reservada por %s (%s/%s). Usa --force-workspace-takeover", e.OwnerID, e.ProjectSlug, e.WorkspaceBranch)
+			}
+		}
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	entry := workspaceStateEntry{
+		ProjectSlug:        project,
+		WorkspaceBranch:    branch,
+		MutagenDestination: destination,
+		MutagenSessionName: session,
+		OwnerID:            owner,
+		UpdatedAt:          now,
+	}
+	if idx >= 0 {
+		existing := state.Entries[idx]
+		if strings.TrimSpace(existing.OwnerID) != "" && existing.OwnerID != owner && !forceTakeover {
+			return fmt.Errorf("workspace %s/%s está siendo usado por %s. Usa --force-workspace-takeover para tomar control", project, branch, existing.OwnerID)
+		}
+		state.Entries[idx] = entry
+	} else {
+		state.Entries = append(state.Entries, entry)
+	}
+
+	if err := saveWorkspaceState(statePath, state); err != nil {
+		return fmt.Errorf("no se pudo guardar estado global de workspaces: %w", err)
+	}
+	return nil
+}
+
+func gitBranchExists(branch string) bool {
+	b := strings.TrimSpace(branch)
+	if b == "" {
+		return false
+	}
+	cmd := exec.Command("git", "show-ref", "--verify", "--quiet", "refs/heads/"+b)
+	if err := cmd.Run(); err == nil {
+		return true
+	}
+	cmd = exec.Command("git", "ls-remote", "--heads", "origin", b)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) != ""
+}
+
 func setupAndStartRemoteAir(cfg *config.Config) error {
+	if err := ensureWorkspaceBranchLock(cfg); err != nil {
+		return err
+	}
+	if err := ensureWorkspaceOwnership(cfg, false); err != nil {
+		return err
+	}
 	if err := ensureLocalAirConfig(); err != nil {
 		return err
 	}
@@ -506,7 +994,20 @@ func writeSSHPrivateKey(key string) error {
 	return nil
 }
 
+func saveProjectConfig(cfg config.Config) error {
+	cfg.APIURL = ""
+	cfg.Token = ""
+	cfg.RefreshToken = ""
+	return config.Save(cfg)
+}
+
 func setupAndStartMutagen(cfg *config.Config) error {
+	if err := ensureWorkspaceBranchLock(cfg); err != nil {
+		return err
+	}
+	if err := ensureWorkspaceOwnership(cfg, false); err != nil {
+		return err
+	}
 	mutagenBin, err := resolveMutagenBinary()
 	if err != nil {
 		return err
@@ -523,7 +1024,7 @@ func setupAndStartMutagen(cfg *config.Config) error {
 	if sessionName == "" {
 		sessionName = defaultMutagenSessionName(cfg.LastProjectSlug)
 		cfg.MutagenSessionName = sessionName
-		_ = config.Save(*cfg)
+		_ = saveProjectConfig(*cfg)
 	}
 
 	if _, err := os.Stat("mutagen.yml"); os.IsNotExist(err) {
@@ -1164,5 +1665,7 @@ func init() {
 	initCmd.Flags().StringVar(&initMutagenName, "mutagen-name", "", "Nombre de sesión en mutagen.yml (por defecto: dev-sync-<slug>-<shortid>)")
 	initCmd.Flags().BoolVar(&skipMutagenStart, "skip-mutagen-start", false, "No ejecuta 'mutagen project start'")
 	initCmd.Flags().BoolVar(&skipAirAutoStart, "skip-air-auto-start", false, "No inicia Air automáticamente en la VM")
+	initCmd.Flags().BoolVar(&skipInitialCommit, "skip-initial-commit", false, "No crea commit inicial del scaffold del proyecto")
+	initCmd.Flags().BoolVar(&forceWorkspaceTakeover, "force-workspace-takeover", false, "Toma control del workspace global aunque otro owner lo tenga reservado")
 	rootCmd.AddCommand(initCmd)
 }
