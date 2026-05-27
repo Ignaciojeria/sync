@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"archive/tar"
 	"archive/zip"
 	"bufio"
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -29,6 +31,7 @@ var (
 	initMutagenDestination string
 	initMutagenName        string
 	skipMutagenStart       bool
+	skipSSHOnboarding      bool
 	skipAirAutoStart       bool
 	skipInitialCommit      bool
 	forceWorkspaceTakeover bool
@@ -936,9 +939,6 @@ func setupAndStartRemoteAir(cfg *config.Config) error {
 }
 
 func ensureMutagenOnWindows() error {
-	if runtime.GOOS != "windows" {
-		return nil
-	}
 	if _, err := exec.LookPath("mutagen"); err == nil {
 		return nil
 	}
@@ -948,29 +948,31 @@ func ensureMutagenOnWindows() error {
 		}
 	}
 
-	// Intento 1: winget
-	if _, err := exec.LookPath("winget"); err == nil {
-		cmd := exec.Command("winget", "install", "--id", "MutagenIO.Mutagen", "-e", "--accept-package-agreements", "--accept-source-agreements")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		_ = cmd.Run()
-		if _, err := exec.LookPath("mutagen"); err == nil {
-			return nil
+	if runtime.GOOS == "windows" {
+		// Intento 1: winget
+		if _, err := exec.LookPath("winget"); err == nil {
+			cmd := exec.Command("winget", "install", "--id", "MutagenIO.Mutagen", "-e", "--accept-package-agreements", "--accept-source-agreements")
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			_ = cmd.Run()
+			if _, err := exec.LookPath("mutagen"); err == nil {
+				return nil
+			}
+		}
+
+		// Intento 2: choco
+		if _, err := exec.LookPath("choco"); err == nil {
+			cmd := exec.Command("choco", "install", "mutagen", "-y")
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			_ = cmd.Run()
+			if _, err := exec.LookPath("mutagen"); err == nil {
+				return nil
+			}
 		}
 	}
 
-	// Intento 2: choco
-	if _, err := exec.LookPath("choco"); err == nil {
-		cmd := exec.Command("choco", "install", "mutagen", "-y")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		_ = cmd.Run()
-		if _, err := exec.LookPath("mutagen"); err == nil {
-			return nil
-		}
-	}
-
-	// Intento 3: descarga directa (fallback)
+	// Fallback para cualquier SO: descarga directa del asset correcto (GOOS/GOARCH).
 	if err := downloadMutagenLocal(); err == nil {
 		return nil
 	} else {
@@ -1070,6 +1072,12 @@ func setupAndStartMutagen(cfg *config.Config) error {
 	if skipMutagenStart {
 		fmt.Println("ℹ️  Se omitió 'mutagen project start' por --skip-mutagen-start")
 		return nil
+	}
+	if err := ensureLocalSSHKeySetup(); err != nil {
+		fmt.Printf("⚠️  No se pudo preparar clave SSH local automáticamente: %v\n", err)
+	}
+	if err := ensureExeDevSSHOnboarding(destination); err != nil {
+		return err
 	}
 
 	if err := ensureSSHTrustInteractive(destination); err != nil {
@@ -1305,8 +1313,13 @@ func ensureSSHTrustInteractive(destination string) error {
 	if !ok {
 		return nil
 	}
-	check := exec.Command("ssh", "-o", "BatchMode=yes", target, "exit")
-	if err := check.Run(); err == nil {
+	check := exec.Command("ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", target, "exit")
+	checkOut, checkErr := check.CombinedOutput()
+	if checkErr == nil {
+		return nil
+	}
+	checkMsg := strings.ToLower(strings.TrimSpace(string(checkOut)))
+	if strings.Contains(checkMsg, "permission denied") || strings.Contains(checkMsg, "ssh keys are required") || strings.Contains(checkMsg, "authentication failed") {
 		return nil
 	}
 
@@ -1320,10 +1333,21 @@ func ensureSSHTrustInteractive(destination string) error {
 	}
 
 	accept := exec.Command("ssh", "-o", "StrictHostKeyChecking=accept-new", target, "exit")
-	accept.Stdout = os.Stdout
-	accept.Stderr = os.Stderr
-	if err := accept.Run(); err != nil {
-		return fmt.Errorf("no se pudo registrar host key SSH para %s: %w", target, err)
+	acceptOut, acceptErr := accept.CombinedOutput()
+	acceptMsg := strings.ToLower(strings.TrimSpace(string(acceptOut)))
+	if acceptErr != nil {
+		if strings.Contains(acceptMsg, "permanently added") || strings.Contains(acceptMsg, "known hosts") || strings.Contains(acceptMsg, "permission denied") || strings.Contains(acceptMsg, "ssh keys are required") || strings.Contains(acceptMsg, "authentication failed") {
+			fmt.Println(strings.TrimSpace(string(acceptOut)))
+			fmt.Println("✅ Host SSH confiado y guardado en known_hosts")
+			return nil
+		}
+		if strings.TrimSpace(string(acceptOut)) != "" {
+			return fmt.Errorf("no se pudo registrar host key SSH para %s: %s", target, strings.TrimSpace(string(acceptOut)))
+		}
+		return fmt.Errorf("no se pudo registrar host key SSH para %s: %w", target, acceptErr)
+	}
+	if strings.TrimSpace(string(acceptOut)) != "" {
+		fmt.Println(strings.TrimSpace(string(acceptOut)))
 	}
 	fmt.Println("✅ Host SSH confiado y guardado en known_hosts")
 	return nil
@@ -1384,6 +1408,19 @@ func preflightSSHConnection(destination string) error {
 	check := exec.Command("ssh", "-o", "BatchMode=yes", target, "echo", "ok")
 	if out, err := check.CombinedOutput(); err != nil {
 		msg := strings.TrimSpace(string(out))
+		low := strings.ToLower(msg)
+		if strings.Contains(low, "please complete registration by running: ssh exe.dev") {
+			return fmt.Errorf("SSH no disponible para %s: falta completar onboarding de exe.dev. Ejecuta 'ssh exe.dev' y reintenta", target)
+		}
+		if strings.Contains(low, "permission denied") || strings.Contains(low, "publickey") || strings.Contains(low, "ssh keys are required") || strings.Contains(low, "authentication failed") {
+			if pubPath, pubKey, keyErr := readLocalSSHPublicKey(); keyErr == nil && strings.TrimSpace(pubKey) != "" {
+				return fmt.Errorf("SSH no disponible para %s: autenticación por clave fallida. Sube esta clave pública a exe.dev (%s): %s", target, pubPath, pubKey)
+			}
+			if pubPath, _, keyErr := readLocalSSHPublicKey(); keyErr == nil {
+				return fmt.Errorf("SSH no disponible para %s: autenticación por clave fallida. Sube tu clave pública a exe.dev (%s)", target, pubPath)
+			}
+			return fmt.Errorf("SSH no disponible para %s: autenticación por clave fallida. Genera una clave con 'ssh-keygen -t ed25519' y súbela a exe.dev", target)
+		}
 		if msg != "" {
 			return fmt.Errorf("SSH no disponible para %s: %s", target, msg)
 		}
@@ -1391,6 +1428,160 @@ func preflightSSHConnection(destination string) error {
 	}
 	fmt.Printf("✅ SSH operativo: %s\n", target)
 	return nil
+}
+
+func ensureExeDevSSHOnboarding(destination string) error {
+	if skipSSHOnboarding {
+		return nil
+	}
+	target, _, ok := sshTargetAndPathFromMutagenDestination(destination)
+	if !ok {
+		return nil
+	}
+	lowTarget := strings.ToLower(strings.TrimSpace(target))
+	if !strings.Contains(lowTarget, ".exe.xyz") && !strings.Contains(lowTarget, "exe.dev") {
+		return nil
+	}
+
+	required, msg, err := exeDevRegistrationRequired()
+	if err != nil && !required {
+		return nil
+	}
+	if !required {
+		return nil
+	}
+
+	fmt.Println("🔑 Se requiere onboarding SSH en exe.dev. Ejecutando 'ssh exe.dev'...")
+	if strings.TrimSpace(msg) != "" {
+		fmt.Println(strings.TrimSpace(msg))
+	}
+	if !isInteractiveTerminal() {
+		return fmt.Errorf("falta completar onboarding SSH en exe.dev (modo no interactivo). Ejecuta 'ssh exe.dev' y reintenta")
+	}
+
+	cmd := exec.Command("ssh", "exe.dev")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("onboarding SSH de exe.dev no completado: %w", err)
+	}
+
+	if requiredAgain, msgAgain, _ := exeDevRegistrationRequired(); requiredAgain {
+		if strings.TrimSpace(msgAgain) != "" {
+			return fmt.Errorf("onboarding SSH de exe.dev no completado: %s", strings.TrimSpace(msgAgain))
+		}
+		return fmt.Errorf("onboarding SSH de exe.dev no completado; ejecuta 'ssh exe.dev' y reintenta")
+	}
+	fmt.Println("✅ Onboarding SSH de exe.dev completado")
+	return nil
+}
+
+func exeDevRegistrationRequired() (bool, string, error) {
+	check := exec.Command("ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "exe.dev", "exit")
+	out, err := check.CombinedOutput()
+	msg := strings.TrimSpace(string(out))
+	low := strings.ToLower(msg)
+	if strings.Contains(low, "please complete registration by running: ssh exe.dev") {
+		return true, msg, nil
+	}
+	return false, msg, err
+}
+
+func isInteractiveTerminal() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return (fi.Mode() & os.ModeCharDevice) != 0
+}
+
+func ensureLocalSSHKeySetup() error {
+	privPath, pubPath, err := localSSHKeyPaths()
+	if err != nil {
+		return err
+	}
+	sshDir := filepath.Dir(privPath)
+	if err := os.MkdirAll(sshDir, 0o700); err != nil {
+		return err
+	}
+	_ = os.Chmod(sshDir, 0o700)
+
+	if _, err := os.Stat(privPath); os.IsNotExist(err) {
+		if _, lookErr := exec.LookPath("ssh-keygen"); lookErr != nil {
+			return fmt.Errorf("falta ssh-keygen para generar %s", privPath)
+		}
+		cmd := exec.Command("ssh-keygen", "-t", "ed25519", "-N", "", "-f", privPath, "-C", "einarc")
+		if out, genErr := cmd.CombinedOutput(); genErr != nil {
+			msg := strings.TrimSpace(string(out))
+			if msg != "" {
+				return fmt.Errorf("no se pudo generar clave SSH: %s", msg)
+			}
+			return fmt.Errorf("no se pudo generar clave SSH: %w", genErr)
+		}
+		fmt.Printf("✅ Clave SSH ed25519 generada: %s\n", privPath)
+	}
+
+	if err := os.Chmod(privPath, 0o600); err != nil {
+		return fmt.Errorf("no se pudo ajustar permisos de %s: %w", privPath, err)
+	}
+
+	if _, err := os.Stat(pubPath); os.IsNotExist(err) {
+		if _, lookErr := exec.LookPath("ssh-keygen"); lookErr != nil {
+			return fmt.Errorf("falta ssh-keygen para derivar %s", pubPath)
+		}
+		cmd := exec.Command("ssh-keygen", "-y", "-f", privPath)
+		out, pubErr := cmd.CombinedOutput()
+		if pubErr != nil {
+			msg := strings.TrimSpace(string(out))
+			if msg != "" {
+				return fmt.Errorf("no se pudo derivar clave pública: %s", msg)
+			}
+			return fmt.Errorf("no se pudo derivar clave pública: %w", pubErr)
+		}
+		pubKey := strings.TrimSpace(string(out))
+		if pubKey == "" {
+			return fmt.Errorf("ssh-keygen devolvió clave pública vacía")
+		}
+		if err := os.WriteFile(pubPath, []byte(pubKey+"\n"), 0o644); err != nil {
+			return fmt.Errorf("no se pudo escribir %s: %w", pubPath, err)
+		}
+	}
+	if err := os.Chmod(pubPath, 0o644); err != nil {
+		return fmt.Errorf("no se pudo ajustar permisos de %s: %w", pubPath, err)
+	}
+
+	if strings.TrimSpace(os.Getenv("SSH_AUTH_SOCK")) != "" {
+		if _, err := exec.LookPath("ssh-add"); err == nil {
+			cmd := exec.Command("ssh-add", privPath)
+			_ = cmd.Run()
+		}
+	}
+
+	fmt.Printf("✅ Permisos SSH local verificados (%s)\n", privPath)
+	return nil
+}
+
+func localSSHKeyPaths() (string, string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", "", err
+	}
+	priv := filepath.Join(home, ".ssh", "id_ed25519")
+	pub := priv + ".pub"
+	return priv, pub, nil
+}
+
+func readLocalSSHPublicKey() (string, string, error) {
+	_, pub, err := localSSHKeyPaths()
+	if err != nil {
+		return "", "", err
+	}
+	b, err := os.ReadFile(pub)
+	if err != nil {
+		return pub, "", err
+	}
+	return pub, strings.TrimSpace(string(b)), nil
 }
 
 func ensureRemoteMutagenRoot(destination string) error {
@@ -1534,7 +1725,11 @@ func downloadMutagenLocal() error {
 	if err := os.MkdirAll(filepath.Dir(mutagenPath), 0o700); err != nil {
 		return err
 	}
-	tmpZip := filepath.Join(filepath.Dir(mutagenPath), "mutagen.zip")
+	archiveName := strings.TrimSpace(filepath.Base(strings.Split(url, "?")[0]))
+	if archiveName == "" {
+		archiveName = "mutagen-archive"
+	}
+	tmpArchive := filepath.Join(filepath.Dir(mutagenPath), archiveName)
 
 	resp, err := http.Get(url)
 	if err != nil {
@@ -1545,7 +1740,7 @@ func downloadMutagenLocal() error {
 		return fmt.Errorf("descarga mutagen falló: %s", resp.Status)
 	}
 
-	f, err := os.Create(tmpZip)
+	f, err := os.Create(tmpArchive)
 	if err != nil {
 		return err
 	}
@@ -1554,17 +1749,46 @@ func downloadMutagenLocal() error {
 		return err
 	}
 	f.Close()
-	defer os.Remove(tmpZip)
+	defer os.Remove(tmpArchive)
 
-	zr, err := zip.OpenReader(tmpZip)
+	baseDir := filepath.Dir(mutagenPath)
+	foundExe, foundAgentBundle, err := extractMutagenArchive(tmpArchive, baseDir)
 	if err != nil {
 		return err
+	}
+
+	if !foundExe {
+		return fmt.Errorf("no se encontró binario mutagen en el archivo descargado")
+	}
+	if !foundAgentBundle {
+		return fmt.Errorf("no se encontró bundle de agentes en el archivo descargado")
+	}
+
+	fmt.Printf("✅ Mutagen descargado en %s\n", mutagenPath)
+	return nil
+}
+
+func extractMutagenArchive(archivePath, baseDir string) (bool, bool, error) {
+	lower := strings.ToLower(strings.TrimSpace(archivePath))
+	switch {
+	case strings.HasSuffix(lower, ".zip"):
+		return extractMutagenZip(archivePath, baseDir)
+	case strings.HasSuffix(lower, ".tar.gz"), strings.HasSuffix(lower, ".tgz"):
+		return extractMutagenTarGz(archivePath, baseDir)
+	default:
+		return false, false, fmt.Errorf("formato de archivo no soportado: %s", archivePath)
+	}
+}
+
+func extractMutagenZip(archivePath, baseDir string) (bool, bool, error) {
+	zr, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return false, false, err
 	}
 	defer zr.Close()
 
 	foundExe := false
 	foundAgentBundle := false
-	baseDir := filepath.Dir(mutagenPath)
 
 	for _, zf := range zr.File {
 		if zf.FileInfo().IsDir() {
@@ -1578,19 +1802,19 @@ func downloadMutagenLocal() error {
 
 		rc, err := zf.Open()
 		if err != nil {
-			return err
+			return false, false, err
 		}
 
 		dst := filepath.Join(baseDir, filepath.Base(zf.Name))
 		out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
 		if err != nil {
 			rc.Close()
-			return err
+			return false, false, err
 		}
 		if _, err := io.Copy(out, rc); err != nil {
 			out.Close()
 			rc.Close()
-			return err
+			return false, false, err
 		}
 		out.Close()
 		rc.Close()
@@ -1603,15 +1827,70 @@ func downloadMutagenLocal() error {
 		}
 	}
 
-	if !foundExe {
-		return fmt.Errorf("no se encontró binario mutagen en el zip descargado")
+	return foundExe, foundAgentBundle, nil
+}
+
+func extractMutagenTarGz(archivePath, baseDir string) (bool, bool, error) {
+	f, err := os.Open(archivePath)
+	if err != nil {
+		return false, false, err
 	}
-	if !foundAgentBundle {
-		return fmt.Errorf("no se encontró bundle de agentes en el zip descargado")
+	defer f.Close()
+
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return false, false, err
+	}
+	defer gz.Close()
+
+	tr := tar.NewReader(gz)
+	foundExe := false
+	foundAgentBundle := false
+
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return false, false, err
+		}
+		if hdr == nil || hdr.FileInfo().IsDir() {
+			continue
+		}
+
+		name := strings.ToLower(filepath.Base(hdr.Name))
+		isMutagenBin := name == "mutagen.exe" || name == "mutagen"
+		if !isMutagenBin && !strings.Contains(name, "agent") {
+			continue
+		}
+
+		dst := filepath.Join(baseDir, filepath.Base(hdr.Name))
+		mode := os.FileMode(0o644)
+		if isMutagenBin {
+			mode = 0o755
+		}
+		out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+		if err != nil {
+			return false, false, err
+		}
+		if _, err := io.Copy(out, tr); err != nil {
+			out.Close()
+			return false, false, err
+		}
+		if err := out.Close(); err != nil {
+			return false, false, err
+		}
+
+		if isMutagenBin {
+			foundExe = true
+		}
+		if strings.Contains(name, "agent") {
+			foundAgentBundle = true
+		}
 	}
 
-	fmt.Printf("✅ Mutagen descargado en %s\n", mutagenPath)
-	return nil
+	return foundExe, foundAgentBundle, nil
 }
 
 func resolveLatestMutagenAssetURL() (string, error) {
@@ -1644,15 +1923,44 @@ func resolveLatestMutagenAssetURL() (string, error) {
 
 	osName := runtime.GOOS
 	arch := runtime.GOARCH
+	osAliases := []string{osName}
+	if osName == "darwin" {
+		osAliases = append(osAliases, "macos", "osx")
+	}
+	archAliases := []string{arch}
+	if arch == "amd64" {
+		archAliases = append(archAliases, "x86_64", "x64")
+	}
+	if arch == "arm64" {
+		archAliases = append(archAliases, "aarch64")
+	}
 	for _, a := range payload.Assets {
 		name := strings.ToLower(strings.TrimSpace(a.Name))
-		if !strings.HasSuffix(name, ".zip") {
+		if !strings.HasSuffix(name, ".zip") && !strings.HasSuffix(name, ".tar.gz") && !strings.HasSuffix(name, ".tgz") {
 			continue
 		}
-		if strings.Contains(name, osName) && strings.Contains(name, arch) {
-			if strings.TrimSpace(a.URL) != "" {
-				return strings.TrimSpace(a.URL), nil
+		osMatch := false
+		for _, oa := range osAliases {
+			if strings.Contains(name, oa) {
+				osMatch = true
+				break
 			}
+		}
+		if !osMatch {
+			continue
+		}
+		archMatch := false
+		for _, aa := range archAliases {
+			if strings.Contains(name, aa) {
+				archMatch = true
+				break
+			}
+		}
+		if !archMatch {
+			continue
+		}
+		if strings.TrimSpace(a.URL) != "" {
+			return strings.TrimSpace(a.URL), nil
 		}
 	}
 
@@ -1664,6 +1972,7 @@ func init() {
 	initCmd.Flags().StringVar(&initMutagenDestination, "mutagen-destination", "", "Destino remoto Mutagen (ej: docker://mi-contenedor/var/www)")
 	initCmd.Flags().StringVar(&initMutagenName, "mutagen-name", "", "Nombre de sesión en mutagen.yml (por defecto: dev-sync-<slug>-<shortid>)")
 	initCmd.Flags().BoolVar(&skipMutagenStart, "skip-mutagen-start", false, "No ejecuta 'mutagen project start'")
+	initCmd.Flags().BoolVar(&skipSSHOnboarding, "skip-ssh-onboarding", false, "No ejecuta onboarding automático con 'ssh exe.dev'")
 	initCmd.Flags().BoolVar(&skipAirAutoStart, "skip-air-auto-start", false, "No inicia Air automáticamente en la VM")
 	initCmd.Flags().BoolVar(&skipInitialCommit, "skip-initial-commit", false, "No crea commit inicial del scaffold del proyecto")
 	initCmd.Flags().BoolVar(&forceWorkspaceTakeover, "force-workspace-takeover", false, "Toma control del workspace global aunque otro owner lo tenga reservado")
