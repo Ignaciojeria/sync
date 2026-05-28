@@ -11,8 +11,8 @@ import (
 )
 
 type Config struct {
-	APIURL              string `json:"apiUrl"`
-	Token               string `json:"token"`
+	APIURL              string `json:"apiUrl,omitempty"`
+	Token               string `json:"token,omitempty"`
 	RefreshToken        string `json:"refreshToken,omitempty"`
 	LastProjectID       string `json:"lastProjectId,omitempty"`
 	LastProjectSlug     string `json:"lastProjectSlug,omitempty"`
