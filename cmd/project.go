@@ -1539,6 +1539,35 @@ func preflightSSHConnection(destination string) error {
 	return nil
 }
 
+func directVMSSHReady(destination string) (bool, string) {
+	target, _, ok := sshTargetAndPathFromMutagenDestination(destination)
+	if !ok {
+		return false, "destino mutagen inválido"
+	}
+	check := exec.Command("ssh",
+		"-o", "BatchMode=yes",
+		"-o", "StrictHostKeyChecking=accept-new",
+		"-o", "ConnectTimeout=10",
+		target, "echo", "ok",
+	)
+	out, err := check.CombinedOutput()
+	msg := strings.TrimSpace(string(out))
+	if err == nil {
+		return true, ""
+	}
+	low := strings.ToLower(msg)
+	if strings.Contains(low, "please complete registration by running: ssh exe.dev") {
+		return false, "registro exe.dev requerido"
+	}
+	if strings.Contains(low, "permission denied") || strings.Contains(low, "publickey") || strings.Contains(low, "authentication failed") {
+		return false, "auth por clave fallida"
+	}
+	if msg != "" {
+		return false, msg
+	}
+	return false, err.Error()
+}
+
 func ensureExeDevSSHOnboarding(destination string) error {
 	if skipSSHOnboarding {
 		return nil
@@ -1554,9 +1583,11 @@ func ensureExeDevSSHOnboarding(destination string) error {
 
 	// Si el SSH directo a la VM ya funciona (ej: clave inline del backend),
 	// no forzamos onboarding en exe.dev.
-	if err := preflightSSHConnection(destination); err == nil {
+	if ok, msg := directVMSSHReady(destination); ok {
 		fmt.Println("✅ SSH directo a VM operativo; se omite onboarding de exe.dev")
 		return nil
+	} else if strings.TrimSpace(msg) != "" {
+		fmt.Printf("ℹ️  SSH directo aún no listo (%s). Se evaluará onboarding exe.dev...\n", msg)
 	}
 
 	required, msg, err := exeDevRegistrationRequired()
