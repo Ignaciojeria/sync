@@ -1552,6 +1552,13 @@ func ensureExeDevSSHOnboarding(destination string) error {
 		return nil
 	}
 
+	// Si el SSH directo a la VM ya funciona (ej: clave inline del backend),
+	// no forzamos onboarding en exe.dev.
+	if err := preflightSSHConnection(destination); err == nil {
+		fmt.Println("✅ SSH directo a VM operativo; se omite onboarding de exe.dev")
+		return nil
+	}
+
 	required, msg, err := exeDevRegistrationRequired()
 	if err != nil && !required {
 		return nil
