@@ -324,6 +324,11 @@ var initCmd = &cobra.Command{
 			fmt.Println("   - Siguiente paso: einarc dev logs -f")
 		}
 		if !skipAirAutoStart && !airStarted {
+			if !mutagenReady {
+				fmt.Println("⚠️  Init completado con advertencias: no hubo conectividad SSH al VM, Air no pudo iniciar automáticamente.")
+				fmt.Println("   Cuando el VM esté accesible por SSH, ejecuta: einarc dev logs -f")
+				return nil
+			}
 			if airErr != nil {
 				return fmt.Errorf("init incompleto: Air es mandatorio y no inició (%v)", airErr)
 			}
@@ -1076,10 +1081,6 @@ func setupAndStartMutagen(cfg *config.Config) error {
 	if err := ensureLocalSSHKeySetup(); err != nil {
 		fmt.Printf("⚠️  No se pudo preparar clave SSH local automáticamente: %v\n", err)
 	}
-	if err := ensureExeDevSSHOnboarding(destination); err != nil {
-		return err
-	}
-
 	if err := ensureSSHTrustInteractive(destination); err != nil {
 		return err
 	}
@@ -1408,19 +1409,6 @@ func preflightSSHConnection(destination string) error {
 	check := exec.Command("ssh", "-o", "BatchMode=yes", target, "echo", "ok")
 	if out, err := check.CombinedOutput(); err != nil {
 		msg := strings.TrimSpace(string(out))
-		low := strings.ToLower(msg)
-		if strings.Contains(low, "please complete registration by running: ssh exe.dev") {
-			return fmt.Errorf("SSH no disponible para %s: falta completar onboarding de exe.dev. Ejecuta 'ssh exe.dev' y reintenta", target)
-		}
-		if strings.Contains(low, "permission denied") || strings.Contains(low, "publickey") || strings.Contains(low, "ssh keys are required") || strings.Contains(low, "authentication failed") {
-			if pubPath, pubKey, keyErr := readLocalSSHPublicKey(); keyErr == nil && strings.TrimSpace(pubKey) != "" {
-				return fmt.Errorf("SSH no disponible para %s: autenticación por clave fallida. Sube esta clave pública a exe.dev (%s): %s", target, pubPath, pubKey)
-			}
-			if pubPath, _, keyErr := readLocalSSHPublicKey(); keyErr == nil {
-				return fmt.Errorf("SSH no disponible para %s: autenticación por clave fallida. Sube tu clave pública a exe.dev (%s)", target, pubPath)
-			}
-			return fmt.Errorf("SSH no disponible para %s: autenticación por clave fallida. Genera una clave con 'ssh-keygen -t ed25519' y súbela a exe.dev", target)
-		}
 		if msg != "" {
 			return fmt.Errorf("SSH no disponible para %s: %s", target, msg)
 		}
