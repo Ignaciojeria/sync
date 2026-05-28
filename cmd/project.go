@@ -177,9 +177,12 @@ var initCmd = &cobra.Command{
 			cfg.ProjectDBPort = resp.Database.Port
 		}
 		if sshPrivateKey != "" {
+			fmt.Println("✅ Clave SSH de VM recibida inline desde backend")
 			if err := writeSSHPrivateKey(slug, cfg.MutagenDestination, sshPrivateKey); err != nil {
 				return fmt.Errorf("no se pudo guardar clave SSH privada: %w", err)
 			}
+		} else {
+			fmt.Println("ℹ️  Backend no devolvió sshPrivateKey inline; se usará flujo SSH legacy (puede requerir onboarding exe.dev)")
 		}
 		if err := writeProjectSecretsBundle(slug, sshPrivateKey, projectAPIToken, dbPassword); err != nil {
 			return fmt.Errorf("no se pudieron guardar secretos locales del proyecto: %w", err)
@@ -1581,6 +1584,11 @@ func ensureExeDevSSHOnboarding(destination string) error {
 		return nil
 	}
 
+	if hasLocalProjectSSHKey() {
+		fmt.Println("✅ Clave SSH local del proyecto detectada; se omite onboarding de exe.dev")
+		return nil
+	}
+
 	// Si el SSH directo a la VM ya funciona (ej: clave inline del backend),
 	// no forzamos onboarding en exe.dev.
 	if ok, msg := directVMSSHReady(destination); ok {
@@ -1717,6 +1725,19 @@ func localSSHKeyPaths() (string, string, error) {
 	priv := filepath.Join(home, ".ssh", "id_ed25519")
 	pub := priv + ".pub"
 	return priv, pub, nil
+}
+
+func hasLocalProjectSSHKey() bool {
+	path, err := config.ConfigPath()
+	if err != nil {
+		return false
+	}
+	keyPath := filepath.Join(filepath.Dir(path), "id_ed25519")
+	st, err := os.Stat(keyPath)
+	if err != nil || st.IsDir() || st.Size() == 0 {
+		return false
+	}
+	return true
 }
 
 func readLocalSSHPublicKey() (string, string, error) {
