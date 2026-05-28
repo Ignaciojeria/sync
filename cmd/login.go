@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -45,7 +46,7 @@ var loginCmd = &cobra.Command{
 		casdoorOrigin := resolvedCasdoorOrigin(cfg.APIURL)
 		clientID := resolvedClientID()
 
-		idToken, refreshToken, err := runPKCELogin(casdoorOrigin, clientID, strings.TrimSpace(oidcProviderFlag))
+		idToken, refreshToken, err := runDeviceLogin(casdoorOrigin, clientID)
 		if err != nil {
 			return err
 		}
@@ -213,6 +214,129 @@ func runPKCELogin(casdoorOrigin, clientID, provider string) (string, string, err
 	}
 
 	return exchangeCodeForTokens(ctx, casdoorOrigin, clientID, code, verifier, redirectURI)
+}
+
+func runDeviceLogin(casdoorOrigin, clientID string) (string, string, error) {
+	codeEndpoint := strings.TrimRight(casdoorOrigin, "/") + "/api/auth/device/code"
+	tokenEndpoint := strings.TrimRight(casdoorOrigin, "/") + "/api/auth/device/token"
+
+	payload, err := json.Marshal(map[string]string{"client_id": clientID})
+	if err != nil {
+		return "", "", err
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, codeEndpoint, bytes.NewReader(payload))
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := (&http.Client{Timeout: 20 * time.Second}).Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("device code request falló: %w", err)
+	}
+	defer resp.Body.Close()
+
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return "", "", fmt.Errorf("device code %d: %s", resp.StatusCode, string(raw))
+	}
+
+	var device struct {
+		DeviceCode              string `json:"device_code"`
+		UserCode                string `json:"user_code"`
+		VerificationURI         string `json:"verification_uri"`
+		VerificationURIComplete string `json:"verification_uri_complete"`
+		ExpiresIn               int    `json:"expires_in"`
+		Interval                int    `json:"interval"`
+	}
+	if err := json.Unmarshal(raw, &device); err != nil {
+		return "", "", fmt.Errorf("respuesta inválida de device code: %w", err)
+	}
+	if strings.TrimSpace(device.DeviceCode) == "" {
+		return "", "", fmt.Errorf("device code vacío")
+	}
+
+	verificationURL := strings.TrimSpace(device.VerificationURIComplete)
+	if verificationURL == "" {
+		verificationURL = strings.TrimSpace(device.VerificationURI)
+	}
+	if verificationURL == "" {
+		return "", "", fmt.Errorf("verification_uri ausente")
+	}
+
+	fmt.Printf("\n🔐 Login por código de dispositivo\n")
+	if device.UserCode != "" {
+		fmt.Printf("Código: %s\n", device.UserCode)
+	}
+	fmt.Printf("Abrí esta URL en tu navegador:\n%s\n\n", verificationURL)
+	if err := openBrowser(verificationURL); err == nil {
+		fmt.Println("Intentando abrir navegador automáticamente...")
+	}
+
+	interval := device.Interval
+	if interval <= 0 {
+		interval = 5
+	}
+	expiresIn := device.ExpiresIn
+	if expiresIn <= 0 {
+		expiresIn = 900
+	}
+	deadline := time.Now().Add(time.Duration(expiresIn) * time.Second)
+
+	for {
+		if time.Now().After(deadline) {
+			return "", "", fmt.Errorf("timeout esperando autorización de dispositivo")
+		}
+
+		pollBody, _ := json.Marshal(map[string]string{
+			"grant_type":  "urn:ietf:params:oauth:grant-type:device_code",
+			"device_code": device.DeviceCode,
+			"client_id":   clientID,
+		})
+		pollReq, err := http.NewRequestWithContext(context.Background(), http.MethodPost, tokenEndpoint, bytes.NewReader(pollBody))
+		if err != nil {
+			return "", "", err
+		}
+		pollReq.Header.Set("Content-Type", "application/json")
+
+		pollResp, err := (&http.Client{Timeout: 20 * time.Second}).Do(pollReq)
+		if err != nil {
+			return "", "", fmt.Errorf("polling device token falló: %w", err)
+		}
+		pollRaw, _ := io.ReadAll(pollResp.Body)
+		pollResp.Body.Close()
+
+		var token struct {
+			AccessToken  string `json:"access_token"`
+			IDToken      string `json:"id_token"`
+			RefreshToken string `json:"refresh_token"`
+			Error        string `json:"error"`
+		}
+		_ = json.Unmarshal(pollRaw, &token)
+
+		switch strings.TrimSpace(token.Error) {
+		case "":
+			id := strings.TrimSpace(token.IDToken)
+			if id == "" {
+				id = strings.TrimSpace(token.AccessToken)
+			}
+			if id == "" {
+				return "", "", fmt.Errorf("token response sin id_token/access_token: %s", string(pollRaw))
+			}
+			return id, strings.TrimSpace(token.RefreshToken), nil
+		case "authorization_pending":
+			// seguir esperando
+		case "slow_down":
+			interval += 5
+		default:
+			if pollResp.StatusCode >= 200 && pollResp.StatusCode <= 299 {
+				return "", "", fmt.Errorf("device flow error: %s", token.Error)
+			}
+			return "", "", fmt.Errorf("device token %d: %s", pollResp.StatusCode, string(pollRaw))
+		}
+
+		time.Sleep(time.Duration(interval) * time.Second)
+	}
 }
 
 func buildAuthorizeURL(casdoorOrigin, clientID, redirectURI, state, challenge, provider string) (string, error) {
