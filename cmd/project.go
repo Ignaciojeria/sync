@@ -1023,7 +1023,11 @@ func writeSSHPrivateKey(projectSlug, destination, key string) error {
 	if err != nil {
 		return err
 	}
-	keyPath := filepath.Join(filepath.Dir(path), "id_ed25519")
+	keyDir := filepath.Dir(path)
+	if err := os.MkdirAll(keyDir, 0o700); err != nil {
+		return fmt.Errorf("no se pudo crear directorio .einar: %w", err)
+	}
+	keyPath := filepath.Join(keyDir, "id_ed25519")
 	content := strings.TrimSpace(key) + "\n"
 	if err := os.WriteFile(keyPath, []byte(content), 0o600); err != nil {
 		return err
