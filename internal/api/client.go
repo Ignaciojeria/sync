@@ -51,14 +51,20 @@ type createProjectRequest struct {
 }
 
 type CreateProjectResponse struct {
-	ProjectID          string `json:"projectId"`
-	Name               string `json:"name"`
-	Slug               string `json:"slug"`
-	Path               string `json:"path"`
-	Subdomain          string `json:"subdomain"`
-	Status             string `json:"status"`
-	VMSshPrivateKey string `json:"vmSshPrivateKey,omitempty"`
-	ProjectAPIToken string `json:"projectApiToken,omitempty"`
+	ProjectID      string `json:"projectId"`
+	Name           string `json:"name"`
+	Slug           string `json:"slug"`
+	Path           string `json:"path"`
+	Subdomain      string `json:"subdomain"`
+	Status         string `json:"status"`
+	VMSshPrivateKey string `json:"vmSshPrivateKey,omitempty"` // compat legado
+	ProjectAPIToken string `json:"projectApiToken,omitempty"` // compat legado
+	DBPassword      string `json:"dbPassword,omitempty"`      // compat legado
+	Secrets *struct {
+		SSHPrivateKey   string `json:"sshPrivateKey,omitempty"`
+		ProjectAPIToken string `json:"projectApiToken,omitempty"`
+		DBPassword      string `json:"dbPassword,omitempty"`
+	} `json:"secrets,omitempty"`
 
 	Workspace struct {
 		Branch string `json:"branch"`

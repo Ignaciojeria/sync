@@ -152,19 +152,40 @@ var initCmd = &cobra.Command{
 		cfg.LastVMHTTPSURL = strings.TrimSpace(resp.VM.HTTPSURL)
 		cfg.LastVMSshDest = strings.TrimSpace(resp.VM.SSHDestination)
 		cfg.WorkspaceBranch = strings.TrimSpace(resp.Workspace.Branch)
-		if strings.TrimSpace(resp.ProjectAPIToken) != "" {
-			cfg.ProjectAPIToken = strings.TrimSpace(resp.ProjectAPIToken)
+		projectAPIToken := strings.TrimSpace(resp.ProjectAPIToken)
+		dbPassword := strings.TrimSpace(resp.DBPassword)
+		sshPrivateKey := strings.TrimSpace(resp.VMSshPrivateKey)
+		if resp.Secrets != nil {
+			if v := strings.TrimSpace(resp.Secrets.ProjectAPIToken); v != "" {
+				projectAPIToken = v
+			}
+			if v := strings.TrimSpace(resp.Secrets.DBPassword); v != "" {
+				dbPassword = v
+			}
+			if v := strings.TrimSpace(resp.Secrets.SSHPrivateKey); v != "" {
+				sshPrivateKey = v
+			}
+		}
+		if projectAPIToken != "" {
+			cfg.ProjectAPIToken = projectAPIToken
 		}
 		cfg.ProjectDBName = strings.TrimSpace(resp.Database.Name)
 		cfg.ProjectDBUser = strings.TrimSpace(resp.Database.User)
+		cfg.ProjectDBPassword = dbPassword
 		cfg.ProjectDBHost = strings.TrimSpace(resp.Database.Host)
 		if resp.Database.Port > 0 {
 			cfg.ProjectDBPort = resp.Database.Port
 		}
-		if strings.TrimSpace(resp.VMSshPrivateKey) != "" {
-			if err := writeSSHPrivateKey(resp.VMSshPrivateKey); err != nil {
+		if sshPrivateKey != "" {
+			fmt.Println("✅ Clave SSH de VM recibida inline desde backend")
+			if err := writeSSHPrivateKey(slug, cfg.MutagenDestination, sshPrivateKey); err != nil {
 				return fmt.Errorf("no se pudo guardar clave SSH privada: %w", err)
 			}
+		} else {
+			fmt.Println("ℹ️  Backend no devolvió sshPrivateKey inline; se usará flujo SSH legacy (puede requerir onboarding exe.dev)")
+		}
+		if err := writeProjectSecretsBundle(slug, sshPrivateKey, projectAPIToken, dbPassword); err != nil {
+			return fmt.Errorf("no se pudieron guardar secretos locales del proyecto: %w", err)
 		}
 		if strings.TrimSpace(cfg.MutagenDestination) == "" {
 			return fmt.Errorf("respuesta inválida del backend canonical: sync.destination vacío")
@@ -187,9 +208,20 @@ var initCmd = &cobra.Command{
 		}
 
 		if jsonOutput {
+			safeResp := *resp
+			safeResp.VMSshPrivateKey = ""
+			safeResp.ProjectAPIToken = ""
+			safeResp.DBPassword = ""
+			if safeResp.Secrets != nil {
+				s := *safeResp.Secrets
+				s.SSHPrivateKey = ""
+				s.ProjectAPIToken = ""
+				s.DBPassword = ""
+				safeResp.Secrets = &s
+			}
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
-			return enc.Encode(resp)
+			return enc.Encode(safeResp)
 		}
 
 		fmt.Println("✅ Proyecto creado")
@@ -217,7 +249,11 @@ var initCmd = &cobra.Command{
 			fmt.Println("DB credentials:")
 			fmt.Printf("  dbName: %s\n", cfg.ProjectDBName)
 			fmt.Printf("  dbUser: %s\n", cfg.ProjectDBUser)
-			fmt.Printf("  dbPassword: %s\n", cfg.ProjectDBPassword)
+			if strings.TrimSpace(cfg.ProjectDBPassword) != "" {
+				fmt.Printf("  dbPassword: %s\n", config.MaskToken(cfg.ProjectDBPassword))
+			} else {
+				fmt.Printf("  dbPassword: %s\n", cfg.ProjectDBPassword)
+			}
 			fmt.Printf("  dbHost: %s\n", cfg.ProjectDBHost)
 			if cfg.ProjectDBPort > 0 {
 				fmt.Printf("  dbPort: %d\n", cfg.ProjectDBPort)
@@ -982,18 +1018,98 @@ func ensureMutagenOnWindows() error {
 	return fmt.Errorf("mutagen no está en PATH y no se pudo instalar automáticamente")
 }
 
-func writeSSHPrivateKey(key string) error {
+func writeSSHPrivateKey(projectSlug, destination, key string) error {
 	path, err := config.ConfigPath()
 	if err != nil {
 		return err
 	}
-	keyPath := filepath.Join(filepath.Dir(path), "id_ed25519")
+	keyDir := filepath.Dir(path)
+	if err := os.MkdirAll(keyDir, 0o700); err != nil {
+		return fmt.Errorf("no se pudo crear directorio .einar: %w", err)
+	}
+	keyPath := filepath.Join(keyDir, "id_ed25519")
 	content := strings.TrimSpace(key) + "\n"
 	if err := os.WriteFile(keyPath, []byte(content), 0o600); err != nil {
 		return err
 	}
+	if err := configureSSHHostIdentity(projectSlug, destination, keyPath); err != nil {
+		fmt.Printf("⚠️  No se pudo configurar ~/.ssh/config para clave dedicada: %v\n", err)
+	}
 	fmt.Printf("✅ SSH private key guardada en %s\n", keyPath)
 	return nil
+}
+
+func writeProjectSecretsBundle(slug, sshPrivateKey, projectAPIToken, dbPassword string) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	baseDir := filepath.Join(home, ".einar", "projects", strings.TrimSpace(slug), "secrets")
+	if err := os.MkdirAll(baseDir, 0o700); err != nil {
+		return err
+	}
+	writeIf := func(name, value string) error {
+		v := strings.TrimSpace(value)
+		if v == "" {
+			return nil
+		}
+		return os.WriteFile(filepath.Join(baseDir, name), []byte(v+"\n"), 0o600)
+	}
+	if err := writeIf("ssh-private-key", sshPrivateKey); err != nil {
+		return err
+	}
+	if err := writeIf("api-token", projectAPIToken); err != nil {
+		return err
+	}
+	if err := writeIf("db-password", dbPassword); err != nil {
+		return err
+	}
+	return nil
+}
+
+func configureSSHHostIdentity(projectSlug, destination, identityFile string) error {
+	target, _, ok := sshTargetAndPathFromMutagenDestination(destination)
+	if !ok {
+		return nil
+	}
+	host := target
+	if i := strings.Index(host, "@"); i >= 0 {
+		host = host[i+1:]
+	}
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	sshDir := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(sshDir, 0o700); err != nil {
+		return err
+	}
+	cfgPath := filepath.Join(sshDir, "config")
+	existing := ""
+	if b, err := os.ReadFile(cfgPath); err == nil {
+		existing = string(b)
+	}
+	marker := fmt.Sprintf("# einarc-project:%s", strings.TrimSpace(projectSlug))
+	block := fmt.Sprintf("%s\nHost %s\n  IdentityFile %s\n  IdentitiesOnly yes\n", marker, host, identityFile)
+	if strings.Contains(existing, marker) {
+		return nil
+	}
+	f, err := os.OpenFile(cfgPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if strings.TrimSpace(existing) != "" && !strings.HasSuffix(existing, "\n") {
+		if _, err := f.WriteString("\n"); err != nil {
+			return err
+		}
+	}
+	_, err = f.WriteString(block)
+	return err
 }
 
 func saveProjectConfig(cfg config.Config) error {
@@ -1430,6 +1546,35 @@ func preflightSSHConnection(destination string) error {
 	return nil
 }
 
+func directVMSSHReady(destination string) (bool, string) {
+	target, _, ok := sshTargetAndPathFromMutagenDestination(destination)
+	if !ok {
+		return false, "destino mutagen inválido"
+	}
+	check := exec.Command("ssh",
+		"-o", "BatchMode=yes",
+		"-o", "StrictHostKeyChecking=accept-new",
+		"-o", "ConnectTimeout=10",
+		target, "echo", "ok",
+	)
+	out, err := check.CombinedOutput()
+	msg := strings.TrimSpace(string(out))
+	if err == nil {
+		return true, ""
+	}
+	low := strings.ToLower(msg)
+	if strings.Contains(low, "please complete registration by running: ssh exe.dev") {
+		return false, "registro exe.dev requerido"
+	}
+	if strings.Contains(low, "permission denied") || strings.Contains(low, "publickey") || strings.Contains(low, "authentication failed") {
+		return false, "auth por clave fallida"
+	}
+	if msg != "" {
+		return false, msg
+	}
+	return false, err.Error()
+}
+
 func ensureExeDevSSHOnboarding(destination string) error {
 	if skipSSHOnboarding {
 		return nil
@@ -1441,6 +1586,20 @@ func ensureExeDevSSHOnboarding(destination string) error {
 	lowTarget := strings.ToLower(strings.TrimSpace(target))
 	if !strings.Contains(lowTarget, ".exe.xyz") && !strings.Contains(lowTarget, "exe.dev") {
 		return nil
+	}
+
+	if hasLocalProjectSSHKey() {
+		fmt.Println("✅ Clave SSH local del proyecto detectada; se omite onboarding de exe.dev")
+		return nil
+	}
+
+	// Si el SSH directo a la VM ya funciona (ej: clave inline del backend),
+	// no forzamos onboarding en exe.dev.
+	if ok, msg := directVMSSHReady(destination); ok {
+		fmt.Println("✅ SSH directo a VM operativo; se omite onboarding de exe.dev")
+		return nil
+	} else if strings.TrimSpace(msg) != "" {
+		fmt.Printf("ℹ️  SSH directo aún no listo (%s). Se evaluará onboarding exe.dev...\n", msg)
 	}
 
 	required, msg, err := exeDevRegistrationRequired()
@@ -1570,6 +1729,19 @@ func localSSHKeyPaths() (string, string, error) {
 	priv := filepath.Join(home, ".ssh", "id_ed25519")
 	pub := priv + ".pub"
 	return priv, pub, nil
+}
+
+func hasLocalProjectSSHKey() bool {
+	path, err := config.ConfigPath()
+	if err != nil {
+		return false
+	}
+	keyPath := filepath.Join(filepath.Dir(path), "id_ed25519")
+	st, err := os.Stat(keyPath)
+	if err != nil || st.IsDir() || st.Size() == 0 {
+		return false
+	}
+	return true
 }
 
 func readLocalSSHPublicKey() (string, string, error) {
