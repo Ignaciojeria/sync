@@ -1032,6 +1032,9 @@ func writeSSHPrivateKey(projectSlug, destination, key string) error {
 	if err := os.WriteFile(keyPath, []byte(content), 0o600); err != nil {
 		return err
 	}
+	if err := enforceSSHPrivateKeyPermissions(keyPath); err != nil {
+		fmt.Printf("⚠️  No se pudieron endurecer permisos de clave SSH (%s): %v\n", keyPath, err)
+	}
 	if err := configureSSHHostIdentity(projectSlug, destination, keyPath); err != nil {
 		fmt.Printf("⚠️  No se pudo configurar ~/.ssh/config para clave dedicada: %v\n", err)
 	}
@@ -1528,6 +1531,22 @@ func preflightSSHConnection(destination string) error {
 		if strings.Contains(low, "please complete registration by running: ssh exe.dev") {
 			return fmt.Errorf("SSH no disponible para %s: falta completar onboarding de exe.dev. Ejecuta 'ssh exe.dev' y reintenta", target)
 		}
+		if strings.Contains(low, "unprotected private key file") || strings.Contains(low, "bad permissions") || strings.Contains(low, "this private key will be ignored") {
+			if keyPath, kerr := projectSSHPrivateKeyPath(); kerr == nil {
+				if fixErr := enforceSSHPrivateKeyPermissions(keyPath); fixErr == nil {
+					retry := exec.Command("ssh", "-o", "BatchMode=yes", target, "echo", "ok")
+					if retryOut, retryErr := retry.CombinedOutput(); retryErr == nil {
+						fmt.Printf("✅ Permisos SSH corregidos automáticamente: %s\n", keyPath)
+						fmt.Printf("✅ SSH operativo: %s\n", target)
+						return nil
+					} else {
+						msg = strings.TrimSpace(string(retryOut))
+						low = strings.ToLower(msg)
+					}
+				}
+				return fmt.Errorf("SSH no disponible para %s: permisos inseguros en clave privada (%s). Revisa ACLs del archivo (quita Authenticated Users/Users y deja solo tu usuario con lectura).", target, keyPath)
+			}
+		}
 		if strings.Contains(low, "permission denied") || strings.Contains(low, "publickey") || strings.Contains(low, "ssh keys are required") || strings.Contains(low, "authentication failed") {
 			if pubPath, pubKey, keyErr := readLocalSSHPublicKey(); keyErr == nil && strings.TrimSpace(pubKey) != "" {
 				return fmt.Errorf("SSH no disponible para %s: autenticación por clave fallida. Sube esta clave pública a exe.dev (%s): %s", target, pubPath, pubKey)
@@ -1684,6 +1703,9 @@ func ensureLocalSSHKeySetup() error {
 	if err := os.Chmod(privPath, 0o600); err != nil {
 		return fmt.Errorf("no se pudo ajustar permisos de %s: %w", privPath, err)
 	}
+	if err := enforceSSHPrivateKeyPermissions(privPath); err != nil {
+		fmt.Printf("⚠️  No se pudieron endurecer permisos de clave SSH (%s): %v\n", privPath, err)
+	}
 
 	if _, err := os.Stat(pubPath); os.IsNotExist(err) {
 		if _, lookErr := exec.LookPath("ssh-keygen"); lookErr != nil {
@@ -1732,16 +1754,61 @@ func localSSHKeyPaths() (string, string, error) {
 }
 
 func hasLocalProjectSSHKey() bool {
-	path, err := config.ConfigPath()
+	keyPath, err := projectSSHPrivateKeyPath()
 	if err != nil {
 		return false
 	}
-	keyPath := filepath.Join(filepath.Dir(path), "id_ed25519")
 	st, err := os.Stat(keyPath)
 	if err != nil || st.IsDir() || st.Size() == 0 {
 		return false
 	}
+	if err := enforceSSHPrivateKeyPermissions(keyPath); err != nil {
+		fmt.Printf("⚠️  No se pudieron endurecer permisos de clave SSH del proyecto (%s): %v\n", keyPath, err)
+	}
 	return true
+}
+
+func projectSSHPrivateKeyPath() (string, error) {
+	path, err := config.ConfigPath()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(path), "id_ed25519"), nil
+}
+
+func enforceSSHPrivateKeyPermissions(keyPath string) error {
+	if strings.TrimSpace(keyPath) == "" {
+		return fmt.Errorf("ruta de clave SSH vacía")
+	}
+	if runtime.GOOS != "windows" {
+		return os.Chmod(keyPath, 0o600)
+	}
+	currentUser := strings.TrimSpace(os.Getenv("USERNAME"))
+	if currentUser == "" {
+		currentUser = os.Getenv("USER")
+	}
+	if currentUser == "" {
+		return fmt.Errorf("no se pudo resolver USERNAME en Windows")
+	}
+	commands := [][]string{
+		{"/inheritance:r"},
+		{"/remove", "NT AUTHORITY\\Authenticated Users"},
+		{"/remove", "BUILTIN\\Users"},
+		{"/remove", "Everyone"},
+		{"/grant:r", currentUser + ":(R)"},
+	}
+	for _, args := range commands {
+		fullArgs := append([]string{keyPath}, args...)
+		cmd := exec.Command("icacls", fullArgs...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			msg := strings.TrimSpace(string(out))
+			if msg != "" {
+				return fmt.Errorf("icacls %v falló: %s", args, msg)
+			}
+			return fmt.Errorf("icacls %v falló: %w", args, err)
+		}
+	}
+	return nil
 }
 
 func readLocalSSHPublicKey() (string, string, error) {
