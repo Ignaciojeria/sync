@@ -39,7 +39,8 @@ var (
 
 var initCmd = &cobra.Command{
 	Use:   "init <name>",
-	Short: "Inicializa un proyecto en Einar",
+	Short: "Inicializa un proyecto en Einar (entrypoint API en cmd/api/main.go)",
+	Long:  "Inicializa un proyecto Go base en Einar. El scaffold recomendado crea el entrypoint de la API en cmd/api/main.go para separar runtime de API y comandos CLI.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := strings.TrimSpace(args[0])
@@ -418,8 +419,14 @@ func ensureGoProjectScaffold(slug string) error {
 		fmt.Println("✅ go.mod generado")
 	}
 
-	if _, err := os.Stat("main.go"); os.IsNotExist(err) {
-		mainGo := `package main
+	if _, err := os.Stat("cmd/api/main.go"); os.IsNotExist(err) {
+		if _, rootErr := os.Stat("main.go"); rootErr == nil {
+			fmt.Println("ℹ️  main.go ya existe en raíz, se respeta (no se genera cmd/api/main.go)")
+		} else {
+			if mkErr := os.MkdirAll("cmd/api", 0o755); mkErr != nil {
+				return mkErr
+			}
+			mainGo := `package main
 
 import (
 	"fmt"
@@ -445,10 +452,11 @@ func main() {
 	}
 }
 `
-		if werr := os.WriteFile("main.go", []byte(mainGo), 0o644); werr != nil {
-			return werr
+			if werr := os.WriteFile("cmd/api/main.go", []byte(mainGo), 0o644); werr != nil {
+				return werr
+			}
+			fmt.Println("✅ cmd/api/main.go generado")
 		}
-		fmt.Println("✅ main.go generado")
 	}
 
 	return nil
@@ -460,7 +468,7 @@ func airTomlContent() string {
 tmp_dir = "tmp"
 
 [build]
-  cmd = "go build -o ./tmp/main ."
+  cmd = "sh -c 'if [ -f ./cmd/api/main.go ]; then go build -o ./tmp/main ./cmd/api; elif [ -f ./cmd/main.go ]; then go build -o ./tmp/main ./cmd; else go build -o ./tmp/main .; fi'"
   bin = "./tmp/main"
   include_ext = ["go", "tpl", "tmpl", "html"]
   exclude_dir = ["assets", "tmp", "vendor", "node_modules", ".git", ".einar"]
@@ -1343,7 +1351,7 @@ func ensureInitialSyncHealthy(mutagenBin, sessionName, destination string) error
 			_ = out
 		}
 
-		if err := remoteFilesPresent(target, remotePath, []string{"main.go", ".air.toml"}); err == nil {
+		if err := remoteFilesPresent(target, remotePath, []string{"go.mod", ".air.toml"}); err == nil {
 			fmt.Println("✅ Sync healthy: archivos críticos presentes en VM")
 			return nil
 		} else {
