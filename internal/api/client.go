@@ -82,6 +82,7 @@ type CreateProjectResponse struct {
 		SessionName string `json:"sessionName"`
 		IgnoreVCS   bool   `json:"ignoreVCS"`
 	} `json:"sync"`
+	DatabaseURL string `json:"databaseUrl,omitempty"`
 	Database struct {
 		Name              string `json:"name"`
 		User              string `json:"user"`

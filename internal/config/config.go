@@ -11,23 +11,34 @@ import (
 )
 
 type Config struct {
-	APIURL              string `json:"apiUrl,omitempty"`
-	Token               string `json:"token,omitempty"`
-	RefreshToken        string `json:"refreshToken,omitempty"`
-	LastProjectID       string `json:"lastProjectId,omitempty"`
-	LastProjectSlug     string `json:"lastProjectSlug,omitempty"`
-	MutagenDestination  string `json:"mutagenDestination,omitempty"`
-	MutagenSessionName  string `json:"mutagenSessionName,omitempty"`
-	LastVMName          string `json:"lastVmName,omitempty"`
-	LastVMHTTPSURL      string `json:"lastVmHttpsUrl,omitempty"`
-	LastVMSshDest       string `json:"lastVmSshDest,omitempty"`
-	ProjectAPIToken     string `json:"projectApiToken,omitempty"`
-	ProjectDBName       string `json:"projectDbName,omitempty"`
-	ProjectDBUser       string `json:"projectDbUser,omitempty"`
-	ProjectDBPassword   string `json:"projectDbPassword,omitempty"`
-	ProjectDBHost       string `json:"projectDbHost,omitempty"`
-	ProjectDBPort       int    `json:"projectDbPort,omitempty"`
-	WorkspaceBranch     string `json:"workspaceBranch,omitempty"`
+	APIURL             string `json:"apiUrl,omitempty"`
+	Token              string `json:"token,omitempty"`
+	RefreshToken       string `json:"refreshToken,omitempty"`
+	LastProjectID      string
+	LastProjectSlug    string
+	MutagenDestination string
+	MutagenSessionName string
+	LastVMName         string
+	LastVMHTTPSURL     string
+	LastVMSshDest      string
+	ProjectAPIToken    string
+	ProjectDBName      string
+	ProjectDBUser      string
+	ProjectDBPassword  string
+	ProjectDBHost      string
+	ProjectDBPort      int
+	ProjectDatabaseURL string
+	WorkspaceBranch    string
+}
+
+type projectDiskConfig struct {
+	Project struct {
+		ID   string `json:"id,omitempty"`
+		Name string `json:"name,omitempty"`
+	} `json:"project,omitempty"`
+	Database struct {
+		URL string `json:"url,omitempty"`
+	} `json:"database,omitempty"`
 }
 
 func Resolve(apiURLFlag, tokenFlag string) (Config, error) {
@@ -54,6 +65,7 @@ func Resolve(apiURLFlag, tokenFlag string) (Config, error) {
 	cfg.ProjectDBPassword = strings.TrimSpace(projectCfg.ProjectDBPassword)
 	cfg.ProjectDBHost = strings.TrimSpace(projectCfg.ProjectDBHost)
 	cfg.ProjectDBPort = projectCfg.ProjectDBPort
+	cfg.ProjectDatabaseURL = strings.TrimSpace(projectCfg.ProjectDatabaseURL)
 	cfg.WorkspaceBranch = strings.TrimSpace(projectCfg.WorkspaceBranch)
 
 	if envAPI := strings.TrimSpace(os.Getenv("EINAR_API_URL")); envAPI != "" {
@@ -120,11 +132,17 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	var cfg Config
-	if err := json.Unmarshal(b, &cfg); err != nil {
+
+	var disk projectDiskConfig
+	if err := json.Unmarshal(b, &disk); err != nil {
 		return Config{}, err
 	}
-	return cfg, nil
+
+	return Config{
+		LastProjectID:      strings.TrimSpace(disk.Project.ID),
+		LastProjectSlug:    strings.TrimSpace(disk.Project.Name),
+		ProjectDatabaseURL: strings.TrimSpace(disk.Database.URL),
+	}, nil
 }
 
 func Save(cfg Config) error {
@@ -135,7 +153,13 @@ func Save(cfg Config) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	b, err := json.MarshalIndent(cfg, "", "  ")
+
+	var onDisk projectDiskConfig
+	onDisk.Project.ID = strings.TrimSpace(cfg.LastProjectID)
+	onDisk.Project.Name = strings.TrimSpace(cfg.LastProjectSlug)
+	onDisk.Database.URL = strings.TrimSpace(cfg.ProjectDatabaseURL)
+
+	b, err := json.MarshalIndent(onDisk, "", "  ")
 	if err != nil {
 		return err
 	}

@@ -177,6 +177,10 @@ var initCmd = &cobra.Command{
 		if resp.Database.Port > 0 {
 			cfg.ProjectDBPort = resp.Database.Port
 		}
+		cfg.ProjectDatabaseURL = strings.TrimSpace(resp.DatabaseURL)
+		if cfg.ProjectDatabaseURL == "" {
+			cfg.ProjectDatabaseURL = buildDatabaseURL(cfg.ProjectDBUser, cfg.ProjectDBPassword, cfg.ProjectDBHost, cfg.ProjectDBPort, cfg.ProjectDBName)
+		}
 		if sshPrivateKey != "" {
 			fmt.Println("✅ Clave SSH de VM recibida inline desde backend")
 			if err := writeSSHPrivateKey(slug, cfg.MutagenDestination, sshPrivateKey); err != nil {
@@ -259,6 +263,9 @@ var initCmd = &cobra.Command{
 			if cfg.ProjectDBPort > 0 {
 				fmt.Printf("  dbPort: %d\n", cfg.ProjectDBPort)
 			}
+		}
+		if strings.TrimSpace(cfg.ProjectDatabaseURL) != "" {
+			fmt.Printf("  databaseUrl: %s\n", maskDatabaseURL(cfg.ProjectDatabaseURL))
 		}
 
 		airStarted := false
@@ -403,6 +410,28 @@ func mapAPIError(err error) string {
 	default:
 		return fmt.Sprintf("Error API (%d): %s", ae.StatusCode, ae.Message)
 	}
+}
+
+func buildDatabaseURL(user, password, host string, port int, dbName string) string {
+	if strings.TrimSpace(user) == "" || strings.TrimSpace(password) == "" || strings.TrimSpace(host) == "" || strings.TrimSpace(dbName) == "" || port <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", url.QueryEscape(user), url.QueryEscape(password), host, port, url.QueryEscape(dbName))
+}
+
+func maskDatabaseURL(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u == nil || u.User == nil {
+		return raw
+	}
+	username := u.User.Username()
+	if username == "" {
+		return raw
+	}
+	if _, hasPassword := u.User.Password(); hasPassword {
+		u.User = url.UserPassword(username, "***")
+	}
+	return u.String()
 }
 
 func ensureGoProjectScaffold(slug string) error {
