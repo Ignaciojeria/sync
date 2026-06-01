@@ -51,16 +51,16 @@ type createProjectRequest struct {
 }
 
 type CreateProjectResponse struct {
-	ProjectID      string `json:"projectId"`
-	Name           string `json:"name"`
-	Slug           string `json:"slug"`
-	Path           string `json:"path"`
-	Subdomain      string `json:"subdomain"`
-	Status         string `json:"status"`
+	ProjectID       string `json:"projectId"`
+	Name            string `json:"name"`
+	Slug            string `json:"slug"`
+	Path            string `json:"path"`
+	Subdomain       string `json:"subdomain"`
+	Status          string `json:"status"`
 	VMSshPrivateKey string `json:"vmSshPrivateKey,omitempty"` // compat legado
 	ProjectAPIToken string `json:"projectApiToken,omitempty"` // compat legado
 	DBPassword      string `json:"dbPassword,omitempty"`      // compat legado
-	Secrets *struct {
+	Secrets         *struct {
 		SSHPrivateKey   string `json:"sshPrivateKey,omitempty"`
 		ProjectAPIToken string `json:"projectApiToken,omitempty"`
 		DBPassword      string `json:"dbPassword,omitempty"`
@@ -83,14 +83,19 @@ type CreateProjectResponse struct {
 		IgnoreVCS   bool   `json:"ignoreVCS"`
 	} `json:"sync"`
 	DatabaseURL string `json:"databaseUrl,omitempty"`
-	Database struct {
+	Database    struct {
 		Name              string `json:"name"`
 		User              string `json:"user"`
 		Host              string `json:"host"`
 		Port              int    `json:"port"`
 		PasswordSecretRef string `json:"passwordSecretRef"`
 	} `json:"database"`
+}
 
+type CreatePostgresProjectResponse struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	DatabaseURL string `json:"databaseUrl"`
 }
 
 type ProjectPublicConfig struct {
@@ -133,6 +138,18 @@ func (c *Client) CreateProject(ctx context.Context, name string) (*CreateProject
 	payload := createProjectRequest{Name: name, Public: true, Visibility: "public"}
 	var out CreateProjectResponse
 	if err := c.doWithRetry(ctx, http.MethodPost, "/api/projects", payload, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) CreatePostgresProject(ctx context.Context, name string) (*CreatePostgresProjectResponse, error) {
+	if c.token == "" {
+		return nil, fmt.Errorf("falta token (usa EINAR_TOKEN o 'login --token')")
+	}
+	payload := map[string]string{"name": name}
+	var out CreatePostgresProjectResponse
+	if err := c.doWithRetry(ctx, http.MethodPost, "/projects", payload, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

@@ -102,6 +102,10 @@ var initCmd = &cobra.Command{
 		if projectID == "" || slug == "" {
 			return fmt.Errorf("respuesta inválida del backend canonical: projectId/slug vacíos")
 		}
+		postgresDatabaseURL, err := ensurePostgresProjectProvisioned(ctx, &cfg, slug)
+		if err != nil {
+			return err
+		}
 
 		localProjectDir := slug
 		if localProjectDir == "" {
@@ -178,6 +182,9 @@ var initCmd = &cobra.Command{
 			cfg.ProjectDBPort = resp.Database.Port
 		}
 		cfg.ProjectDatabaseURL = strings.TrimSpace(resp.DatabaseURL)
+		if strings.TrimSpace(postgresDatabaseURL) != "" {
+			cfg.ProjectDatabaseURL = strings.TrimSpace(postgresDatabaseURL)
+		}
 		if cfg.ProjectDatabaseURL == "" {
 			cfg.ProjectDatabaseURL = buildDatabaseURL(cfg.ProjectDBUser, cfg.ProjectDBPassword, cfg.ProjectDBHost, cfg.ProjectDBPort, cfg.ProjectDBName)
 		}
@@ -387,6 +394,41 @@ func shouldRefreshAndRetry(err error, cfg *config.Config) (bool, error) {
 		return false, rerr
 	}
 	return ok, nil
+}
+
+func ensurePostgresProjectProvisioned(ctx context.Context, cfg *config.Config, projectName string) (string, error) {
+	name := strings.TrimSpace(projectName)
+	if name == "" {
+		return "", fmt.Errorf("nombre de proyecto vacío para provisioning de Postgres API")
+	}
+	dbAPIURL := resolveDBAPIURL("")
+	client := api.NewClient(dbAPIURL, cfg.Token, 15*time.Second)
+	resp, err := client.CreatePostgresProject(ctx, name)
+	if err != nil {
+		if refreshed, rerr := shouldRefreshAndRetry(err, cfg); rerr != nil {
+			return "", rerr
+		} else if refreshed {
+			client = api.NewClient(dbAPIURL, cfg.Token, 15*time.Second)
+			resp, err = client.CreatePostgresProject(ctx, name)
+		}
+	}
+	if err != nil {
+		var ae api.APIError
+		if api.AsAPIError(err, &ae) && ae.StatusCode == 409 {
+			fmt.Printf("ℹ️  Proyecto ya existe en Postgres API: %s\n", name)
+			return "", nil
+		}
+		if msg := mapAPIError(err); msg != "" {
+			return "", fmt.Errorf("falló provisioning en Postgres API (%s): %s", dbAPIURL, msg)
+		}
+		return "", fmt.Errorf("falló provisioning en Postgres API (%s): %w", dbAPIURL, err)
+	}
+
+	fmt.Printf("✅ Proyecto provisionado en Postgres API (%s)\n", dbAPIURL)
+	if resp == nil {
+		return "", nil
+	}
+	return strings.TrimSpace(resp.DatabaseURL), nil
 }
 
 func mapAPIError(err error) string {
@@ -806,12 +848,12 @@ func ensureWorkspaceBranchLock(cfg *config.Config) error {
 }
 
 type workspaceStateEntry struct {
-	ProjectSlug         string `json:"projectSlug"`
-	WorkspaceBranch     string `json:"workspaceBranch"`
-	MutagenDestination  string `json:"mutagenDestination,omitempty"`
-	MutagenSessionName  string `json:"mutagenSessionName,omitempty"`
-	OwnerID             string `json:"ownerId"`
-	UpdatedAt           string `json:"updatedAt"`
+	ProjectSlug        string `json:"projectSlug"`
+	WorkspaceBranch    string `json:"workspaceBranch"`
+	MutagenDestination string `json:"mutagenDestination,omitempty"`
+	MutagenSessionName string `json:"mutagenSessionName,omitempty"`
+	OwnerID            string `json:"ownerId"`
+	UpdatedAt          string `json:"updatedAt"`
 }
 
 type workspaceStateFile struct {
