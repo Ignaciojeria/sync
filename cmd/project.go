@@ -102,7 +102,7 @@ var initCmd = &cobra.Command{
 		if projectID == "" || slug == "" {
 			return fmt.Errorf("respuesta inválida del backend canonical: projectId/slug vacíos")
 		}
-		postgresDatabaseURL, err := ensurePostgresProjectProvisioned(ctx, &cfg, slug)
+		postgresProject, err := ensurePostgresProjectProvisioned(ctx, &cfg, slug)
 		if err != nil {
 			return err
 		}
@@ -182,11 +182,32 @@ var initCmd = &cobra.Command{
 			cfg.ProjectDBPort = resp.Database.Port
 		}
 		cfg.ProjectDatabaseURL = strings.TrimSpace(resp.DatabaseURL)
-		if strings.TrimSpace(postgresDatabaseURL) != "" {
-			cfg.ProjectDatabaseURL = strings.TrimSpace(postgresDatabaseURL)
+		if postgresProject != nil {
+			if strings.TrimSpace(postgresProject.DatabaseURL) != "" {
+				cfg.ProjectDatabaseURL = strings.TrimSpace(postgresProject.DatabaseURL)
+			}
+			if strings.TrimSpace(postgresProject.Schema) != "" {
+				cfg.ProjectDBName = strings.TrimSpace(postgresProject.Schema)
+			}
 		}
 		if cfg.ProjectDatabaseURL == "" {
 			cfg.ProjectDatabaseURL = buildDatabaseURL(cfg.ProjectDBUser, cfg.ProjectDBPassword, cfg.ProjectDBHost, cfg.ProjectDBPort, cfg.ProjectDBName)
+		}
+		if resp.Identity != nil {
+			cfg.OIDCIssuer = strings.TrimSpace(resp.Identity.Issuer)
+			cfg.OIDCClientID = strings.TrimSpace(resp.Identity.ClientID)
+			cfg.OIDCClientSecret = strings.TrimSpace(resp.Identity.ClientSecret)
+			if cfg.OIDCClientSecret == "" && resp.Secrets != nil {
+				cfg.OIDCClientSecret = strings.TrimSpace(resp.Secrets.OIDCClientSecret)
+			}
+			cfg.CasdoorOrg = strings.TrimSpace(resp.Identity.Organization)
+			cfg.CasdoorApplication = strings.TrimSpace(resp.Identity.Application)
+		} else if resp.Auth != nil {
+			cfg.OIDCIssuer = strings.TrimSpace(resp.Auth.Issuer)
+			cfg.OIDCClientID = strings.TrimSpace(resp.Auth.ClientID)
+			cfg.OIDCClientSecret = strings.TrimSpace(resp.Auth.ClientSecret)
+			cfg.CasdoorOrg = strings.TrimSpace(resp.Auth.Organization)
+			cfg.CasdoorApplication = strings.TrimSpace(resp.Auth.Application)
 		}
 		if sshPrivateKey != "" {
 			fmt.Println("✅ Clave SSH de VM recibida inline desde backend")
@@ -218,17 +239,31 @@ var initCmd = &cobra.Command{
 		if err := saveProjectConfig(cfg); err != nil {
 			return fmt.Errorf("no se pudo guardar config local: %w", err)
 		}
+		if err := materializeProjectEnv(cfg); err != nil {
+			return fmt.Errorf("no se pudo materializar .env del proyecto: %w", err)
+		}
 
 		if jsonOutput {
 			safeResp := *resp
 			safeResp.VMSshPrivateKey = ""
 			safeResp.ProjectAPIToken = ""
 			safeResp.DBPassword = ""
+			if safeResp.Identity != nil {
+				id := *safeResp.Identity
+				id.ClientSecret = ""
+				safeResp.Identity = &id
+			}
+			if safeResp.Auth != nil {
+				a := *safeResp.Auth
+				a.ClientSecret = ""
+				safeResp.Auth = &a
+			}
 			if safeResp.Secrets != nil {
 				s := *safeResp.Secrets
 				s.SSHPrivateKey = ""
 				s.ProjectAPIToken = ""
 				s.DBPassword = ""
+				s.OIDCClientSecret = ""
 				safeResp.Secrets = &s
 			}
 			enc := json.NewEncoder(os.Stdout)
@@ -396,17 +431,17 @@ func shouldRefreshAndRetry(err error, cfg *config.Config) (bool, error) {
 	return ok, nil
 }
 
-func ensurePostgresProjectProvisioned(ctx context.Context, cfg *config.Config, projectName string) (string, error) {
+func ensurePostgresProjectProvisioned(ctx context.Context, cfg *config.Config, projectName string) (*api.CreatePostgresProjectResponse, error) {
 	name := strings.TrimSpace(projectName)
 	if name == "" {
-		return "", fmt.Errorf("nombre de proyecto vacío para provisioning de Postgres API")
+		return nil, fmt.Errorf("nombre de proyecto vacío para provisioning de Postgres API")
 	}
 	dbAPIURL := resolveDBAPIURL("")
 	client := api.NewClient(dbAPIURL, cfg.Token, 15*time.Second)
 	resp, err := client.CreatePostgresProject(ctx, name)
 	if err != nil {
 		if refreshed, rerr := shouldRefreshAndRetry(err, cfg); rerr != nil {
-			return "", rerr
+			return nil, rerr
 		} else if refreshed {
 			client = api.NewClient(dbAPIURL, cfg.Token, 15*time.Second)
 			resp, err = client.CreatePostgresProject(ctx, name)
@@ -416,19 +451,16 @@ func ensurePostgresProjectProvisioned(ctx context.Context, cfg *config.Config, p
 		var ae api.APIError
 		if api.AsAPIError(err, &ae) && ae.StatusCode == 409 {
 			fmt.Printf("ℹ️  Proyecto ya existe en Postgres API: %s\n", name)
-			return "", nil
+			return nil, nil
 		}
 		if msg := mapAPIError(err); msg != "" {
-			return "", fmt.Errorf("falló provisioning en Postgres API (%s): %s", dbAPIURL, msg)
+			return nil, fmt.Errorf("falló provisioning en Postgres API (%s): %s", dbAPIURL, msg)
 		}
-		return "", fmt.Errorf("falló provisioning en Postgres API (%s): %w", dbAPIURL, err)
+		return nil, fmt.Errorf("falló provisioning en Postgres API (%s): %w", dbAPIURL, err)
 	}
 
 	fmt.Printf("✅ Proyecto provisionado en Postgres API (%s)\n", dbAPIURL)
-	if resp == nil {
-		return "", nil
-	}
-	return strings.TrimSpace(resp.DatabaseURL), nil
+	return resp, nil
 }
 
 func mapAPIError(err error) string {
@@ -449,6 +481,15 @@ func mapAPIError(err error) string {
 		return "Ya existe un proyecto con ese nombre/slug en este tenant."
 	case 422:
 		return "El nombre no permite generar un slug válido. Intenta otro nombre."
+	case 502:
+		lower := strings.ToLower(strings.TrimSpace(ae.Message))
+		if strings.Contains(lower, "vm name") && strings.Contains(lower, "not available") {
+			return "El nombre de VM/slug no está disponible. Prueba con otro nombre de proyecto."
+		}
+		if strings.Contains(lower, "provisioner http failed") && strings.Contains(lower, "status=422") {
+			return fmt.Sprintf("El provisionador rechazó la VM. Detalle: %s", ae.Message)
+		}
+		return fmt.Sprintf("Error API (%d): %s", ae.StatusCode, ae.Message)
 	default:
 		return fmt.Sprintf("Error API (%d): %s", ae.StatusCode, ae.Message)
 	}
@@ -622,6 +663,7 @@ func ensureProjectGitIgnore() error {
 	const path = ".gitignore"
 	required := []string{
 		".einar/",
+		".env",
 		"tmp/",
 		".air.log",
 		".air.pid",
@@ -1199,6 +1241,71 @@ func saveProjectConfig(cfg config.Config) error {
 	cfg.Token = ""
 	cfg.RefreshToken = ""
 	return config.Save(cfg)
+}
+
+func materializeProjectEnv(cfg config.Config) error {
+	entries := map[string]string{
+		"OIDC_ISSUER":        strings.TrimSpace(cfg.OIDCIssuer),
+		"OIDC_CLIENT_ID":     strings.TrimSpace(cfg.OIDCClientID),
+		"OIDC_CLIENT_SECRET": strings.TrimSpace(cfg.OIDCClientSecret),
+	}
+
+	hasAny := false
+	for _, v := range entries {
+		if v != "" {
+			hasAny = true
+			break
+		}
+	}
+	if !hasAny {
+		return nil
+	}
+
+	lines := []string{}
+	if b, err := os.ReadFile(".env"); err == nil {
+		s := bufio.NewScanner(strings.NewReader(string(b)))
+		for s.Scan() {
+			lines = append(lines, s.Text())
+		}
+		if err := s.Err(); err != nil {
+			return err
+		}
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "export ") {
+				trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "export "))
+			}
+			parts := strings.SplitN(trimmed, "=", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			key := strings.TrimSpace(parts[0])
+			value, ok := entries[key]
+			if !ok || value == "" {
+				continue
+			}
+			lines[i] = key + "=" + value
+			delete(entries, key)
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	for _, key := range []string{"OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET"} {
+		if value := strings.TrimSpace(entries[key]); value != "" {
+			lines = append(lines, key+"="+value)
+		}
+	}
+
+	content := strings.Join(lines, "\n")
+	if content != "" && !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	if err := os.WriteFile(".env", []byte(content), 0o600); err != nil {
+		return err
+	}
+	fmt.Println("✅ .env materializado con credenciales OIDC")
+	return nil
 }
 
 func setupAndStartMutagen(cfg *config.Config) error {

@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -61,9 +62,10 @@ type CreateProjectResponse struct {
 	ProjectAPIToken string `json:"projectApiToken,omitempty"` // compat legado
 	DBPassword      string `json:"dbPassword,omitempty"`      // compat legado
 	Secrets         *struct {
-		SSHPrivateKey   string `json:"sshPrivateKey,omitempty"`
-		ProjectAPIToken string `json:"projectApiToken,omitempty"`
-		DBPassword      string `json:"dbPassword,omitempty"`
+		SSHPrivateKey    string `json:"sshPrivateKey,omitempty"`
+		ProjectAPIToken  string `json:"projectApiToken,omitempty"`
+		DBPassword       string `json:"dbPassword,omitempty"`
+		OIDCClientSecret string `json:"oidcClientSecret,omitempty"`
 	} `json:"secrets,omitempty"`
 
 	Workspace struct {
@@ -90,11 +92,31 @@ type CreateProjectResponse struct {
 		Port              int    `json:"port"`
 		PasswordSecretRef string `json:"passwordSecretRef"`
 	} `json:"database"`
+	Auth *struct {
+		Issuer       string `json:"issuer,omitempty"`
+		ClientID     string `json:"clientId,omitempty"`
+		ClientSecret string `json:"clientSecret,omitempty"`
+		Organization string `json:"organization,omitempty"`
+		Application  string `json:"application,omitempty"`
+		RedirectURI  string `json:"redirectUri,omitempty"`
+		LogoutURI    string `json:"logoutUri,omitempty"`
+	} `json:"auth,omitempty"`
+	Identity *struct {
+		Issuer          string `json:"issuer,omitempty"`
+		ClientID        string `json:"clientId,omitempty"`
+		ClientSecret    string `json:"clientSecret,omitempty"`
+		ClientSecretRef string `json:"clientSecretRef,omitempty"`
+		RedirectURI     string `json:"redirectUri,omitempty"`
+		LogoutURI       string `json:"logoutUri,omitempty"`
+		Organization    string `json:"organization,omitempty"`
+		Application     string `json:"application,omitempty"`
+	} `json:"identity,omitempty"`
 }
 
 type CreatePostgresProjectResponse struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
+	Schema      string `json:"schema"`
 	DatabaseURL string `json:"databaseUrl"`
 }
 
@@ -243,18 +265,28 @@ func parseAPIError(status int, body []byte) error {
 		} `json:"error"`
 		Code    string `json:"code"`
 		Message string `json:"message"`
+		Title   string `json:"title"`
+		Detail  string `json:"detail"`
 	}
-	apiErr := &APIError{StatusCode: status, RawBody: string(body), Message: string(body)}
+	apiErr := &APIError{StatusCode: status, RawBody: string(body), Message: strings.TrimSpace(string(body))}
 	var parsed wrappedErr
 	if err := json.Unmarshal(body, &parsed); err == nil {
 		if parsed.Error.Code != "" || parsed.Error.Message != "" {
 			apiErr.Code = parsed.Error.Code
-			apiErr.Message = parsed.Error.Message
+			apiErr.Message = strings.TrimSpace(parsed.Error.Message)
 			return apiErr
 		}
 		if parsed.Code != "" || parsed.Message != "" {
 			apiErr.Code = parsed.Code
-			apiErr.Message = parsed.Message
+			apiErr.Message = strings.TrimSpace(parsed.Message)
+			return apiErr
+		}
+		if parsed.Title != "" || parsed.Detail != "" {
+			apiErr.Code = strings.TrimSpace(parsed.Title)
+			apiErr.Message = strings.TrimSpace(parsed.Detail)
+			if apiErr.Message == "" {
+				apiErr.Message = strings.TrimSpace(parsed.Title)
+			}
 			return apiErr
 		}
 	}

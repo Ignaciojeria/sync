@@ -71,6 +71,14 @@ func loadWorkspaceConfigForOps() (config.Config, error) {
 			return config.Config{}, err
 		}
 	}
+
+	if strings.TrimSpace(cfg.MutagenDestination) == "" || strings.TrimSpace(cfg.MutagenSessionName) == "" || strings.TrimSpace(cfg.WorkspaceBranch) == "" {
+		cfg, err = bootstrapConfigFromSlug()
+		if err != nil {
+			return config.Config{}, err
+		}
+	}
+
 	if err := ensureWorkspaceBranchLock(&cfg); err != nil {
 		return config.Config{}, err
 	}
