@@ -62,10 +62,11 @@ type CreateProjectResponse struct {
 	ProjectAPIToken string `json:"projectApiToken,omitempty"` // compat legado
 	DBPassword      string `json:"dbPassword,omitempty"`      // compat legado
 	Secrets         *struct {
-		SSHPrivateKey    string `json:"sshPrivateKey,omitempty"`
-		ProjectAPIToken  string `json:"projectApiToken,omitempty"`
-		DBPassword       string `json:"dbPassword,omitempty"`
-		OIDCClientSecret string `json:"oidcClientSecret,omitempty"`
+		SSHPrivateKey       string `json:"sshPrivateKey,omitempty"`
+		ProjectAPIToken     string `json:"projectApiToken,omitempty"`
+		DBPassword          string `json:"dbPassword,omitempty"`
+		OIDCClientSecret    string `json:"oidcClientSecret,omitempty"`
+		OIDCClientSecretRef string `json:"oidcClientSecretRef,omitempty"`
 	} `json:"secrets,omitempty"`
 
 	Workspace struct {
@@ -92,25 +93,29 @@ type CreateProjectResponse struct {
 		Port              int    `json:"port"`
 		PasswordSecretRef string `json:"passwordSecretRef"`
 	} `json:"database"`
-	Auth *struct {
-		Issuer       string `json:"issuer,omitempty"`
-		ClientID     string `json:"clientId,omitempty"`
-		ClientSecret string `json:"clientSecret,omitempty"`
-		Organization string `json:"organization,omitempty"`
-		Application  string `json:"application,omitempty"`
-		RedirectURI  string `json:"redirectUri,omitempty"`
-		LogoutURI    string `json:"logoutUri,omitempty"`
-	} `json:"auth,omitempty"`
-	Identity *struct {
-		Issuer          string `json:"issuer,omitempty"`
-		ClientID        string `json:"clientId,omitempty"`
-		ClientSecret    string `json:"clientSecret,omitempty"`
-		ClientSecretRef string `json:"clientSecretRef,omitempty"`
-		RedirectURI     string `json:"redirectUri,omitempty"`
-		LogoutURI       string `json:"logoutUri,omitempty"`
-		Organization    string `json:"organization,omitempty"`
-		Application     string `json:"application,omitempty"`
-	} `json:"identity,omitempty"`
+	Auth     *ProjectAuth `json:"auth,omitempty"`
+	Identity *ProjectAuth `json:"identity,omitempty"`
+}
+
+type ProjectAuth struct {
+	Type                  string   `json:"type,omitempty"`
+	Provider              string   `json:"provider,omitempty"`
+	Issuer                string   `json:"issuer,omitempty"`
+	DiscoveryURL          string   `json:"discoveryUrl,omitempty"`
+	JWKSURI               string   `json:"jwksUri,omitempty"`
+	AuthorizationEndpoint string   `json:"authorizationEndpoint,omitempty"`
+	TokenEndpoint         string   `json:"tokenEndpoint,omitempty"`
+	UserinfoEndpoint      string   `json:"userinfoEndpoint,omitempty"`
+	ClientID              string   `json:"clientId,omitempty"`
+	ClientSecret          string   `json:"clientSecret,omitempty"`
+	ClientSecretRef       string   `json:"clientSecretRef,omitempty"`
+	RedirectURI           string   `json:"redirectUri,omitempty"`
+	LogoutURI             string   `json:"logoutUri,omitempty"`
+	PostLogoutRedirectURI string   `json:"postLogoutRedirectUri,omitempty"`
+	Scopes                []string `json:"scopes,omitempty"`
+	LoginURL              string   `json:"loginUrl,omitempty"`
+	Organization          string   `json:"organization,omitempty"`
+	Application           string   `json:"application,omitempty"`
 }
 
 type CreatePostgresProjectResponse struct {

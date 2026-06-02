@@ -193,21 +193,29 @@ var initCmd = &cobra.Command{
 		if cfg.ProjectDatabaseURL == "" {
 			cfg.ProjectDatabaseURL = buildDatabaseURL(cfg.ProjectDBUser, cfg.ProjectDBPassword, cfg.ProjectDBHost, cfg.ProjectDBPort, cfg.ProjectDBName)
 		}
-		if resp.Identity != nil {
-			cfg.OIDCIssuer = strings.TrimSpace(resp.Identity.Issuer)
-			cfg.OIDCClientID = strings.TrimSpace(resp.Identity.ClientID)
-			cfg.OIDCClientSecret = strings.TrimSpace(resp.Identity.ClientSecret)
-			if cfg.OIDCClientSecret == "" && resp.Secrets != nil {
-				cfg.OIDCClientSecret = strings.TrimSpace(resp.Secrets.OIDCClientSecret)
+		normalizedAuth := normalizeProjectAuth(resp)
+		if normalizedAuth != nil {
+			cfg.OIDCType = strings.TrimSpace(normalizedAuth.Type)
+			cfg.OIDCProvider = strings.TrimSpace(normalizedAuth.Provider)
+			cfg.OIDCIssuer = strings.TrimSpace(normalizedAuth.Issuer)
+			cfg.OIDCDiscoveryURL = strings.TrimSpace(normalizedAuth.DiscoveryURL)
+			cfg.OIDCJWKSURI = strings.TrimSpace(normalizedAuth.JWKSURI)
+			cfg.OIDCAuthorizationEndpoint = strings.TrimSpace(normalizedAuth.AuthorizationEndpoint)
+			cfg.OIDCTokenEndpoint = strings.TrimSpace(normalizedAuth.TokenEndpoint)
+			cfg.OIDCUserinfoEndpoint = strings.TrimSpace(normalizedAuth.UserinfoEndpoint)
+			cfg.OIDCClientID = strings.TrimSpace(normalizedAuth.ClientID)
+			cfg.OIDCClientSecret = strings.TrimSpace(normalizedAuth.ClientSecret)
+			cfg.OIDCClientSecretRef = strings.TrimSpace(normalizedAuth.ClientSecretRef)
+			cfg.OIDCRedirectURI = strings.TrimSpace(normalizedAuth.RedirectURI)
+			cfg.OIDCLogoutURI = strings.TrimSpace(normalizedAuth.LogoutURI)
+			cfg.OIDCPostLogoutRedirectURI = strings.TrimSpace(normalizedAuth.PostLogoutRedirectURI)
+			cfg.OIDCScopes = strings.Join(normalizedAuth.Scopes, " ")
+			cfg.OIDCLoginURL = strings.TrimSpace(normalizedAuth.LoginURL)
+			cfg.CasdoorOrg = strings.TrimSpace(normalizedAuth.Organization)
+			cfg.CasdoorApplication = strings.TrimSpace(normalizedAuth.Application)
+			if cfg.OIDCClientSecret == "" && cfg.OIDCClientSecretRef != "" {
+				fmt.Printf("⚠️  OIDC secret no vino inline; secretRef=%s\n", cfg.OIDCClientSecretRef)
 			}
-			cfg.CasdoorOrg = strings.TrimSpace(resp.Identity.Organization)
-			cfg.CasdoorApplication = strings.TrimSpace(resp.Identity.Application)
-		} else if resp.Auth != nil {
-			cfg.OIDCIssuer = strings.TrimSpace(resp.Auth.Issuer)
-			cfg.OIDCClientID = strings.TrimSpace(resp.Auth.ClientID)
-			cfg.OIDCClientSecret = strings.TrimSpace(resp.Auth.ClientSecret)
-			cfg.CasdoorOrg = strings.TrimSpace(resp.Auth.Organization)
-			cfg.CasdoorApplication = strings.TrimSpace(resp.Auth.Application)
 		}
 		if sshPrivateKey != "" {
 			fmt.Println("✅ Clave SSH de VM recibida inline desde backend")
@@ -1236,6 +1244,92 @@ func configureSSHHostIdentity(projectSlug, destination, identityFile string) err
 	return err
 }
 
+func normalizeProjectAuth(resp *api.CreateProjectResponse) *api.ProjectAuth {
+	if resp == nil {
+		return nil
+	}
+
+	auth := resp.Identity
+	if auth == nil {
+		auth = resp.Auth
+	}
+	if auth == nil {
+		return nil
+	}
+
+	issuer := strings.TrimRight(strings.TrimSpace(auth.Issuer), "/")
+	if issuer == "" || strings.TrimSpace(auth.ClientID) == "" {
+		return nil
+	}
+
+	scopes := auth.Scopes
+	if len(scopes) == 0 {
+		scopes = []string{"openid", "profile", "email"}
+	}
+
+	clientSecret := strings.TrimSpace(auth.ClientSecret)
+	if clientSecret == "" && resp.Secrets != nil {
+		clientSecret = strings.TrimSpace(resp.Secrets.OIDCClientSecret)
+	}
+	clientSecretRef := strings.TrimSpace(auth.ClientSecretRef)
+	if clientSecretRef == "" && resp.Secrets != nil {
+		clientSecretRef = strings.TrimSpace(resp.Secrets.OIDCClientSecretRef)
+	}
+
+	normalized := &api.ProjectAuth{
+		Type:                  firstNonEmptyTrimmed(strings.TrimSpace(auth.Type), "oidc"),
+		Provider:              firstNonEmptyTrimmed(strings.TrimSpace(auth.Provider), "casdoor"),
+		Issuer:                issuer,
+		DiscoveryURL:          firstNonEmptyTrimmed(strings.TrimSpace(auth.DiscoveryURL), issuer+"/.well-known/openid-configuration"),
+		JWKSURI:               firstNonEmptyTrimmed(strings.TrimSpace(auth.JWKSURI), issuer+"/api/certs"),
+		AuthorizationEndpoint: firstNonEmptyTrimmed(strings.TrimSpace(auth.AuthorizationEndpoint), issuer+"/login/oauth/authorize"),
+		TokenEndpoint:         firstNonEmptyTrimmed(strings.TrimSpace(auth.TokenEndpoint), issuer+"/api/login/oauth/access_token"),
+		UserinfoEndpoint:      firstNonEmptyTrimmed(strings.TrimSpace(auth.UserinfoEndpoint), issuer+"/api/userinfo"),
+		ClientID:              strings.TrimSpace(auth.ClientID),
+		ClientSecret:          clientSecret,
+		ClientSecretRef:       clientSecretRef,
+		RedirectURI:           strings.TrimSpace(auth.RedirectURI),
+		LogoutURI:             strings.TrimSpace(auth.LogoutURI),
+		PostLogoutRedirectURI: strings.TrimSpace(auth.PostLogoutRedirectURI),
+		Scopes:                scopes,
+		LoginURL:              strings.TrimSpace(auth.LoginURL),
+		Organization:          strings.TrimSpace(auth.Organization),
+		Application:           strings.TrimSpace(auth.Application),
+	}
+	if normalized.LoginURL == "" {
+		normalized.LoginURL = buildOIDCLoginURL(normalized.AuthorizationEndpoint, normalized.ClientID, normalized.RedirectURI, normalized.Scopes)
+	}
+	return normalized
+}
+
+func buildOIDCLoginURL(authorizationEndpoint, clientID, redirectURI string, scopes []string) string {
+	if strings.TrimSpace(authorizationEndpoint) == "" || strings.TrimSpace(clientID) == "" || strings.TrimSpace(redirectURI) == "" {
+		return ""
+	}
+	u, err := url.Parse(strings.TrimSpace(authorizationEndpoint))
+	if err != nil {
+		return ""
+	}
+	q := u.Query()
+	q.Set("client_id", strings.TrimSpace(clientID))
+	q.Set("redirect_uri", strings.TrimSpace(redirectURI))
+	q.Set("response_type", "code")
+	if len(scopes) > 0 {
+		q.Set("scope", strings.Join(scopes, " "))
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+func firstNonEmptyTrimmed(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
 func saveProjectConfig(cfg config.Config) error {
 	cfg.APIURL = ""
 	cfg.Token = ""
@@ -1245,9 +1339,22 @@ func saveProjectConfig(cfg config.Config) error {
 
 func materializeProjectEnv(cfg config.Config) error {
 	entries := map[string]string{
-		"OIDC_ISSUER":        strings.TrimSpace(cfg.OIDCIssuer),
-		"OIDC_CLIENT_ID":     strings.TrimSpace(cfg.OIDCClientID),
-		"OIDC_CLIENT_SECRET": strings.TrimSpace(cfg.OIDCClientSecret),
+		"OIDC_TYPE":                     strings.TrimSpace(cfg.OIDCType),
+		"OIDC_PROVIDER":                 strings.TrimSpace(cfg.OIDCProvider),
+		"OIDC_ISSUER":                   strings.TrimSpace(cfg.OIDCIssuer),
+		"OIDC_DISCOVERY_URL":            strings.TrimSpace(cfg.OIDCDiscoveryURL),
+		"OIDC_JWKS_URI":                 strings.TrimSpace(cfg.OIDCJWKSURI),
+		"OIDC_AUTHORIZATION_ENDPOINT":   strings.TrimSpace(cfg.OIDCAuthorizationEndpoint),
+		"OIDC_TOKEN_ENDPOINT":           strings.TrimSpace(cfg.OIDCTokenEndpoint),
+		"OIDC_USERINFO_ENDPOINT":        strings.TrimSpace(cfg.OIDCUserinfoEndpoint),
+		"OIDC_CLIENT_ID":                strings.TrimSpace(cfg.OIDCClientID),
+		"OIDC_CLIENT_SECRET":            strings.TrimSpace(cfg.OIDCClientSecret),
+		"OIDC_CLIENT_SECRET_REF":        strings.TrimSpace(cfg.OIDCClientSecretRef),
+		"OIDC_REDIRECT_URI":             strings.TrimSpace(cfg.OIDCRedirectURI),
+		"OIDC_LOGOUT_URI":               strings.TrimSpace(cfg.OIDCLogoutURI),
+		"OIDC_POST_LOGOUT_REDIRECT_URI": strings.TrimSpace(cfg.OIDCPostLogoutRedirectURI),
+		"OIDC_SCOPES":                   strings.TrimSpace(cfg.OIDCScopes),
+		"OIDC_LOGIN_URL":                strings.TrimSpace(cfg.OIDCLoginURL),
 	}
 
 	hasAny := false
@@ -1291,7 +1398,7 @@ func materializeProjectEnv(cfg config.Config) error {
 		return err
 	}
 
-	for _, key := range []string{"OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET"} {
+	for _, key := range []string{"OIDC_TYPE", "OIDC_PROVIDER", "OIDC_ISSUER", "OIDC_DISCOVERY_URL", "OIDC_JWKS_URI", "OIDC_AUTHORIZATION_ENDPOINT", "OIDC_TOKEN_ENDPOINT", "OIDC_USERINFO_ENDPOINT", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_CLIENT_SECRET_REF", "OIDC_REDIRECT_URI", "OIDC_LOGOUT_URI", "OIDC_POST_LOGOUT_REDIRECT_URI", "OIDC_SCOPES", "OIDC_LOGIN_URL"} {
 		if value := strings.TrimSpace(entries[key]); value != "" {
 			lines = append(lines, key+"="+value)
 		}
@@ -1304,7 +1411,7 @@ func materializeProjectEnv(cfg config.Config) error {
 	if err := os.WriteFile(".env", []byte(content), 0o600); err != nil {
 		return err
 	}
-	fmt.Println("✅ .env materializado con credenciales OIDC")
+	fmt.Println("✅ .env materializado con configuración OIDC")
 	return nil
 }
 
