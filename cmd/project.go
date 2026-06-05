@@ -879,6 +879,9 @@ func ensureWorkspaceBranchLock(cfg *config.Config) error {
 	if cfg == nil {
 		return nil
 	}
+	if !isGitRepositoryRoot() {
+		return nil
+	}
 	currentBranch, ok := currentGitBranch()
 	if !ok {
 		return nil
@@ -895,6 +898,20 @@ func ensureWorkspaceBranchLock(cfg *config.Config) error {
 		return fmt.Errorf("branch inválida para este workspace: esperada=%q actual=%q. Evita git switch/checkout en este workspace", locked, currentBranch)
 	}
 	return nil
+}
+
+func isGitRepositoryRoot() bool {
+	wd, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return false
+	}
+	top := filepath.Clean(strings.TrimSpace(string(out)))
+	return top != "" && filepath.Clean(wd) == top
 }
 
 type workspaceStateEntry struct {
