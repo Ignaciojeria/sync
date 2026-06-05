@@ -11,8 +11,8 @@ import (
 	"strings"
 	"syscall"
 
-	"einarc/internal/config"
-	"einarc/internal/tunnel"
+	"github.com/Ignaciojeria/sync/internal/config"
+	"github.com/Ignaciojeria/sync/internal/tunnel"
 
 	"github.com/spf13/cobra"
 )

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"einarc/internal/api"
-	"einarc/internal/config"
+	"github.com/Ignaciojeria/sync/internal/api"
+	"github.com/Ignaciojeria/sync/internal/config"
 
 	"github.com/spf13/cobra"
 )

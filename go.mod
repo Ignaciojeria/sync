@@ -1,4 +1,4 @@
-module einarc
+module github.com/Ignaciojeria/sync
 
 go 1.25.0
 

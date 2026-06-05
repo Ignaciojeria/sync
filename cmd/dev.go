@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"einarc/internal/config"
+	"github.com/Ignaciojeria/sync/internal/config"
 
 	"github.com/spf13/cobra"
 )
