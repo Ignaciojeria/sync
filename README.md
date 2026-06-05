@@ -1,6 +1,6 @@
 # sync
 
-## Instalar el binario
+## Instalación del CLI
 
 ### Opción 1: `go install`
 
@@ -8,20 +8,46 @@
 go install github.com/Ignaciojeria/sync@latest
 ```
 
+Eso instala el binario `sync` en tu `GOBIN` o en `$(go env GOPATH)/bin`.
+Asegúrate de tener esa carpeta en el `PATH`.
+
+Verificar:
+
+```bash
+sync --help
+```
+
 ### Opción 2: descargar desde GitHub Releases
 
-Cuando publiques un tag `v*`, GitHub Actions va a ejecutar GoReleaser y generar binarios para:
+Descarga el archivo correspondiente a tu sistema operativo desde:
 
-- Linux amd64/arm64
-- macOS amd64/arm64
-- Windows amd64/arm64
+- `linux_amd64` / `linux_arm64`
+- `darwin_amd64` / `darwin_arm64`
+- `windows_amd64` / `windows_arm64`
 
-Archivos agregados:
+Luego:
 
-- `.goreleaser.yml`
-- `.github/workflows/release.yml`
+#### Linux / macOS
+
+```bash
+tar -xzf sync_<version>_<os>_<arch>.tar.gz
+chmod +x sync
+sudo mv sync /usr/local/bin/sync
+sync --help
+```
+
+#### Windows (PowerShell)
+
+```powershell
+Expand-Archive .\sync_<version>_windows_<arch>.zip -DestinationPath .\sync
+.\sync\sync.exe --help
+```
+
+Si quieres dejarlo globalmente instalado, mueve `sync.exe` a una carpeta incluida en tu `PATH`.
 
 ### Publicar una release
+
+Cada tag que matchee `v*` dispara GoReleaser en GitHub Actions.
 
 ```bash
 git tag v0.1.0
