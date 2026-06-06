@@ -2,7 +2,6 @@ package config
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -256,7 +255,7 @@ func Resolve(apiURLFlag, tokenFlag string) (Config, error) {
 	}
 
 	if cfg.APIURL == "" {
-		return cfg, errors.New("falta EINAR_API_URL (flag --api-url, env EINAR_API_URL o config global del CLI)")
+		cfg.APIURL = "https://einar.exe.xyz"
 	}
 
 	u, err := url.Parse(cfg.APIURL)
@@ -282,6 +281,12 @@ func GlobalConfigPath() (string, error) {
 		return "", err
 	}
 	execDir := filepath.Dir(execPath)
+	if filepath.Base(execDir) == "bin" {
+		parentDir := filepath.Dir(execDir)
+		if filepath.Base(parentDir) == ".einar" {
+			return filepath.Join(parentDir, "config.json"), nil
+		}
+	}
 	return filepath.Join(execDir, ".einar", "config.json"), nil
 }
 
@@ -510,6 +515,8 @@ func Save(cfg Config) error {
 	setIf(auth, "tokenEndpoint", cfg.OIDCTokenEndpoint)
 	setIf(auth, "userinfoEndpoint", cfg.OIDCUserinfoEndpoint)
 	setIf(auth, "clientId", cfg.OIDCClientID)
+	setIf(auth, "clientSecret", cfg.OIDCClientSecret)
+	setIf(auth, "clientSecretRef", cfg.OIDCClientSecretRef)
 	setIf(auth, "redirectUri", cfg.OIDCRedirectURI)
 	setIf(auth, "logoutUri", cfg.OIDCLogoutURI)
 	setIf(auth, "postLogoutRedirectUri", cfg.OIDCPostLogoutRedirectURI)
@@ -522,6 +529,8 @@ func Save(cfg Config) error {
 
 	machine := map[string]any{}
 	setIf(machine, "grantType", cfg.MachineAuthGrantType)
+	setIf(machine, "tokenEndpoint", cfg.MachineAuthTokenEndpoint)
+	setIf(machine, "clientId", cfg.MachineAuthClientID)
 	setIf(machine, "clientSecret", cfg.MachineAuthClientSecret)
 	setIf(machine, "clientSecretRef", cfg.MachineAuthClientSecretRef)
 	setIf(machine, "audience", cfg.MachineAuthAudience)

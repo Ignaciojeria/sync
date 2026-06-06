@@ -270,6 +270,12 @@ var initCmd = &cobra.Command{
 		if err := ensureGoModTidy(); err != nil {
 			return fmt.Errorf("no se pudo ejecutar go mod tidy: %w", err)
 		}
+		if strings.TrimSpace(cfg.ProjectDatabaseURL) != "" {
+			fmt.Println("🚀 Bootstrap remoto de conectividad DB en la VM...")
+			if err := ensureDBBootstrapOnProvisionedVM(&cfg); err != nil {
+				return fmt.Errorf("no se pudo bootstrapear conectividad DB remota: %w", err)
+			}
+		}
 
 		if jsonOutput {
 			safeResp := *resp

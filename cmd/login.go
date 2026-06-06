@@ -110,7 +110,7 @@ func resolvedClientID() string {
 		clientID = strings.TrimSpace(os.Getenv("EINAR_OIDC_CLIENT_ID"))
 	}
 	if clientID == "" {
-		clientID = "einar-app"
+		clientID = "da89744f1f42e0516f2c"
 	}
 	return clientID
 }
@@ -487,7 +487,7 @@ func ensureGitIgnoreHasEinar() error {
 
 func init() {
 	loginCmd.Flags().StringVar(&casdoorOriginFlag, "casdoor-origin", "", "Origen de Casdoor (fallback: EINAR_CASDOOR_ORIGIN o derivado de --api-url)")
-	loginCmd.Flags().StringVar(&oidcClientIDFlag, "oidc-client-id", "", "OIDC client_id para PKCE (fallback: EINAR_OIDC_CLIENT_ID, default: einar-app)")
+	loginCmd.Flags().StringVar(&oidcClientIDFlag, "oidc-client-id", "", "OIDC client_id para PKCE (fallback: EINAR_OIDC_CLIENT_ID, default: da89744f1f42e0516f2c)")
 	loginCmd.Flags().StringVar(&oidcProviderFlag, "provider", "provider_google_einar", "Provider Casdoor opcional para saltar UI (vacío para no enviar)")
 	rootCmd.AddCommand(loginCmd)
 }
