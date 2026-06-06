@@ -102,7 +102,12 @@ var initCmd = &cobra.Command{
 		if projectID == "" || slug == "" {
 			return fmt.Errorf("respuesta inválida del backend canonical: projectId/slug vacíos")
 		}
-		postgresProject, err := ensurePostgresProjectProvisioned(ctx, &cfg, slug)
+		normalizedMachineAuth := normalizeProjectMachineAuth(resp)
+		postgresMachineClientID := ""
+		if normalizedMachineAuth != nil {
+			postgresMachineClientID = strings.TrimSpace(normalizedMachineAuth.ClientID)
+		}
+		postgresProject, err := ensurePostgresProjectProvisioned(ctx, &cfg, slug, postgresMachineClientID)
 		if err != nil {
 			return err
 		}
@@ -194,7 +199,6 @@ var initCmd = &cobra.Command{
 			cfg.ProjectDatabaseURL = buildDatabaseURL(cfg.ProjectDBUser, cfg.ProjectDBPassword, cfg.ProjectDBHost, cfg.ProjectDBPort, cfg.ProjectDBName)
 		}
 		normalizedAuth := normalizeProjectAuth(resp)
-		normalizedMachineAuth := normalizeProjectMachineAuth(resp)
 		if normalizedAuth != nil {
 			cfg.OIDCType = strings.TrimSpace(normalizedAuth.Type)
 			cfg.OIDCProvider = strings.TrimSpace(normalizedAuth.Provider)
@@ -458,20 +462,20 @@ func shouldRefreshAndRetry(err error, cfg *config.Config) (bool, error) {
 	return ok, nil
 }
 
-func ensurePostgresProjectProvisioned(ctx context.Context, cfg *config.Config, projectName string) (*api.CreatePostgresProjectResponse, error) {
+func ensurePostgresProjectProvisioned(ctx context.Context, cfg *config.Config, projectName, machineClientID string) (*api.CreatePostgresProjectResponse, error) {
 	name := strings.TrimSpace(projectName)
 	if name == "" {
 		return nil, fmt.Errorf("nombre de proyecto vacío para provisioning de Postgres API")
 	}
 	dbAPIURL := resolveDBAPIURL("")
 	client := api.NewClient(dbAPIURL, cfg.Token, 15*time.Second)
-	resp, err := client.CreatePostgresProject(ctx, name)
+	resp, err := client.CreatePostgresProject(ctx, name, machineClientID)
 	if err != nil {
 		if refreshed, rerr := shouldRefreshAndRetry(err, cfg); rerr != nil {
 			return nil, rerr
 		} else if refreshed {
 			client = api.NewClient(dbAPIURL, cfg.Token, 15*time.Second)
-			resp, err = client.CreatePostgresProject(ctx, name)
+			resp, err = client.CreatePostgresProject(ctx, name, machineClientID)
 		}
 	}
 	if err != nil {

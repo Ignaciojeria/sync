@@ -102,8 +102,17 @@ func handleConn(ctx context.Context, local net.Conn, options Options) error {
 	}
 
 	dialer := websocket.Dialer{HandshakeTimeout: options.HandshakeTimeout}
-	ws, _, err := dialer.DialContext(ctx, wsURL, headers)
+	ws, resp, err := dialer.DialContext(ctx, wsURL, headers)
 	if err != nil {
+		if resp != nil {
+			body, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			text := strings.TrimSpace(string(body))
+			if text != "" {
+				return fmt.Errorf("websocket handshake failed: status=%d %s body=%s", resp.StatusCode, resp.Status, text)
+			}
+			return fmt.Errorf("websocket handshake failed: status=%d %s", resp.StatusCode, resp.Status)
+		}
 		return err
 	}
 	defer ws.Close()

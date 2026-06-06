@@ -183,11 +183,14 @@ func (c *Client) CreateProject(ctx context.Context, name string) (*CreateProject
 	return &out, nil
 }
 
-func (c *Client) CreatePostgresProject(ctx context.Context, name string) (*CreatePostgresProjectResponse, error) {
+func (c *Client) CreatePostgresProject(ctx context.Context, name, machineClientID string) (*CreatePostgresProjectResponse, error) {
 	if c.token == "" {
 		return nil, fmt.Errorf("falta token (usa EINAR_TOKEN o 'login --token')")
 	}
 	payload := map[string]string{"name": name}
+	if strings.TrimSpace(machineClientID) != "" {
+		payload["machineClientId"] = strings.TrimSpace(machineClientID)
+	}
 	var out CreatePostgresProjectResponse
 	if err := c.doWithRetry(ctx, http.MethodPost, "/projects", payload, &out); err != nil {
 		return nil, err
