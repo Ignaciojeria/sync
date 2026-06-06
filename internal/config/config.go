@@ -103,6 +103,15 @@ type projectDiskConfig struct {
 		LoginURL              string   `json:"loginUrl,omitempty"`
 		Organization          string   `json:"organization,omitempty"`
 		Application           string   `json:"application,omitempty"`
+		Machine               struct {
+			GrantType       string   `json:"grantType,omitempty"`
+			TokenEndpoint   string   `json:"tokenEndpoint,omitempty"`
+			ClientID        string   `json:"clientId,omitempty"`
+			ClientSecret    string   `json:"clientSecret,omitempty"`
+			ClientSecretRef string   `json:"clientSecretRef,omitempty"`
+			Audience        string   `json:"audience,omitempty"`
+			Scopes          []string `json:"scopes,omitempty"`
+		} `json:"machine,omitempty"`
 	} `json:"auth,omitempty"`
 	Identity struct {
 		Type                  string   `json:"type,omitempty"`
@@ -396,15 +405,19 @@ func Load() (Config, error) {
 	oidcLoginURL := firstNonEmpty(strings.TrimSpace(disk.Identity.LoginURL), strings.TrimSpace(disk.Auth.LoginURL), strings.TrimSpace(disk.OIDCLoginURL))
 	casdoorOrg := firstNonEmpty(strings.TrimSpace(disk.Identity.Organization), strings.TrimSpace(disk.Auth.Organization), strings.TrimSpace(disk.CasdoorOrg))
 	casdoorApplication := firstNonEmpty(strings.TrimSpace(disk.Identity.Application), strings.TrimSpace(disk.Auth.Application), strings.TrimSpace(disk.CasdoorApplication))
-	machineAuthGrantType := firstNonEmpty(strings.TrimSpace(disk.MachineAuth.GrantType), strings.TrimSpace(disk.MachineAuthGrantType))
-	machineAuthTokenEndpoint := firstNonEmpty(strings.TrimSpace(disk.MachineAuth.TokenEndpoint), strings.TrimSpace(disk.MachineAuthTokenEndpoint))
-	machineAuthClientID := firstNonEmpty(strings.TrimSpace(disk.MachineAuth.ClientID), strings.TrimSpace(disk.MachineAuthClientID))
-	machineAuthClientSecret := firstNonEmpty(strings.TrimSpace(disk.MachineAuth.ClientSecret), strings.TrimSpace(disk.MachineAuthClientSecret))
-	machineAuthClientSecretRef := firstNonEmpty(strings.TrimSpace(disk.MachineAuth.ClientSecretRef), strings.TrimSpace(disk.MachineAuthClientSecretRef))
-	machineAuthAudience := firstNonEmpty(strings.TrimSpace(disk.MachineAuth.Audience), strings.TrimSpace(disk.MachineAuthAudience))
+	machineAuthGrantType := firstNonEmpty(strings.TrimSpace(disk.Auth.Machine.GrantType), strings.TrimSpace(disk.MachineAuth.GrantType), strings.TrimSpace(disk.MachineAuthGrantType))
+	machineAuthTokenEndpoint := firstNonEmpty(strings.TrimSpace(disk.Auth.Machine.TokenEndpoint), strings.TrimSpace(disk.MachineAuth.TokenEndpoint), strings.TrimSpace(disk.MachineAuthTokenEndpoint), oidcTokenEndpoint)
+	machineAuthClientID := firstNonEmpty(strings.TrimSpace(disk.Auth.Machine.ClientID), strings.TrimSpace(disk.MachineAuth.ClientID), strings.TrimSpace(disk.MachineAuthClientID), oidcClientID)
+	machineAuthClientSecret := firstNonEmpty(strings.TrimSpace(disk.Auth.Machine.ClientSecret), strings.TrimSpace(disk.MachineAuth.ClientSecret), strings.TrimSpace(disk.MachineAuthClientSecret))
+	machineAuthClientSecretRef := firstNonEmpty(strings.TrimSpace(disk.Auth.Machine.ClientSecretRef), strings.TrimSpace(disk.MachineAuth.ClientSecretRef), strings.TrimSpace(disk.MachineAuthClientSecretRef))
+	machineAuthAudience := firstNonEmpty(strings.TrimSpace(disk.Auth.Machine.Audience), strings.TrimSpace(disk.MachineAuth.Audience), strings.TrimSpace(disk.MachineAuthAudience))
 	machineAuthScopes := strings.TrimSpace(disk.MachineAuthScopes)
-	if machineAuthScopes == "" && len(disk.MachineAuth.Scopes) > 0 {
-		machineAuthScopes = strings.Join(disk.MachineAuth.Scopes, " ")
+	if machineAuthScopes == "" {
+		if len(disk.Auth.Machine.Scopes) > 0 {
+			machineAuthScopes = strings.Join(disk.Auth.Machine.Scopes, " ")
+		} else if len(disk.MachineAuth.Scopes) > 0 {
+			machineAuthScopes = strings.Join(disk.MachineAuth.Scopes, " ")
+		}
 	}
 
 	return Config{
@@ -497,8 +510,6 @@ func Save(cfg Config) error {
 	setIf(auth, "tokenEndpoint", cfg.OIDCTokenEndpoint)
 	setIf(auth, "userinfoEndpoint", cfg.OIDCUserinfoEndpoint)
 	setIf(auth, "clientId", cfg.OIDCClientID)
-	setIf(auth, "clientSecret", cfg.OIDCClientSecret)
-	setIf(auth, "clientSecretRef", cfg.OIDCClientSecretRef)
 	setIf(auth, "redirectUri", cfg.OIDCRedirectURI)
 	setIf(auth, "logoutUri", cfg.OIDCLogoutURI)
 	setIf(auth, "postLogoutRedirectUri", cfg.OIDCPostLogoutRedirectURI)
@@ -508,22 +519,20 @@ func Save(cfg Config) error {
 	setIf(auth, "loginUrl", cfg.OIDCLoginURL)
 	setIf(auth, "organization", cfg.CasdoorOrg)
 	setIf(auth, "application", cfg.CasdoorApplication)
+
+	machine := map[string]any{}
+	setIf(machine, "grantType", cfg.MachineAuthGrantType)
+	setIf(machine, "clientSecret", cfg.MachineAuthClientSecret)
+	setIf(machine, "clientSecretRef", cfg.MachineAuthClientSecretRef)
+	setIf(machine, "audience", cfg.MachineAuthAudience)
+	if scopes := strings.Fields(strings.TrimSpace(cfg.MachineAuthScopes)); len(scopes) > 0 {
+		machine["scopes"] = scopes
+	}
+	if len(machine) > 0 {
+		auth["machine"] = machine
+	}
 	if len(auth) > 0 {
 		onDisk["auth"] = auth
-	}
-
-	machineAuth := map[string]any{}
-	setIf(machineAuth, "grantType", cfg.MachineAuthGrantType)
-	setIf(machineAuth, "tokenEndpoint", cfg.MachineAuthTokenEndpoint)
-	setIf(machineAuth, "clientId", cfg.MachineAuthClientID)
-	setIf(machineAuth, "clientSecret", cfg.MachineAuthClientSecret)
-	setIf(machineAuth, "clientSecretRef", cfg.MachineAuthClientSecretRef)
-	setIf(machineAuth, "audience", cfg.MachineAuthAudience)
-	if scopes := strings.Fields(strings.TrimSpace(cfg.MachineAuthScopes)); len(scopes) > 0 {
-		machineAuth["scopes"] = scopes
-	}
-	if len(machineAuth) > 0 {
-		onDisk["machineAuth"] = machineAuth
 	}
 
 	var buf strings.Builder
