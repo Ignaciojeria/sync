@@ -15,11 +15,12 @@ import (
 )
 
 type Options struct {
-	APIBaseURL   string
-	Project      string
-	Token        string
-	DevSub       string
-	InsecureAuth bool
+	APIBaseURL    string
+	Project       string
+	Token         string
+	TokenProvider func(context.Context) (string, error)
+	DevSub        string
+	InsecureAuth  bool
 
 	HandshakeTimeout time.Duration
 }
@@ -86,7 +87,18 @@ func handleConn(ctx context.Context, local net.Conn, options Options) error {
 	if options.InsecureAuth {
 		headers.Set("X-Dev-Sub", options.DevSub)
 	} else {
-		headers.Set("Authorization", "Bearer "+options.Token)
+		token := strings.TrimSpace(options.Token)
+		if options.TokenProvider != nil {
+			resolvedToken, err := options.TokenProvider(ctx)
+			if err != nil {
+				return err
+			}
+			token = strings.TrimSpace(resolvedToken)
+		}
+		if token == "" {
+			return fmt.Errorf("token vacío para túnel autenticado")
+		}
+		headers.Set("Authorization", "Bearer "+token)
 	}
 
 	dialer := websocket.Dialer{HandshakeTimeout: options.HandshakeTimeout}

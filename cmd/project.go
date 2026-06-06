@@ -194,6 +194,7 @@ var initCmd = &cobra.Command{
 			cfg.ProjectDatabaseURL = buildDatabaseURL(cfg.ProjectDBUser, cfg.ProjectDBPassword, cfg.ProjectDBHost, cfg.ProjectDBPort, cfg.ProjectDBName)
 		}
 		normalizedAuth := normalizeProjectAuth(resp)
+		normalizedMachineAuth := normalizeProjectMachineAuth(resp)
 		if normalizedAuth != nil {
 			cfg.OIDCType = strings.TrimSpace(normalizedAuth.Type)
 			cfg.OIDCProvider = strings.TrimSpace(normalizedAuth.Provider)
@@ -217,6 +218,18 @@ var initCmd = &cobra.Command{
 				fmt.Printf("⚠️  OIDC secret no vino inline; secretRef=%s\n", cfg.OIDCClientSecretRef)
 			}
 		}
+		if normalizedMachineAuth != nil {
+			cfg.MachineAuthGrantType = strings.TrimSpace(normalizedMachineAuth.GrantType)
+			cfg.MachineAuthTokenEndpoint = strings.TrimSpace(normalizedMachineAuth.TokenEndpoint)
+			cfg.MachineAuthClientID = strings.TrimSpace(normalizedMachineAuth.ClientID)
+			cfg.MachineAuthClientSecret = strings.TrimSpace(normalizedMachineAuth.ClientSecret)
+			cfg.MachineAuthClientSecretRef = strings.TrimSpace(normalizedMachineAuth.ClientSecretRef)
+			cfg.MachineAuthAudience = strings.TrimSpace(normalizedMachineAuth.Audience)
+			cfg.MachineAuthScopes = strings.Join(normalizedMachineAuth.Scopes, " ")
+			if cfg.MachineAuthClientSecret == "" && cfg.MachineAuthClientSecretRef != "" {
+				fmt.Printf("⚠️  Machine auth secret no vino inline; secretRef=%s\n", cfg.MachineAuthClientSecretRef)
+			}
+		}
 		if sshPrivateKey != "" {
 			fmt.Println("✅ Clave SSH de VM recibida inline desde backend")
 			if err := writeSSHPrivateKey(slug, cfg.MutagenDestination, sshPrivateKey); err != nil {
@@ -225,7 +238,7 @@ var initCmd = &cobra.Command{
 		} else {
 			fmt.Println("ℹ️  Backend no devolvió sshPrivateKey inline; se usará flujo SSH legacy (puede requerir onboarding exe.dev)")
 		}
-		if err := writeProjectSecretsBundle(slug, sshPrivateKey, projectAPIToken, dbPassword); err != nil {
+		if err := writeProjectSecretsBundle(slug, sshPrivateKey, projectAPIToken, dbPassword, cfg.MachineAuthClientID, cfg.MachineAuthClientSecret); err != nil {
 			return fmt.Errorf("no se pudieron guardar secretos locales del proyecto: %w", err)
 		}
 		if strings.TrimSpace(cfg.MutagenDestination) == "" {
@@ -266,12 +279,18 @@ var initCmd = &cobra.Command{
 				a.ClientSecret = ""
 				safeResp.Auth = &a
 			}
+			if safeResp.MachineAuth != nil {
+				m := *safeResp.MachineAuth
+				m.ClientSecret = ""
+				safeResp.MachineAuth = &m
+			}
 			if safeResp.Secrets != nil {
 				s := *safeResp.Secrets
 				s.SSHPrivateKey = ""
 				s.ProjectAPIToken = ""
 				s.DBPassword = ""
 				s.OIDCClientSecret = ""
+				s.MachineClientSecret = ""
 				safeResp.Secrets = &s
 			}
 			enc := json.NewEncoder(os.Stdout)
@@ -1188,7 +1207,7 @@ func writeSSHPrivateKey(projectSlug, destination, key string) error {
 	return nil
 }
 
-func writeProjectSecretsBundle(slug, sshPrivateKey, projectAPIToken, dbPassword string) error {
+func writeProjectSecretsBundle(slug, sshPrivateKey, projectAPIToken, dbPassword, machineClientID, machineClientSecret string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
@@ -1211,6 +1230,12 @@ func writeProjectSecretsBundle(slug, sshPrivateKey, projectAPIToken, dbPassword 
 		return err
 	}
 	if err := writeIf("db-password", dbPassword); err != nil {
+		return err
+	}
+	if err := writeIf("machine-client-id", machineClientID); err != nil {
+		return err
+	}
+	if err := writeIf("machine-client-secret", machineClientSecret); err != nil {
 		return err
 	}
 	return nil
@@ -1319,6 +1344,42 @@ func normalizeProjectAuth(resp *api.CreateProjectResponse) *api.ProjectAuth {
 	return normalized
 }
 
+func normalizeProjectMachineAuth(resp *api.CreateProjectResponse) *api.ProjectMachineAuth {
+	if resp == nil || resp.MachineAuth == nil {
+		return nil
+	}
+
+	auth := resp.MachineAuth
+	clientSecret := strings.TrimSpace(auth.ClientSecret)
+	if clientSecret == "" && resp.Secrets != nil {
+		clientSecret = strings.TrimSpace(resp.Secrets.MachineClientSecret)
+	}
+	clientSecretRef := strings.TrimSpace(auth.ClientSecretRef)
+	if clientSecretRef == "" && resp.Secrets != nil {
+		clientSecretRef = strings.TrimSpace(resp.Secrets.MachineClientSecretRef)
+	}
+	tokenEndpoint := strings.TrimSpace(auth.TokenEndpoint)
+	clientID := strings.TrimSpace(auth.ClientID)
+	if tokenEndpoint == "" || clientID == "" {
+		return nil
+	}
+
+	scopes := auth.Scopes
+	if len(scopes) == 0 {
+		scopes = nil
+	}
+
+	return &api.ProjectMachineAuth{
+		GrantType:       firstNonEmptyTrimmed(strings.TrimSpace(auth.GrantType), "client_credentials"),
+		TokenEndpoint:   tokenEndpoint,
+		ClientID:        clientID,
+		ClientSecret:    clientSecret,
+		ClientSecretRef: clientSecretRef,
+		Audience:        strings.TrimSpace(auth.Audience),
+		Scopes:          scopes,
+	}
+}
+
 func buildOIDCLoginURL(authorizationEndpoint, clientID, redirectURI string, scopes []string) string {
 	if strings.TrimSpace(authorizationEndpoint) == "" || strings.TrimSpace(clientID) == "" || strings.TrimSpace(redirectURI) == "" {
 		return ""
@@ -1356,22 +1417,29 @@ func saveProjectConfig(cfg config.Config) error {
 
 func materializeProjectEnv(cfg config.Config) error {
 	entries := map[string]string{
-		"OIDC_TYPE":                     strings.TrimSpace(cfg.OIDCType),
-		"OIDC_PROVIDER":                 strings.TrimSpace(cfg.OIDCProvider),
-		"OIDC_ISSUER":                   strings.TrimSpace(cfg.OIDCIssuer),
-		"OIDC_DISCOVERY_URL":            strings.TrimSpace(cfg.OIDCDiscoveryURL),
-		"OIDC_JWKS_URI":                 strings.TrimSpace(cfg.OIDCJWKSURI),
-		"OIDC_AUTHORIZATION_ENDPOINT":   strings.TrimSpace(cfg.OIDCAuthorizationEndpoint),
-		"OIDC_TOKEN_ENDPOINT":           strings.TrimSpace(cfg.OIDCTokenEndpoint),
-		"OIDC_USERINFO_ENDPOINT":        strings.TrimSpace(cfg.OIDCUserinfoEndpoint),
-		"OIDC_CLIENT_ID":                strings.TrimSpace(cfg.OIDCClientID),
-		"OIDC_CLIENT_SECRET":            strings.TrimSpace(cfg.OIDCClientSecret),
-		"OIDC_CLIENT_SECRET_REF":        strings.TrimSpace(cfg.OIDCClientSecretRef),
-		"OIDC_REDIRECT_URI":             strings.TrimSpace(cfg.OIDCRedirectURI),
-		"OIDC_LOGOUT_URI":               strings.TrimSpace(cfg.OIDCLogoutURI),
-		"OIDC_POST_LOGOUT_REDIRECT_URI": strings.TrimSpace(cfg.OIDCPostLogoutRedirectURI),
-		"OIDC_SCOPES":                   strings.TrimSpace(cfg.OIDCScopes),
-		"OIDC_LOGIN_URL":                strings.TrimSpace(cfg.OIDCLoginURL),
+		"OIDC_TYPE":                      strings.TrimSpace(cfg.OIDCType),
+		"OIDC_PROVIDER":                  strings.TrimSpace(cfg.OIDCProvider),
+		"OIDC_ISSUER":                    strings.TrimSpace(cfg.OIDCIssuer),
+		"OIDC_DISCOVERY_URL":             strings.TrimSpace(cfg.OIDCDiscoveryURL),
+		"OIDC_JWKS_URI":                  strings.TrimSpace(cfg.OIDCJWKSURI),
+		"OIDC_AUTHORIZATION_ENDPOINT":    strings.TrimSpace(cfg.OIDCAuthorizationEndpoint),
+		"OIDC_TOKEN_ENDPOINT":            strings.TrimSpace(cfg.OIDCTokenEndpoint),
+		"OIDC_USERINFO_ENDPOINT":         strings.TrimSpace(cfg.OIDCUserinfoEndpoint),
+		"OIDC_CLIENT_ID":                 strings.TrimSpace(cfg.OIDCClientID),
+		"OIDC_CLIENT_SECRET":             strings.TrimSpace(cfg.OIDCClientSecret),
+		"OIDC_CLIENT_SECRET_REF":         strings.TrimSpace(cfg.OIDCClientSecretRef),
+		"OIDC_REDIRECT_URI":              strings.TrimSpace(cfg.OIDCRedirectURI),
+		"OIDC_LOGOUT_URI":                strings.TrimSpace(cfg.OIDCLogoutURI),
+		"OIDC_POST_LOGOUT_REDIRECT_URI":  strings.TrimSpace(cfg.OIDCPostLogoutRedirectURI),
+		"OIDC_SCOPES":                    strings.TrimSpace(cfg.OIDCScopes),
+		"OIDC_LOGIN_URL":                 strings.TrimSpace(cfg.OIDCLoginURL),
+		"MACHINE_AUTH_GRANT_TYPE":        strings.TrimSpace(cfg.MachineAuthGrantType),
+		"MACHINE_AUTH_TOKEN_ENDPOINT":    strings.TrimSpace(cfg.MachineAuthTokenEndpoint),
+		"MACHINE_AUTH_CLIENT_ID":         strings.TrimSpace(cfg.MachineAuthClientID),
+		"MACHINE_AUTH_CLIENT_SECRET":     strings.TrimSpace(cfg.MachineAuthClientSecret),
+		"MACHINE_AUTH_CLIENT_SECRET_REF": strings.TrimSpace(cfg.MachineAuthClientSecretRef),
+		"MACHINE_AUTH_AUDIENCE":          strings.TrimSpace(cfg.MachineAuthAudience),
+		"MACHINE_AUTH_SCOPES":            strings.TrimSpace(cfg.MachineAuthScopes),
 	}
 
 	hasAny := false
@@ -1415,7 +1483,7 @@ func materializeProjectEnv(cfg config.Config) error {
 		return err
 	}
 
-	for _, key := range []string{"OIDC_TYPE", "OIDC_PROVIDER", "OIDC_ISSUER", "OIDC_DISCOVERY_URL", "OIDC_JWKS_URI", "OIDC_AUTHORIZATION_ENDPOINT", "OIDC_TOKEN_ENDPOINT", "OIDC_USERINFO_ENDPOINT", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_CLIENT_SECRET_REF", "OIDC_REDIRECT_URI", "OIDC_LOGOUT_URI", "OIDC_POST_LOGOUT_REDIRECT_URI", "OIDC_SCOPES", "OIDC_LOGIN_URL"} {
+	for _, key := range []string{"OIDC_TYPE", "OIDC_PROVIDER", "OIDC_ISSUER", "OIDC_DISCOVERY_URL", "OIDC_JWKS_URI", "OIDC_AUTHORIZATION_ENDPOINT", "OIDC_TOKEN_ENDPOINT", "OIDC_USERINFO_ENDPOINT", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_CLIENT_SECRET_REF", "OIDC_REDIRECT_URI", "OIDC_LOGOUT_URI", "OIDC_POST_LOGOUT_REDIRECT_URI", "OIDC_SCOPES", "OIDC_LOGIN_URL", "MACHINE_AUTH_GRANT_TYPE", "MACHINE_AUTH_TOKEN_ENDPOINT", "MACHINE_AUTH_CLIENT_ID", "MACHINE_AUTH_CLIENT_SECRET", "MACHINE_AUTH_CLIENT_SECRET_REF", "MACHINE_AUTH_AUDIENCE", "MACHINE_AUTH_SCOPES"} {
 		if value := strings.TrimSpace(entries[key]); value != "" {
 			lines = append(lines, key+"="+value)
 		}
@@ -1428,7 +1496,7 @@ func materializeProjectEnv(cfg config.Config) error {
 	if err := os.WriteFile(".env", []byte(content), 0o600); err != nil {
 		return err
 	}
-	fmt.Println("✅ .env materializado con configuración OIDC")
+	fmt.Println("✅ .env materializado con configuración OIDC/machine auth")
 	return nil
 }
 

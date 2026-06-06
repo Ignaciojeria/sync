@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/Ignaciojeria/sync/internal/config"
+	"github.com/Ignaciojeria/sync/internal/machineauth"
 	"github.com/Ignaciojeria/sync/internal/tunnel"
 
 	"github.com/spf13/cobra"
@@ -37,7 +38,7 @@ var dbConnectCmd = &cobra.Command{
 	Use:   "connect",
 	Short: "Abre túnel local a PostgreSQL vía WebSocket",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.Resolve(apiURLFlag, tokenFlag)
+		cfg, err := resolveDBCommandConfig(tokenFlag)
 		if err != nil {
 			return err
 		}
@@ -51,8 +52,18 @@ var dbConnectCmd = &cobra.Command{
 		}
 
 		token := strings.TrimSpace(cfg.Token)
-		if token == "" && !dbInsecureFlag {
-			return fmt.Errorf("falta token (usa 'einarc login' o EINAR_TOKEN)")
+		var tokenProvider func(context.Context) (string, error)
+		if !dbInsecureFlag {
+			machineSource, err := machineTokenSourceFromConfig(cfg)
+			if err != nil {
+				return err
+			}
+			if machineSource != nil {
+				tokenProvider = machineSource.Token
+				token = ""
+			} else if token == "" {
+				return fmt.Errorf("falta token (usa 'einarc login' o EINAR_TOKEN) y no hay machineAuth configurado para este proyecto")
+			}
 		}
 
 		apiURL := resolveDBAPIURL(dbAPIFlag)
@@ -64,6 +75,11 @@ var dbConnectCmd = &cobra.Command{
 		}
 
 		fmt.Printf("✅ DB tunnel listo\n")
+		if tokenProvider != nil {
+			fmt.Println("Auth: machineAuth del proyecto actual")
+		} else if !dbInsecureFlag {
+			fmt.Println("Auth: bearer token del usuario")
+		}
 		fmt.Printf("Project: %s\n", project)
 		fmt.Printf("Listen:  %s\n", listenAddr)
 		fmt.Printf("Remote:  %s\n", wsURL)
@@ -77,11 +93,12 @@ var dbConnectCmd = &cobra.Command{
 		defer stop()
 
 		return tunnel.Serve(ctx, listenAddr, tunnel.Options{
-			APIBaseURL:   apiURL,
-			Project:      project,
-			Token:        token,
-			DevSub:       strings.TrimSpace(dbDevSubFlag),
-			InsecureAuth: dbInsecureFlag,
+			APIBaseURL:    apiURL,
+			Project:       project,
+			Token:         token,
+			TokenProvider: tokenProvider,
+			DevSub:        strings.TrimSpace(dbDevSubFlag),
+			InsecureAuth:  dbInsecureFlag,
 		}, cmd.Printf)
 	},
 }
@@ -136,6 +153,41 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func resolveDBCommandConfig(tokenFlag string) (config.Config, error) {
+	projectCfg, err := config.Load()
+	if err != nil {
+		return config.Config{}, err
+	}
+	globalCfg, _ := config.LoadGlobal()
+
+	cfg := projectCfg
+	cfg.Token = strings.TrimSpace(globalCfg.Token)
+	cfg.RefreshToken = strings.TrimSpace(globalCfg.RefreshToken)
+	cfg.APIURL = strings.TrimSpace(globalCfg.APIURL)
+
+	if envToken := strings.TrimSpace(os.Getenv("EINAR_TOKEN")); envToken != "" {
+		cfg.Token = envToken
+	}
+	if flagToken := strings.TrimSpace(tokenFlag); flagToken != "" {
+		cfg.Token = flagToken
+	}
+	return cfg, nil
+}
+
+func machineTokenSourceFromConfig(cfg config.Config) (*machineauth.TokenSource, error) {
+	if strings.TrimSpace(cfg.MachineAuthTokenEndpoint) == "" && strings.TrimSpace(cfg.MachineAuthClientID) == "" && strings.TrimSpace(cfg.MachineAuthClientSecret) == "" {
+		return nil, nil
+	}
+	return machineauth.NewTokenSource(machineauth.Config{
+		GrantType:     strings.TrimSpace(cfg.MachineAuthGrantType),
+		TokenEndpoint: strings.TrimSpace(cfg.MachineAuthTokenEndpoint),
+		ClientID:      strings.TrimSpace(cfg.MachineAuthClientID),
+		ClientSecret:  strings.TrimSpace(cfg.MachineAuthClientSecret),
+		Audience:      strings.TrimSpace(cfg.MachineAuthAudience),
+		Scopes:        strings.Fields(strings.TrimSpace(cfg.MachineAuthScopes)),
+	})
 }
 
 func envOrDefault(key, fallback string) string {

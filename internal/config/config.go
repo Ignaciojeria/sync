@@ -11,47 +11,55 @@ import (
 )
 
 type Config struct {
-	APIURL                    string `json:"apiUrl,omitempty"`
-	Token                     string `json:"token,omitempty"`
-	RefreshToken              string `json:"refreshToken,omitempty"`
-	LastProjectID             string `json:"lastProjectId,omitempty"`
-	LastProjectSlug           string `json:"lastProjectSlug,omitempty"`
-	MutagenDestination        string `json:"mutagenDestination,omitempty"`
-	MutagenSessionName        string `json:"mutagenSessionName,omitempty"`
-	LastVMName                string `json:"lastVmName,omitempty"`
-	LastVMHTTPSURL            string `json:"lastVmHttpsUrl,omitempty"`
-	LastVMSshDest             string `json:"lastVmSshDest,omitempty"`
-	ProjectAPIToken           string `json:"projectApiToken,omitempty"`
-	ProjectDBName             string `json:"projectDbName,omitempty"`
-	ProjectDBUser             string `json:"projectDbUser,omitempty"`
-	ProjectDBPassword         string `json:"projectDbPassword,omitempty"`
-	ProjectDBHost             string `json:"projectDbHost,omitempty"`
-	ProjectDBPort             int    `json:"projectDbPort,omitempty"`
-	ProjectDatabaseURL        string `json:"projectDatabaseUrl,omitempty"`
-	WorkspaceBranch           string `json:"workspaceBranch,omitempty"`
-	OIDCType                  string `json:"oidcType,omitempty"`
-	OIDCProvider              string `json:"oidcProvider,omitempty"`
-	OIDCIssuer                string `json:"oidcIssuer,omitempty"`
-	OIDCDiscoveryURL          string `json:"oidcDiscoveryUrl,omitempty"`
-	OIDCJWKSURI               string `json:"oidcJwksUri,omitempty"`
-	OIDCAuthorizationEndpoint string `json:"oidcAuthorizationEndpoint,omitempty"`
-	OIDCTokenEndpoint         string `json:"oidcTokenEndpoint,omitempty"`
-	OIDCUserinfoEndpoint      string `json:"oidcUserinfoEndpoint,omitempty"`
-	OIDCClientID              string `json:"oidcClientId,omitempty"`
-	OIDCClientSecret          string `json:"oidcClientSecret,omitempty"`
-	OIDCClientSecretRef       string `json:"oidcClientSecretRef,omitempty"`
-	OIDCRedirectURI           string `json:"oidcRedirectUri,omitempty"`
-	OIDCLogoutURI             string `json:"oidcLogoutUri,omitempty"`
-	OIDCPostLogoutRedirectURI string `json:"oidcPostLogoutRedirectUri,omitempty"`
-	OIDCScopes                string `json:"oidcScopes,omitempty"`
-	OIDCLoginURL              string `json:"oidcLoginUrl,omitempty"`
-	CasdoorOrg                string `json:"casdoorOrg,omitempty"`
-	CasdoorApplication        string `json:"casdoorApplication,omitempty"`
+	APIURL                     string `json:"apiUrl,omitempty"`
+	Token                      string `json:"token,omitempty"`
+	RefreshToken               string `json:"refreshToken,omitempty"`
+	LastProjectID              string `json:"lastProjectId,omitempty"`
+	LastProjectSlug            string `json:"lastProjectSlug,omitempty"`
+	MutagenDestination         string `json:"mutagenDestination,omitempty"`
+	MutagenSessionName         string `json:"mutagenSessionName,omitempty"`
+	LastVMName                 string `json:"lastVmName,omitempty"`
+	LastVMHTTPSURL             string `json:"lastVmHttpsUrl,omitempty"`
+	LastVMSshDest              string `json:"lastVmSshDest,omitempty"`
+	ProjectAPIToken            string `json:"projectApiToken,omitempty"`
+	ProjectDBName              string `json:"projectDbName,omitempty"`
+	ProjectDBUser              string `json:"projectDbUser,omitempty"`
+	ProjectDBPassword          string `json:"projectDbPassword,omitempty"`
+	ProjectDBHost              string `json:"projectDbHost,omitempty"`
+	ProjectDBPort              int    `json:"projectDbPort,omitempty"`
+	ProjectDatabaseURL         string `json:"projectDatabaseUrl,omitempty"`
+	WorkspaceBranch            string `json:"workspaceBranch,omitempty"`
+	OIDCType                   string `json:"oidcType,omitempty"`
+	OIDCProvider               string `json:"oidcProvider,omitempty"`
+	OIDCIssuer                 string `json:"oidcIssuer,omitempty"`
+	OIDCDiscoveryURL           string `json:"oidcDiscoveryUrl,omitempty"`
+	OIDCJWKSURI                string `json:"oidcJwksUri,omitempty"`
+	OIDCAuthorizationEndpoint  string `json:"oidcAuthorizationEndpoint,omitempty"`
+	OIDCTokenEndpoint          string `json:"oidcTokenEndpoint,omitempty"`
+	OIDCUserinfoEndpoint       string `json:"oidcUserinfoEndpoint,omitempty"`
+	OIDCClientID               string `json:"oidcClientId,omitempty"`
+	OIDCClientSecret           string `json:"oidcClientSecret,omitempty"`
+	OIDCClientSecretRef        string `json:"oidcClientSecretRef,omitempty"`
+	OIDCRedirectURI            string `json:"oidcRedirectUri,omitempty"`
+	OIDCLogoutURI              string `json:"oidcLogoutUri,omitempty"`
+	OIDCPostLogoutRedirectURI  string `json:"oidcPostLogoutRedirectUri,omitempty"`
+	OIDCScopes                 string `json:"oidcScopes,omitempty"`
+	OIDCLoginURL               string `json:"oidcLoginUrl,omitempty"`
+	CasdoorOrg                 string `json:"casdoorOrg,omitempty"`
+	CasdoorApplication         string `json:"casdoorApplication,omitempty"`
+	MachineAuthGrantType       string `json:"machineAuthGrantType,omitempty"`
+	MachineAuthTokenEndpoint   string `json:"machineAuthTokenEndpoint,omitempty"`
+	MachineAuthClientID        string `json:"machineAuthClientId,omitempty"`
+	MachineAuthClientSecret    string `json:"machineAuthClientSecret,omitempty"`
+	MachineAuthClientSecretRef string `json:"machineAuthClientSecretRef,omitempty"`
+	MachineAuthAudience        string `json:"machineAuthAudience,omitempty"`
+	MachineAuthScopes          string `json:"machineAuthScopes,omitempty"`
 }
 
 type projectDiskConfig struct {
 	Project struct {
 		ID   string `json:"id,omitempty"`
+		Slug string `json:"slug,omitempty"`
 		Name string `json:"name,omitempty"`
 	} `json:"project,omitempty"`
 	Database struct {
@@ -116,41 +124,57 @@ type projectDiskConfig struct {
 		Organization          string   `json:"organization,omitempty"`
 		Application           string   `json:"application,omitempty"`
 	} `json:"identity,omitempty"`
+	MachineAuth struct {
+		GrantType       string   `json:"grantType,omitempty"`
+		TokenEndpoint   string   `json:"tokenEndpoint,omitempty"`
+		ClientID        string   `json:"clientId,omitempty"`
+		ClientSecret    string   `json:"clientSecret,omitempty"`
+		ClientSecretRef string   `json:"clientSecretRef,omitempty"`
+		Audience        string   `json:"audience,omitempty"`
+		Scopes          []string `json:"scopes,omitempty"`
+	} `json:"machineAuth,omitempty"`
 
 	// Compatibilidad con formatos legacy flat.
-	LastProjectID             string `json:"lastProjectId,omitempty"`
-	LastProjectSlug           string `json:"lastProjectSlug,omitempty"`
-	MutagenDestination        string `json:"mutagenDestination,omitempty"`
-	MutagenSessionName        string `json:"mutagenSessionName,omitempty"`
-	LastVMName                string `json:"lastVmName,omitempty"`
-	LastVMHTTPSURL            string `json:"lastVmHttpsUrl,omitempty"`
-	LastVMSshDest             string `json:"lastVmSshDest,omitempty"`
-	ProjectAPIToken           string `json:"projectApiToken,omitempty"`
-	ProjectDBName             string `json:"projectDbName,omitempty"`
-	ProjectDBUser             string `json:"projectDbUser,omitempty"`
-	ProjectDBPassword         string `json:"projectDbPassword,omitempty"`
-	ProjectDBHost             string `json:"projectDbHost,omitempty"`
-	ProjectDBPort             int    `json:"projectDbPort,omitempty"`
-	ProjectDatabaseURL        string `json:"projectDatabaseUrl,omitempty"`
-	WorkspaceBranch           string `json:"workspaceBranch,omitempty"`
-	OIDCType                  string `json:"oidcType,omitempty"`
-	OIDCProvider              string `json:"oidcProvider,omitempty"`
-	OIDCIssuer                string `json:"oidcIssuer,omitempty"`
-	OIDCDiscoveryURL          string `json:"oidcDiscoveryUrl,omitempty"`
-	OIDCJWKSURI               string `json:"oidcJwksUri,omitempty"`
-	OIDCAuthorizationEndpoint string `json:"oidcAuthorizationEndpoint,omitempty"`
-	OIDCTokenEndpoint         string `json:"oidcTokenEndpoint,omitempty"`
-	OIDCUserinfoEndpoint      string `json:"oidcUserinfoEndpoint,omitempty"`
-	OIDCClientID              string `json:"oidcClientId,omitempty"`
-	OIDCClientSecret          string `json:"oidcClientSecret,omitempty"`
-	OIDCClientSecretRef       string `json:"oidcClientSecretRef,omitempty"`
-	OIDCRedirectURI           string `json:"oidcRedirectUri,omitempty"`
-	OIDCLogoutURI             string `json:"oidcLogoutUri,omitempty"`
-	OIDCPostLogoutRedirectURI string `json:"oidcPostLogoutRedirectUri,omitempty"`
-	OIDCScopes                string `json:"oidcScopes,omitempty"`
-	OIDCLoginURL              string `json:"oidcLoginUrl,omitempty"`
-	CasdoorOrg                string `json:"casdoorOrg,omitempty"`
-	CasdoorApplication        string `json:"casdoorApplication,omitempty"`
+	LastProjectID              string `json:"lastProjectId,omitempty"`
+	LastProjectSlug            string `json:"lastProjectSlug,omitempty"`
+	MutagenDestination         string `json:"mutagenDestination,omitempty"`
+	MutagenSessionName         string `json:"mutagenSessionName,omitempty"`
+	LastVMName                 string `json:"lastVmName,omitempty"`
+	LastVMHTTPSURL             string `json:"lastVmHttpsUrl,omitempty"`
+	LastVMSshDest              string `json:"lastVmSshDest,omitempty"`
+	ProjectAPIToken            string `json:"projectApiToken,omitempty"`
+	ProjectDBName              string `json:"projectDbName,omitempty"`
+	ProjectDBUser              string `json:"projectDbUser,omitempty"`
+	ProjectDBPassword          string `json:"projectDbPassword,omitempty"`
+	ProjectDBHost              string `json:"projectDbHost,omitempty"`
+	ProjectDBPort              int    `json:"projectDbPort,omitempty"`
+	ProjectDatabaseURL         string `json:"projectDatabaseUrl,omitempty"`
+	WorkspaceBranch            string `json:"workspaceBranch,omitempty"`
+	OIDCType                   string `json:"oidcType,omitempty"`
+	OIDCProvider               string `json:"oidcProvider,omitempty"`
+	OIDCIssuer                 string `json:"oidcIssuer,omitempty"`
+	OIDCDiscoveryURL           string `json:"oidcDiscoveryUrl,omitempty"`
+	OIDCJWKSURI                string `json:"oidcJwksUri,omitempty"`
+	OIDCAuthorizationEndpoint  string `json:"oidcAuthorizationEndpoint,omitempty"`
+	OIDCTokenEndpoint          string `json:"oidcTokenEndpoint,omitempty"`
+	OIDCUserinfoEndpoint       string `json:"oidcUserinfoEndpoint,omitempty"`
+	OIDCClientID               string `json:"oidcClientId,omitempty"`
+	OIDCClientSecret           string `json:"oidcClientSecret,omitempty"`
+	OIDCClientSecretRef        string `json:"oidcClientSecretRef,omitempty"`
+	OIDCRedirectURI            string `json:"oidcRedirectUri,omitempty"`
+	OIDCLogoutURI              string `json:"oidcLogoutUri,omitempty"`
+	OIDCPostLogoutRedirectURI  string `json:"oidcPostLogoutRedirectUri,omitempty"`
+	OIDCScopes                 string `json:"oidcScopes,omitempty"`
+	OIDCLoginURL               string `json:"oidcLoginUrl,omitempty"`
+	CasdoorOrg                 string `json:"casdoorOrg,omitempty"`
+	CasdoorApplication         string `json:"casdoorApplication,omitempty"`
+	MachineAuthGrantType       string `json:"machineAuthGrantType,omitempty"`
+	MachineAuthTokenEndpoint   string `json:"machineAuthTokenEndpoint,omitempty"`
+	MachineAuthClientID        string `json:"machineAuthClientId,omitempty"`
+	MachineAuthClientSecret    string `json:"machineAuthClientSecret,omitempty"`
+	MachineAuthClientSecretRef string `json:"machineAuthClientSecretRef,omitempty"`
+	MachineAuthAudience        string `json:"machineAuthAudience,omitempty"`
+	MachineAuthScopes          string `json:"machineAuthScopes,omitempty"`
 }
 
 func Resolve(apiURLFlag, tokenFlag string) (Config, error) {
@@ -197,6 +221,13 @@ func Resolve(apiURLFlag, tokenFlag string) (Config, error) {
 	cfg.OIDCLoginURL = strings.TrimSpace(projectCfg.OIDCLoginURL)
 	cfg.CasdoorOrg = strings.TrimSpace(projectCfg.CasdoorOrg)
 	cfg.CasdoorApplication = strings.TrimSpace(projectCfg.CasdoorApplication)
+	cfg.MachineAuthGrantType = strings.TrimSpace(projectCfg.MachineAuthGrantType)
+	cfg.MachineAuthTokenEndpoint = strings.TrimSpace(projectCfg.MachineAuthTokenEndpoint)
+	cfg.MachineAuthClientID = strings.TrimSpace(projectCfg.MachineAuthClientID)
+	cfg.MachineAuthClientSecret = strings.TrimSpace(projectCfg.MachineAuthClientSecret)
+	cfg.MachineAuthClientSecretRef = strings.TrimSpace(projectCfg.MachineAuthClientSecretRef)
+	cfg.MachineAuthAudience = strings.TrimSpace(projectCfg.MachineAuthAudience)
+	cfg.MachineAuthScopes = strings.TrimSpace(projectCfg.MachineAuthScopes)
 
 	if envAPI := strings.TrimSpace(os.Getenv("EINAR_API_URL")); envAPI != "" {
 		cfg.APIURL = envAPI
@@ -272,7 +303,10 @@ func Load() (Config, error) {
 	if projectID == "" {
 		projectID = strings.TrimSpace(disk.LastProjectID)
 	}
-	projectSlug := strings.TrimSpace(disk.Project.Name)
+	projectSlug := strings.TrimSpace(disk.Project.Slug)
+	if projectSlug == "" {
+		projectSlug = strings.TrimSpace(disk.Project.Name)
+	}
 	if projectSlug == "" {
 		projectSlug = strings.TrimSpace(disk.LastProjectSlug)
 	}
@@ -292,6 +326,16 @@ func Load() (Config, error) {
 	if mutagenSessionName == "" {
 		mutagenSessionName = strings.TrimSpace(disk.MutagenSessionName)
 	}
+	if mutagenDestination == "" || mutagenSessionName == "" {
+		if sessionName, destination, err := loadMutagenConfigFromFile(); err == nil {
+			if mutagenSessionName == "" {
+				mutagenSessionName = sessionName
+			}
+			if mutagenDestination == "" {
+				mutagenDestination = destination
+			}
+		}
+	}
 	lastVMName := strings.TrimSpace(disk.VM.Name)
 	if lastVMName == "" {
 		lastVMName = strings.TrimSpace(disk.LastVMName)
@@ -303,6 +347,9 @@ func Load() (Config, error) {
 	lastVMSshDest := strings.TrimSpace(disk.VM.SSHDestination)
 	if lastVMSshDest == "" {
 		lastVMSshDest = strings.TrimSpace(disk.LastVMSshDest)
+	}
+	if lastVMSshDest == "" {
+		lastVMSshDest = mutagenDestination
 	}
 	projectDBName := strings.TrimSpace(disk.DatabaseRuntime.Name)
 	if projectDBName == "" {
@@ -349,41 +396,58 @@ func Load() (Config, error) {
 	oidcLoginURL := firstNonEmpty(strings.TrimSpace(disk.Identity.LoginURL), strings.TrimSpace(disk.Auth.LoginURL), strings.TrimSpace(disk.OIDCLoginURL))
 	casdoorOrg := firstNonEmpty(strings.TrimSpace(disk.Identity.Organization), strings.TrimSpace(disk.Auth.Organization), strings.TrimSpace(disk.CasdoorOrg))
 	casdoorApplication := firstNonEmpty(strings.TrimSpace(disk.Identity.Application), strings.TrimSpace(disk.Auth.Application), strings.TrimSpace(disk.CasdoorApplication))
+	machineAuthGrantType := firstNonEmpty(strings.TrimSpace(disk.MachineAuth.GrantType), strings.TrimSpace(disk.MachineAuthGrantType))
+	machineAuthTokenEndpoint := firstNonEmpty(strings.TrimSpace(disk.MachineAuth.TokenEndpoint), strings.TrimSpace(disk.MachineAuthTokenEndpoint))
+	machineAuthClientID := firstNonEmpty(strings.TrimSpace(disk.MachineAuth.ClientID), strings.TrimSpace(disk.MachineAuthClientID))
+	machineAuthClientSecret := firstNonEmpty(strings.TrimSpace(disk.MachineAuth.ClientSecret), strings.TrimSpace(disk.MachineAuthClientSecret))
+	machineAuthClientSecretRef := firstNonEmpty(strings.TrimSpace(disk.MachineAuth.ClientSecretRef), strings.TrimSpace(disk.MachineAuthClientSecretRef))
+	machineAuthAudience := firstNonEmpty(strings.TrimSpace(disk.MachineAuth.Audience), strings.TrimSpace(disk.MachineAuthAudience))
+	machineAuthScopes := strings.TrimSpace(disk.MachineAuthScopes)
+	if machineAuthScopes == "" && len(disk.MachineAuth.Scopes) > 0 {
+		machineAuthScopes = strings.Join(disk.MachineAuth.Scopes, " ")
+	}
 
 	return Config{
-		LastProjectID:             projectID,
-		LastProjectSlug:           projectSlug,
-		MutagenDestination:        mutagenDestination,
-		MutagenSessionName:        mutagenSessionName,
-		LastVMName:                lastVMName,
-		LastVMHTTPSURL:            lastVMHTTPSURL,
-		LastVMSshDest:             lastVMSshDest,
-		ProjectAPIToken:           strings.TrimSpace(disk.ProjectAPIToken),
-		ProjectDBName:             projectDBName,
-		ProjectDBUser:             projectDBUser,
-		ProjectDBPassword:         projectDBPassword,
-		ProjectDBHost:             projectDBHost,
-		ProjectDBPort:             projectDBPort,
-		ProjectDatabaseURL:        databaseURL,
-		WorkspaceBranch:           workspaceBranch,
-		OIDCType:                  oidcType,
-		OIDCProvider:              oidcProvider,
-		OIDCIssuer:                oidcIssuer,
-		OIDCDiscoveryURL:          oidcDiscoveryURL,
-		OIDCJWKSURI:               oidcJWKSURI,
-		OIDCAuthorizationEndpoint: oidcAuthorizationEndpoint,
-		OIDCTokenEndpoint:         oidcTokenEndpoint,
-		OIDCUserinfoEndpoint:      oidcUserinfoEndpoint,
-		OIDCClientID:              oidcClientID,
-		OIDCClientSecret:          oidcClientSecret,
-		OIDCClientSecretRef:       oidcClientSecretRef,
-		OIDCRedirectURI:           oidcRedirectURI,
-		OIDCLogoutURI:             oidcLogoutURI,
-		OIDCPostLogoutRedirectURI: oidcPostLogoutRedirectURI,
-		OIDCScopes:                oidcScopes,
-		OIDCLoginURL:              oidcLoginURL,
-		CasdoorOrg:                casdoorOrg,
-		CasdoorApplication:        casdoorApplication,
+		LastProjectID:              projectID,
+		LastProjectSlug:            projectSlug,
+		MutagenDestination:         mutagenDestination,
+		MutagenSessionName:         mutagenSessionName,
+		LastVMName:                 lastVMName,
+		LastVMHTTPSURL:             lastVMHTTPSURL,
+		LastVMSshDest:              lastVMSshDest,
+		ProjectAPIToken:            strings.TrimSpace(disk.ProjectAPIToken),
+		ProjectDBName:              projectDBName,
+		ProjectDBUser:              projectDBUser,
+		ProjectDBPassword:          projectDBPassword,
+		ProjectDBHost:              projectDBHost,
+		ProjectDBPort:              projectDBPort,
+		ProjectDatabaseURL:         databaseURL,
+		WorkspaceBranch:            workspaceBranch,
+		OIDCType:                   oidcType,
+		OIDCProvider:               oidcProvider,
+		OIDCIssuer:                 oidcIssuer,
+		OIDCDiscoveryURL:           oidcDiscoveryURL,
+		OIDCJWKSURI:                oidcJWKSURI,
+		OIDCAuthorizationEndpoint:  oidcAuthorizationEndpoint,
+		OIDCTokenEndpoint:          oidcTokenEndpoint,
+		OIDCUserinfoEndpoint:       oidcUserinfoEndpoint,
+		OIDCClientID:               oidcClientID,
+		OIDCClientSecret:           oidcClientSecret,
+		OIDCClientSecretRef:        oidcClientSecretRef,
+		OIDCRedirectURI:            oidcRedirectURI,
+		OIDCLogoutURI:              oidcLogoutURI,
+		OIDCPostLogoutRedirectURI:  oidcPostLogoutRedirectURI,
+		OIDCScopes:                 oidcScopes,
+		OIDCLoginURL:               oidcLoginURL,
+		CasdoorOrg:                 casdoorOrg,
+		CasdoorApplication:         casdoorApplication,
+		MachineAuthGrantType:       machineAuthGrantType,
+		MachineAuthTokenEndpoint:   machineAuthTokenEndpoint,
+		MachineAuthClientID:        machineAuthClientID,
+		MachineAuthClientSecret:    machineAuthClientSecret,
+		MachineAuthClientSecretRef: machineAuthClientSecretRef,
+		MachineAuthAudience:        machineAuthAudience,
+		MachineAuthScopes:          machineAuthScopes,
 	}, nil
 }
 
@@ -396,42 +460,71 @@ func Save(cfg Config) error {
 		return err
 	}
 
-	var onDisk projectDiskConfig
-	onDisk.Project.ID = strings.TrimSpace(cfg.LastProjectID)
-	onDisk.Project.Name = strings.TrimSpace(cfg.LastProjectSlug)
-	onDisk.Database.URL = strings.TrimSpace(cfg.ProjectDatabaseURL)
-	onDisk.Workspace.Branch = strings.TrimSpace(cfg.WorkspaceBranch)
-	onDisk.Sync.Destination = strings.TrimSpace(cfg.MutagenDestination)
-	onDisk.Sync.SessionName = strings.TrimSpace(cfg.MutagenSessionName)
-	onDisk.VM.Name = strings.TrimSpace(cfg.LastVMName)
-	onDisk.VM.HTTPSURL = strings.TrimSpace(cfg.LastVMHTTPSURL)
-	onDisk.VM.SSHDestination = strings.TrimSpace(cfg.LastVMSshDest)
-	onDisk.DatabaseRuntime.Name = strings.TrimSpace(cfg.ProjectDBName)
-	onDisk.DatabaseRuntime.User = strings.TrimSpace(cfg.ProjectDBUser)
-	onDisk.DatabaseRuntime.Password = strings.TrimSpace(cfg.ProjectDBPassword)
-	onDisk.DatabaseRuntime.Host = strings.TrimSpace(cfg.ProjectDBHost)
-	onDisk.DatabaseRuntime.Port = cfg.ProjectDBPort
-	onDisk.ProjectAPIToken = strings.TrimSpace(cfg.ProjectAPIToken)
-	onDisk.Auth.Type = strings.TrimSpace(cfg.OIDCType)
-	onDisk.Auth.Provider = strings.TrimSpace(cfg.OIDCProvider)
-	onDisk.Auth.Issuer = strings.TrimSpace(cfg.OIDCIssuer)
-	onDisk.Auth.DiscoveryURL = strings.TrimSpace(cfg.OIDCDiscoveryURL)
-	onDisk.Auth.JWKSURI = strings.TrimSpace(cfg.OIDCJWKSURI)
-	onDisk.Auth.AuthorizationEndpoint = strings.TrimSpace(cfg.OIDCAuthorizationEndpoint)
-	onDisk.Auth.TokenEndpoint = strings.TrimSpace(cfg.OIDCTokenEndpoint)
-	onDisk.Auth.UserinfoEndpoint = strings.TrimSpace(cfg.OIDCUserinfoEndpoint)
-	onDisk.Auth.ClientID = strings.TrimSpace(cfg.OIDCClientID)
-	onDisk.Auth.ClientSecret = strings.TrimSpace(cfg.OIDCClientSecret)
-	onDisk.Auth.ClientSecretRef = strings.TrimSpace(cfg.OIDCClientSecretRef)
-	onDisk.Auth.RedirectURI = strings.TrimSpace(cfg.OIDCRedirectURI)
-	onDisk.Auth.LogoutURI = strings.TrimSpace(cfg.OIDCLogoutURI)
-	onDisk.Auth.PostLogoutRedirectURI = strings.TrimSpace(cfg.OIDCPostLogoutRedirectURI)
-	if scopes := strings.Fields(strings.TrimSpace(cfg.OIDCScopes)); len(scopes) > 0 {
-		onDisk.Auth.Scopes = scopes
+	onDisk := map[string]any{}
+
+	if projectID := strings.TrimSpace(cfg.LastProjectID); projectID != "" || strings.TrimSpace(cfg.LastProjectSlug) != "" {
+		project := map[string]any{}
+		if projectID != "" {
+			project["id"] = projectID
+		}
+		if slug := strings.TrimSpace(cfg.LastProjectSlug); slug != "" {
+			project["slug"] = slug
+		}
+		onDisk["project"] = project
 	}
-	onDisk.Auth.LoginURL = strings.TrimSpace(cfg.OIDCLoginURL)
-	onDisk.Auth.Organization = strings.TrimSpace(cfg.CasdoorOrg)
-	onDisk.Auth.Application = strings.TrimSpace(cfg.CasdoorApplication)
+	if branch := strings.TrimSpace(cfg.WorkspaceBranch); branch != "" {
+		onDisk["workspace"] = map[string]any{"branch": branch}
+	}
+	if httpsURL := strings.TrimSpace(cfg.LastVMHTTPSURL); httpsURL != "" {
+		onDisk["vm"] = map[string]any{"httpsUrl": httpsURL}
+	}
+	if databaseURL := strings.TrimSpace(cfg.ProjectDatabaseURL); databaseURL != "" {
+		onDisk["database"] = map[string]any{"url": databaseURL}
+	}
+
+	auth := map[string]any{}
+	setIf := func(target map[string]any, key, value string) {
+		if v := strings.TrimSpace(value); v != "" {
+			target[key] = v
+		}
+	}
+	setIf(auth, "type", cfg.OIDCType)
+	setIf(auth, "provider", cfg.OIDCProvider)
+	setIf(auth, "issuer", cfg.OIDCIssuer)
+	setIf(auth, "discoveryUrl", cfg.OIDCDiscoveryURL)
+	setIf(auth, "jwksUri", cfg.OIDCJWKSURI)
+	setIf(auth, "authorizationEndpoint", cfg.OIDCAuthorizationEndpoint)
+	setIf(auth, "tokenEndpoint", cfg.OIDCTokenEndpoint)
+	setIf(auth, "userinfoEndpoint", cfg.OIDCUserinfoEndpoint)
+	setIf(auth, "clientId", cfg.OIDCClientID)
+	setIf(auth, "clientSecret", cfg.OIDCClientSecret)
+	setIf(auth, "clientSecretRef", cfg.OIDCClientSecretRef)
+	setIf(auth, "redirectUri", cfg.OIDCRedirectURI)
+	setIf(auth, "logoutUri", cfg.OIDCLogoutURI)
+	setIf(auth, "postLogoutRedirectUri", cfg.OIDCPostLogoutRedirectURI)
+	if scopes := strings.Fields(strings.TrimSpace(cfg.OIDCScopes)); len(scopes) > 0 {
+		auth["scopes"] = scopes
+	}
+	setIf(auth, "loginUrl", cfg.OIDCLoginURL)
+	setIf(auth, "organization", cfg.CasdoorOrg)
+	setIf(auth, "application", cfg.CasdoorApplication)
+	if len(auth) > 0 {
+		onDisk["auth"] = auth
+	}
+
+	machineAuth := map[string]any{}
+	setIf(machineAuth, "grantType", cfg.MachineAuthGrantType)
+	setIf(machineAuth, "tokenEndpoint", cfg.MachineAuthTokenEndpoint)
+	setIf(machineAuth, "clientId", cfg.MachineAuthClientID)
+	setIf(machineAuth, "clientSecret", cfg.MachineAuthClientSecret)
+	setIf(machineAuth, "clientSecretRef", cfg.MachineAuthClientSecretRef)
+	setIf(machineAuth, "audience", cfg.MachineAuthAudience)
+	if scopes := strings.Fields(strings.TrimSpace(cfg.MachineAuthScopes)); len(scopes) > 0 {
+		machineAuth["scopes"] = scopes
+	}
+	if len(machineAuth) > 0 {
+		onDisk["machineAuth"] = machineAuth
+	}
 
 	var buf strings.Builder
 	enc := json.NewEncoder(&buf)
@@ -477,6 +570,67 @@ func LoadGlobal() (Config, error) {
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+func loadMutagenConfigFromFile() (string, string, error) {
+	b, err := os.ReadFile("mutagen.yml")
+	if err != nil {
+		return "", "", err
+	}
+
+	var currentSession string
+	inSync := false
+	inDefaults := false
+	sessionName := ""
+	destination := ""
+
+	for _, raw := range strings.Split(string(b), "\n") {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if trimmed == "sync:" {
+			inSync = true
+			continue
+		}
+		if !inSync {
+			continue
+		}
+		if !strings.HasPrefix(raw, "  ") {
+			break
+		}
+		if strings.HasPrefix(raw, "  defaults:") {
+			inDefaults = true
+			currentSession = ""
+			continue
+		}
+		if strings.HasPrefix(raw, "  ") && strings.HasSuffix(trimmed, ":") && !strings.HasPrefix(raw, "    ") {
+			name := strings.TrimSuffix(trimmed, ":")
+			if name == "defaults" {
+				inDefaults = true
+				currentSession = ""
+				continue
+			}
+			if sessionName == "" {
+				sessionName = name
+			}
+			currentSession = name
+			inDefaults = false
+			continue
+		}
+		if inDefaults || currentSession == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "beta:") {
+			destination = strings.Trim(strings.TrimSpace(strings.TrimPrefix(trimmed, "beta:")), "\"'")
+			break
+		}
+	}
+
+	if sessionName == "" || destination == "" {
+		return "", "", fmt.Errorf("mutagen.yml incompleto")
+	}
+	return sessionName, destination, nil
 }
 
 func firstNonEmpty(values ...string) string {

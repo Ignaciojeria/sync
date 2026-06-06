@@ -62,11 +62,13 @@ type CreateProjectResponse struct {
 	ProjectAPIToken string `json:"projectApiToken,omitempty"` // compat legado
 	DBPassword      string `json:"dbPassword,omitempty"`      // compat legado
 	Secrets         *struct {
-		SSHPrivateKey       string `json:"sshPrivateKey,omitempty"`
-		ProjectAPIToken     string `json:"projectApiToken,omitempty"`
-		DBPassword          string `json:"dbPassword,omitempty"`
-		OIDCClientSecret    string `json:"oidcClientSecret,omitempty"`
-		OIDCClientSecretRef string `json:"oidcClientSecretRef,omitempty"`
+		SSHPrivateKey          string `json:"sshPrivateKey,omitempty"`
+		ProjectAPIToken        string `json:"projectApiToken,omitempty"`
+		DBPassword             string `json:"dbPassword,omitempty"`
+		OIDCClientSecret       string `json:"oidcClientSecret,omitempty"`
+		OIDCClientSecretRef    string `json:"oidcClientSecretRef,omitempty"`
+		MachineClientSecret    string `json:"machineClientSecret,omitempty"`
+		MachineClientSecretRef string `json:"machineClientSecretRef,omitempty"`
 	} `json:"secrets,omitempty"`
 
 	Workspace struct {
@@ -93,8 +95,19 @@ type CreateProjectResponse struct {
 		Port              int    `json:"port"`
 		PasswordSecretRef string `json:"passwordSecretRef"`
 	} `json:"database"`
-	Auth     *ProjectAuth `json:"auth,omitempty"`
-	Identity *ProjectAuth `json:"identity,omitempty"`
+	Auth        *ProjectAuth        `json:"auth,omitempty"`
+	Identity    *ProjectAuth        `json:"identity,omitempty"`
+	MachineAuth *ProjectMachineAuth `json:"machineAuth,omitempty"`
+}
+
+type ProjectMachineAuth struct {
+	GrantType       string   `json:"grantType,omitempty"`
+	TokenEndpoint   string   `json:"tokenEndpoint,omitempty"`
+	ClientID        string   `json:"clientId,omitempty"`
+	ClientSecret    string   `json:"clientSecret,omitempty"`
+	ClientSecretRef string   `json:"clientSecretRef,omitempty"`
+	Audience        string   `json:"audience,omitempty"`
+	Scopes          []string `json:"scopes,omitempty"`
 }
 
 type ProjectAuth struct {
