@@ -267,6 +267,9 @@ var initCmd = &cobra.Command{
 		if err := materializeProjectEnv(cfg); err != nil {
 			return fmt.Errorf("no se pudo materializar .env del proyecto: %w", err)
 		}
+		if err := ensureGoModTidy(); err != nil {
+			return fmt.Errorf("no se pudo ejecutar go mod tidy: %w", err)
+		}
 
 		if jsonOutput {
 			safeResp := *resp
@@ -569,36 +572,613 @@ func ensureGoProjectScaffold(slug string) error {
 			if mkErr := os.MkdirAll("cmd/api", 0o755); mkErr != nil {
 				return mkErr
 			}
-			mainGo := `package main
+			mainGo := fmt.Sprintf(`package main
 
 import (
-	"fmt"
 	"log"
-	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+
+	_ %q
+	_ %q
+	_ %q
+
+	"github.com/Ignaciojeria/ioc"
 )
 
 func main() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8000"
-	}
-
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "ok: %s\\n", r.URL.Path)
-	})
-
-	addr := ":" + port
-	log.Printf("server listening on %s", addr)
-	if err := http.ListenAndServe(addr, nil); err != nil {
+	if err := ioc.LoadDependencies(); err != nil {
 		log.Fatal(err)
 	}
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+
+	if err := ioc.Shutdown(); err != nil {
+		log.Fatalf("Shutdown errors: %%v", err)
+	}
 }
-`
+`, s+"/internal/shared/jwks", s+"/internal/shared/server", s+"/internal/adapter/in/web")
 			if werr := os.WriteFile("cmd/api/main.go", []byte(mainGo), 0o644); werr != nil {
 				return werr
 			}
 			fmt.Println("✅ cmd/api/main.go generado")
+		}
+	}
+
+	sharedFiles := map[string]string{
+		"internal/shared/configuration/conf.go": `package configuration
+
+import (
+	"github.com/Ignaciojeria/ioc"
+)
+
+var _ = ioc.Register(NewConf)
+
+type Conf struct {
+	PORT         string ` + "`env:\"PORT\" envDefault:\"8000\"`" + `
+	PROJECT_NAME string ` + "`env:\"PROJECT_NAME\"`" + `
+	VERSION      string ` + "`env:\"VERSION\"`" + `
+
+	DATABASE_URL string ` + "`env:\"DATABASE_URL\" envDefault:\"postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable\"`" + `
+
+	OIDCType                 string ` + "`env:\"OIDC_TYPE\" envDefault:\"oidc\"`" + `
+	OIDCProvider             string ` + "`env:\"OIDC_PROVIDER\" envDefault:\"casdoor\"`" + `
+	OIDCIssuer               string ` + "`env:\"OIDC_ISSUER\"`" + `
+	OIDCDiscoveryURL         string ` + "`env:\"OIDC_DISCOVERY_URL\"`" + `
+	OIDCJWKSURI              string ` + "`env:\"OIDC_JWKS_URI\"`" + `
+	OIDCAuthorizationEndpoint string ` + "`env:\"OIDC_AUTHORIZATION_ENDPOINT\"`" + `
+	OIDCTokenEndpoint        string ` + "`env:\"OIDC_TOKEN_ENDPOINT\"`" + `
+	OIDCUserinfoEndpoint     string ` + "`env:\"OIDC_USERINFO_ENDPOINT\"`" + `
+	OIDCClientID             string ` + "`env:\"OIDC_CLIENT_ID\"`" + `
+	OIDCClientSecret         string ` + "`env:\"OIDC_CLIENT_SECRET\"`" + `
+	OIDCClientSecretRef      string ` + "`env:\"OIDC_CLIENT_SECRET_REF\"`" + `
+	OIDCRedirectURI          string ` + "`env:\"OIDC_REDIRECT_URI\"`" + `
+	OIDCLogoutURI            string ` + "`env:\"OIDC_LOGOUT_URI\"`" + `
+	OIDCPostLogoutRedirectURI string ` + "`env:\"OIDC_POST_LOGOUT_REDIRECT_URI\"`" + `
+	OIDCScopes               string ` + "`env:\"OIDC_SCOPES\" envDefault:\"openid profile email\"`" + `
+	OIDCLoginURL             string ` + "`env:\"OIDC_LOGIN_URL\"`" + `
+
+	MachineAuthGrantType      string ` + "`env:\"MACHINE_AUTH_GRANT_TYPE\" envDefault:\"client_credentials\"`" + `
+	MachineAuthTokenEndpoint  string ` + "`env:\"MACHINE_AUTH_TOKEN_ENDPOINT\"`" + `
+	MachineAuthClientID       string ` + "`env:\"MACHINE_AUTH_CLIENT_ID\"`" + `
+	MachineAuthClientSecret   string ` + "`env:\"MACHINE_AUTH_CLIENT_SECRET\"`" + `
+	MachineAuthClientSecretRef string ` + "`env:\"MACHINE_AUTH_CLIENT_SECRET_REF\"`" + `
+	MachineAuthAudience       string ` + "`env:\"MACHINE_AUTH_AUDIENCE\"`" + `
+	MachineAuthScopes         string ` + "`env:\"MACHINE_AUTH_SCOPES\"`" + `
+
+	AUTH_DISABLED string ` + "`env:\"AUTH_DISABLED\" envDefault:\"false\"`" + `
+	JWKSURLS      string ` + "`env:\"JWKS_URLS\"`" + `
+	JWTAudience   string ` + "`env:\"JWT_AUDIENCE\"`" + `
+}
+
+func NewConf() (Conf, error) {
+	return Parse[Conf]()
+}
+`,
+		"internal/shared/configuration/parse.go": `package configuration
+
+import (
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"sync"
+
+	"github.com/caarlos0/env/v11"
+	"github.com/joho/godotenv"
+)
+
+var once sync.Once
+
+func handleEnvLoad(err error) {
+	if err != nil {
+		slog.Warn(".env not found, loading environment variables from system.")
+	} else {
+		slog.Info("Environment variables loaded from .env file.")
+	}
+}
+
+func findProjectRoot() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	dir := wd
+	for dir != filepath.Dir(dir) {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		dir = filepath.Dir(dir)
+	}
+	return wd
+}
+
+func loadEnvOnce() {
+	once.Do(func() {
+		root := findProjectRoot()
+		envPath := filepath.Join(root, ".env")
+		handleEnvLoad(godotenv.Load(envPath))
+	})
+}
+
+func Parse[T any]() (T, error) {
+	loadEnvOnce()
+	var conf T
+	if err := env.Parse(&conf); err != nil {
+		return conf, fmt.Errorf("failed to parse configuration: %w", err)
+	}
+	return conf, nil
+}
+`,
+		"internal/shared/jwks/new.go": fmt.Sprintf(`package jwks
+
+import (
+	"strings"
+
+	%q
+
+	"github.com/Ignaciojeria/ioc"
+	"github.com/MicahParks/keyfunc/v3"
+)
+
+var _ = ioc.Register(New)
+
+func New(conf configuration.Conf) (keyfunc.Keyfunc, error) {
+	urlsValue := strings.TrimSpace(conf.JWKSURLS)
+	if urlsValue == "" {
+		urlsValue = strings.TrimSpace(conf.OIDCJWKSURI)
+	}
+	urls := strings.Split(urlsValue, ",")
+	cleaned := make([]string, 0, len(urls))
+	for i := range urls {
+		if value := strings.TrimSpace(urls[i]); value != "" {
+			cleaned = append(cleaned, value)
+		}
+	}
+	return keyfunc.NewDefault(cleaned)
+}
+`, s+"/internal/shared/configuration"),
+		"internal/shared/server/new.go": fmt.Sprintf(`package server
+
+import (
+	"context"
+	"strings"
+	"time"
+
+	%q
+	%q
+
+	"github.com/Ignaciojeria/ioc"
+	"github.com/MicahParks/keyfunc/v3"
+	"github.com/go-fuego/fuego"
+)
+
+var _ = ioc.Register(New)
+var _ = ioc.Register(startServer)
+
+type Server struct {
+	*fuego.Server
+}
+
+func New(conf configuration.Conf, jwks keyfunc.Keyfunc) *Server {
+	server := fuego.NewServer(fuego.WithAddr(":" + strings.TrimSpace(conf.PORT)))
+	fuego.Use(server, middleware.JWTMiddleware(
+		jwks,
+		strings.TrimSpace(conf.OIDCIssuer),
+		firstNonEmpty(strings.TrimSpace(conf.JWTAudience), strings.TrimSpace(conf.OIDCClientID)),
+	))
+	return &Server{Server: server}
+}
+
+func startServer(
+	server *Server,
+	shutdowner ioc.Shutdowner,
+) error {
+	go func() {
+		if err := server.Run(); err != nil {
+			panic(err)
+		}
+	}()
+
+	shutdowner.RegisterShutdown(func() error {
+		ctx, cancel := context.WithTimeout(
+			context.Background(),
+			10*time.Second,
+		)
+		defer cancel()
+
+		return server.Shutdown(ctx)
+	})
+
+	return nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+`, s+"/internal/shared/configuration", s+"/internal/shared/server/middleware"),
+		"internal/shared/server/middleware/middleware.go": `package middleware
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"os"
+	"strings"
+
+	"github.com/MicahParks/keyfunc/v3"
+	"github.com/golang-jwt/jwt/v5"
+)
+
+type contextKey string
+
+const (
+	claimsContextKey contextKey = "jwt_claims"
+)
+
+func JWTMiddleware(
+	jwks keyfunc.Keyfunc,
+	issuer string,
+	audience string,
+) func(http.Handler) http.Handler {
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if isPublicPath(r.URL.Path) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if os.Getenv("AUTH_DISABLED") == "true" {
+				sub := strings.TrimSpace(r.Header.Get("X-Dev-Sub"))
+				if sub == "" {
+					sub = "dev-user"
+				}
+				ctx := context.WithValue(r.Context(), claimsContextKey, jwt.MapClaims{"sub": sub})
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			authHeader := r.Header.Get("Authorization")
+			if !strings.HasPrefix(authHeader, "Bearer ") {
+				writeUnauthorized(w)
+				return
+			}
+
+			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+
+			opts := []jwt.ParserOption{}
+			if issuer != "" {
+				opts = append(opts, jwt.WithIssuer(issuer))
+			}
+			if audience != "" {
+				opts = append(opts, jwt.WithAudience(audience))
+			}
+
+			claims := jwt.MapClaims{}
+			token, err := jwt.ParseWithClaims(tokenString, claims, jwks.Keyfunc, opts...)
+			if err != nil || !token.Valid {
+				writeUnauthorized(w)
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), claimsContextKey, claims)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+type Principal struct {
+	Subject         string
+	MachineClientID string
+	IsMachine       bool
+}
+
+func JWTClaimsFromContext(ctx context.Context) (jwt.MapClaims, bool) {
+	claims, ok := ctx.Value(claimsContextKey).(jwt.MapClaims)
+	return claims, ok
+}
+
+func PrincipalFromClaims(claims jwt.MapClaims) Principal {
+	subject, _ := claims["sub"].(string)
+	subject = strings.TrimSpace(subject)
+	grantType := normalizeGrantType(firstStringClaim(claims, "gty", "grant_type"))
+	tokenUse := strings.ToLower(strings.TrimSpace(firstStringClaim(claims, "token_use", "type")))
+	isMachine := grantType == "client_credentials" || tokenUse == "machine" || tokenUse == "application"
+
+	machineClientID := firstStringClaim(claims, "client_id", "azp", "cid")
+	if strings.TrimSpace(machineClientID) == "" && isMachine {
+		machineClientID = firstAudienceClaim(claims)
+	}
+	if strings.TrimSpace(machineClientID) == "" {
+		machineClientID = firstNonEmptyMachineID(subject, firstStringClaim(claims, "name", "id"))
+	}
+	if subject == "" && strings.TrimSpace(machineClientID) != "" {
+		isMachine = true
+	}
+	if tokenUse == "application" && strings.TrimSpace(machineClientID) != "" {
+		isMachine = true
+	}
+	return Principal{
+		Subject:         subject,
+		MachineClientID: strings.TrimSpace(machineClientID),
+		IsMachine:       isMachine,
+	}
+}
+
+func normalizeGrantType(value string) string {
+	v := strings.ToLower(strings.TrimSpace(value))
+	v = strings.ReplaceAll(v, "-", "_")
+	return v
+}
+
+func firstNonEmptyMachineID(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func firstAudienceClaim(claims jwt.MapClaims) string {
+	raw, ok := claims["aud"]
+	if !ok || raw == nil {
+		return ""
+	}
+	switch aud := raw.(type) {
+	case string:
+		return strings.TrimSpace(aud)
+	case []string:
+		for _, value := range aud {
+			if strings.TrimSpace(value) != "" {
+				return strings.TrimSpace(value)
+			}
+		}
+	case []any:
+		for _, value := range aud {
+			if s, ok := value.(string); ok && strings.TrimSpace(s) != "" {
+				return strings.TrimSpace(s)
+			}
+		}
+	}
+	return ""
+}
+
+func firstStringClaim(claims jwt.MapClaims, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := claims[key].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func isPublicPath(path string) bool {
+	switch strings.TrimSpace(path) {
+	case "/auth/login", "/auth/callback":
+		return true
+	default:
+		return false
+	}
+}
+
+func writeUnauthorized(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error": "unauthorized",
+	})
+}
+`,
+		"internal/adapter/in/web/hello.go": fmt.Sprintf(`package in
+
+import (
+	%q
+
+	"github.com/Ignaciojeria/ioc"
+	"github.com/go-fuego/fuego"
+)
+
+var _ = ioc.Register(helloHandler)
+
+func helloHandler(s *server.Server) {
+	fuego.Get(s.Server, "/", func(c fuego.ContextNoBody) (string, error) {
+		return "Hello, World!", nil
+	})
+}
+`, s+"/internal/shared/server"),
+		"internal/adapter/in/web/auth_login.go": fmt.Sprintf(`package in
+
+import (
+	"crypto/rand"
+	"encoding/base64"
+	"net/http"
+	"net/url"
+	"strings"
+
+	%q
+	%q
+
+	"github.com/Ignaciojeria/ioc"
+	"github.com/go-fuego/fuego"
+)
+
+var _ = ioc.Register(authLoginHandler)
+
+func authLoginHandler(s *server.Server, conf configuration.Conf) {
+	fuego.Get(s.Server, "/auth/login", func(c fuego.ContextNoBody) (any, error) {
+		state, err := randomState()
+		if err != nil {
+			return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: "cannot generate oauth state"}
+		}
+
+		http.SetCookie(c.Response(), &http.Cookie{
+			Name:     "oidc_state",
+			Value:    state,
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   isHTTPS(conf.OIDCRedirectURI),
+			SameSite: http.SameSiteLaxMode,
+		})
+
+		loginURL, err := buildLoginURL(conf, state)
+		if err != nil {
+			return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
+		}
+
+		http.Redirect(c.Response(), c.Request(), loginURL, http.StatusFound)
+		return nil, nil
+		})
+}
+
+func buildLoginURL(conf configuration.Conf, state string) (string, error) {
+		base := strings.TrimSpace(conf.OIDCLoginURL)
+		if base == "" {
+			base = strings.TrimSpace(conf.OIDCAuthorizationEndpoint)
+		}
+		u, err := url.Parse(base)
+		if err != nil {
+			return "", err
+		}
+		q := u.Query()
+		q.Set("client_id", strings.TrimSpace(conf.OIDCClientID))
+		q.Set("redirect_uri", strings.TrimSpace(conf.OIDCRedirectURI))
+		q.Set("response_type", "code")
+		q.Set("scope", firstNonEmptyScope(strings.TrimSpace(conf.OIDCScopes), "openid profile email"))
+		q.Set("state", state)
+		u.RawQuery = q.Encode()
+		return u.String(), nil
+}
+
+func randomState() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func isHTTPS(raw string) bool {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(u.Scheme, "https")
+}
+
+func firstNonEmptyScope(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+`, s+"/internal/shared/configuration", s+"/internal/shared/server"),
+		"internal/adapter/in/web/auth_callback.go": fmt.Sprintf(`package in
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+
+	%q
+	%q
+
+	"github.com/Ignaciojeria/ioc"
+	"github.com/go-fuego/fuego"
+)
+
+var _ = ioc.Register(authCallbackHandler)
+
+type authCallbackResponse struct {
+	AccessToken  string `+"`json:\"access_token,omitempty\"`"+`
+	RefreshToken string `+"`json:\"refresh_token,omitempty\"`"+`
+	IDToken      string `+"`json:\"id_token,omitempty\"`"+`
+	TokenType    string `+"`json:\"token_type,omitempty\"`"+`
+	ExpiresIn    int    `+"`json:\"expires_in,omitempty\"`"+`
+}
+
+func authCallbackHandler(s *server.Server, conf configuration.Conf) {
+	fuego.Get(s.Server, "/auth/callback", func(c fuego.ContextNoBody) (authCallbackResponse, error) {
+		state := strings.TrimSpace(c.QueryParam("state"))
+		code := strings.TrimSpace(c.QueryParam("code"))
+		if code == "" {
+			return authCallbackResponse{}, fuego.HTTPError{Status: http.StatusBadRequest, Detail: "missing code"}
+		}
+
+		stateCookie, err := c.Request().Cookie("oidc_state")
+		if err != nil || strings.TrimSpace(stateCookie.Value) == "" || stateCookie.Value != state {
+			return authCallbackResponse{}, fuego.HTTPError{Status: http.StatusBadRequest, Detail: "invalid oauth state"}
+		}
+
+		resp, err := exchangeAuthorizationCode(conf, code)
+		if err != nil {
+			return authCallbackResponse{}, fuego.HTTPError{Status: http.StatusBadGateway, Detail: err.Error()}
+		}
+
+		http.SetCookie(c.Response(), &http.Cookie{
+			Name:     "oidc_state",
+			Value:    "",
+			Path:     "/",
+			MaxAge:   -1,
+			HttpOnly: true,
+			Secure:   isHTTPS(conf.OIDCRedirectURI),
+			SameSite: http.SameSiteLaxMode,
+		})
+
+		return resp, nil
+	})
+}
+
+func exchangeAuthorizationCode(conf configuration.Conf, code string) (authCallbackResponse, error) {
+	form := url.Values{}
+	form.Set("grant_type", "authorization_code")
+	form.Set("code", code)
+	form.Set("redirect_uri", strings.TrimSpace(conf.OIDCRedirectURI))
+	form.Set("client_id", strings.TrimSpace(conf.OIDCClientID))
+	if secret := strings.TrimSpace(conf.OIDCClientSecret); secret != "" {
+		form.Set("client_secret", secret)
+	}
+
+	resp, err := http.PostForm(strings.TrimSpace(conf.OIDCTokenEndpoint), form)
+	if err != nil {
+		return authCallbackResponse{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return authCallbackResponse{}, fmt.Errorf("token exchange failed with status %%d", resp.StatusCode)
+	}
+
+	var out authCallbackResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return authCallbackResponse{}, err
+	}
+	return out, nil
+}
+`, s+"/internal/shared/configuration", s+"/internal/shared/server"),
+	}
+
+	for path, content := range sharedFiles {
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			if mkErr := os.MkdirAll(filepath.Dir(path), 0o755); mkErr != nil {
+				return mkErr
+			}
+			if werr := os.WriteFile(path, []byte(content), 0o644); werr != nil {
+				return werr
+			}
+			fmt.Printf("✅ %s generado\n", path)
 		}
 	}
 
@@ -862,6 +1442,19 @@ func currentGitBranch() (string, bool) {
 		return "", false
 	}
 	return branch, true
+}
+
+func ensureGoModTidy() error {
+	cmd := exec.Command("go", "mod", "tidy")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg != "" {
+			return fmt.Errorf("go mod tidy falló: %s", msg)
+		}
+		return err
+	}
+	fmt.Println("✅ go mod tidy ejecutado")
+	return nil
 }
 
 func ensureInitialGitCommit(skip bool) error {
@@ -1444,6 +2037,19 @@ func materializeProjectEnv(cfg config.Config) error {
 		"MACHINE_AUTH_CLIENT_SECRET_REF": strings.TrimSpace(cfg.MachineAuthClientSecretRef),
 		"MACHINE_AUTH_AUDIENCE":          strings.TrimSpace(cfg.MachineAuthAudience),
 		"MACHINE_AUTH_SCOPES":            strings.TrimSpace(cfg.MachineAuthScopes),
+	}
+
+	if entries["MACHINE_AUTH_TOKEN_ENDPOINT"] != "" && entries["MACHINE_AUTH_TOKEN_ENDPOINT"] == entries["OIDC_TOKEN_ENDPOINT"] {
+		entries["MACHINE_AUTH_TOKEN_ENDPOINT"] = ""
+	}
+	if entries["MACHINE_AUTH_CLIENT_ID"] != "" && entries["MACHINE_AUTH_CLIENT_ID"] == entries["OIDC_CLIENT_ID"] {
+		entries["MACHINE_AUTH_CLIENT_ID"] = ""
+	}
+	if entries["MACHINE_AUTH_CLIENT_SECRET"] != "" && entries["MACHINE_AUTH_CLIENT_SECRET"] == entries["OIDC_CLIENT_SECRET"] {
+		entries["MACHINE_AUTH_CLIENT_SECRET"] = ""
+	}
+	if entries["MACHINE_AUTH_CLIENT_SECRET_REF"] != "" && entries["MACHINE_AUTH_CLIENT_SECRET_REF"] == entries["OIDC_CLIENT_SECRET_REF"] {
+		entries["MACHINE_AUTH_CLIENT_SECRET_REF"] = ""
 	}
 
 	hasAny := false
