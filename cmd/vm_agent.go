@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	pathpkg "path"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/Ignaciojeria/sync/internal/config"
+
 	"github.com/spf13/cobra"
 )
 
@@ -260,6 +262,77 @@ func loadVMTargetConfig() (config.Config, string, string, error) {
 		return config.Config{}, "", "", err
 	}
 	return cfg, target, remotePath, nil
+}
+
+func runProjectMigrationsOnVM(cfg config.Config, migrationsDir, explicitDatabaseURL string) error {
+	migrationsDir = strings.TrimSpace(migrationsDir)
+	if migrationsDir == "" {
+		return fmt.Errorf("carpeta de migraciones vacía")
+	}
+	stat, err := os.Stat(migrationsDir)
+	if err != nil {
+		return fmt.Errorf("carpeta de migraciones no encontrada en %s: %w", migrationsDir, err)
+	}
+	if !stat.IsDir() {
+		return fmt.Errorf("ruta de migraciones no es carpeta: %s", migrationsDir)
+	}
+
+	_, target, remotePath, err := resolveVMRemote(cfg)
+	if err != nil {
+		return err
+	}
+
+	localMigrationsDir, err := filepath.Abs(migrationsDir)
+	if err != nil {
+		return fmt.Errorf("no se pudo resolver ruta absoluta de migraciones: %w", err)
+	}
+
+	remoteRoot := strings.TrimRight(strings.TrimSpace(remotePath), "/")
+	if remoteRoot == "" {
+		return fmt.Errorf("ruta remota de workspace vacía")
+	}
+	remoteMigrationsDir := remoteRoot + "/" + strings.TrimLeft(filepath.ToSlash(migrationsDir), "/")
+	remoteParentDir := pathpkg.Dir(remoteMigrationsDir)
+
+	prepareScript := fmt.Sprintf("mkdir -p %s && rm -rf %s", shellQuote(remoteParentDir), shellQuote(remoteMigrationsDir))
+	if out, err := runSSHScriptWithTimeout(target, prepareScript, 30*time.Second); err != nil {
+		msg := strings.TrimSpace(out)
+		if msg != "" {
+			return fmt.Errorf("no se pudo preparar carpeta remota de migraciones: %w\n%s", err, msg)
+		}
+		return fmt.Errorf("no se pudo preparar carpeta remota de migraciones: %w", err)
+	}
+
+	scp := exec.Command("scp", "-r", localMigrationsDir, target+":"+remoteParentDir)
+	scp.Stdout = os.Stdout
+	scp.Stderr = os.Stderr
+	if err := scp.Run(); err != nil {
+		return fmt.Errorf("scp de migraciones a la VM falló: %w", err)
+	}
+	fmt.Printf("✅ Migraciones subidas a %s:%s\n", target, remoteMigrationsDir)
+
+	databaseURL := strings.TrimSpace(explicitDatabaseURL)
+	if databaseURL == "" {
+		databaseURL = strings.TrimSpace(cfg.ProjectDatabaseURL)
+	}
+	if databaseURL == "" {
+		return fmt.Errorf("falta DATABASE_URL del proyecto")
+	}
+	remoteDatabaseURL, err := localDatabaseURL(databaseURL, defaultRemoteDBListenHost, defaultRemoteDBListenPort)
+	if err != nil {
+		return fmt.Errorf("no se pudo adaptar DATABASE_URL al túnel DB remoto: %w", err)
+	}
+
+	remoteBinaryPath := remoteRoot + "/" + defaultRemoteCLIBinaryName
+	remoteCmd := fmt.Sprintf("cd %s && %s db migrate --dir %s --database-url %s --no-ssh-forward", shellQuote(remoteRoot), shellQuote(remoteBinaryPath), shellQuote(migrationsDir), shellQuote(remoteDatabaseURL))
+	out, err := runSSHScriptWithTimeout(target, remoteCmd, 90*time.Second)
+	if strings.TrimSpace(out) != "" {
+		fmt.Println(strings.TrimSpace(out))
+	}
+	if err != nil {
+		return fmt.Errorf("ejecución remota de migraciones falló: %w", err)
+	}
+	return nil
 }
 
 func shellQuoteRemotePathPreserveTilde(v string) string {

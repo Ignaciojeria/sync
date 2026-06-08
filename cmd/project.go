@@ -275,6 +275,10 @@ var initCmd = &cobra.Command{
 			if err := ensureDBBootstrapOnProvisionedVM(&cfg); err != nil {
 				return fmt.Errorf("no se pudo bootstrapear conectividad DB remota: %w", err)
 			}
+			fmt.Println("🚀 Ejecutando migraciones iniciales del proyecto en la VM...")
+			if err := runProjectMigrationsOnVM(cfg, defaultScaffoldMigrations, ""); err != nil {
+				return fmt.Errorf("no se pudieron ejecutar migraciones iniciales en la VM: %w", err)
+			}
 		}
 
 		if jsonOutput {
@@ -589,6 +593,7 @@ import (
 	_ %q
 	_ %q
 	_ %q
+	_ %q
 
 	"github.com/Ignaciojeria/ioc"
 )
@@ -606,7 +611,7 @@ func main() {
 		log.Fatalf("Shutdown errors: %%v", err)
 	}
 }
-`, s+"/internal/shared/jwks", s+"/internal/shared/server", s+"/internal/adapter/in/web")
+`, s+"/internal/shared/jwks", s+"/internal/shared/server", s+"/internal/adapter/in/web", s+"/internal/shared/infrastructure/postgresql")
 			if werr := os.WriteFile("cmd/api/main.go", []byte(mainGo), 0o644); werr != nil {
 				return werr
 			}
@@ -718,6 +723,106 @@ func Parse[T any]() (T, error) {
 	}
 	return conf, nil
 }
+`,
+		"internal/shared/infrastructure/postgresql/connection.go": fmt.Sprintf(`package postgresql
+
+import (
+	"embed"
+	"fmt"
+	"log/slog"
+	"net/url"
+	"strings"
+
+	%q
+
+	"github.com/Ignaciojeria/ioc"
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jmoiron/sqlx"
+)
+
+var _ = ioc.Register(NewConnection)
+
+//go:embed migrations/*.sql
+var migrationsFS embed.FS
+
+func NewConnection(conf configuration.Conf) (*sqlx.DB, error) {
+	dsn := strings.TrimSpace(conf.DATABASE_URL)
+	if dsn == "" {
+		return nil, fmt.Errorf("DATABASE_URL is not set")
+	}
+
+	db, err := sqlx.Connect("pgx", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to postgres: %%w", err)
+	}
+
+	u, err := url.Parse(dsn)
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("invalid DATABASE_URL format: %%w", err)
+	}
+	dbName := strings.TrimPrefix(u.Path, "/")
+	if err := runMigrations(db, dbName); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("failed to run migrations: %%w", err)
+	}
+	return db, nil
+}
+
+func runMigrations(db *sqlx.DB, dbName string) error {
+	if db == nil {
+		return fmt.Errorf("db connection is nil")
+	}
+	d, err := iofs.New(migrationsFS, "migrations")
+	if err != nil {
+		return err
+	}
+	driver, err := postgres.WithInstance(db.DB, &postgres.Config{DatabaseName: dbName})
+	if err != nil {
+		return err
+	}
+	m, err := migrate.NewWithInstance("iofs", d, dbName, driver)
+	if err != nil {
+		return err
+	}
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return err
+	}
+	slog.Info("Database migrations validated/applied successfully")
+	return nil
+}
+`, s+"/internal/shared/configuration"),
+		"internal/shared/infrastructure/postgresql/migrations/000001_create_users_and_sessions.up.sql": `CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    subject TEXT NOT NULL UNIQUE,
+    email TEXT,
+    display_name TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    access_token TEXT,
+    refresh_token TEXT,
+    id_token TEXT,
+    expires_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    revoked_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
+`,
+		"internal/shared/infrastructure/postgresql/migrations/000001_create_users_and_sessions.down.sql": `DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS users;
 `,
 		"internal/shared/jwks/new.go": fmt.Sprintf(`package jwks
 
@@ -2019,7 +2124,15 @@ func saveProjectConfig(cfg config.Config) error {
 }
 
 func materializeProjectEnv(cfg config.Config) error {
+	databaseURLForRuntime := strings.TrimSpace(cfg.ProjectDatabaseURL)
+	if databaseURLForRuntime != "" {
+		if rewritten, err := localDatabaseURL(databaseURLForRuntime, defaultRemoteDBListenHost, defaultRemoteDBListenPort); err == nil {
+			databaseURLForRuntime = rewritten
+		}
+	}
 	entries := map[string]string{
+		"PROJECT_NAME":                    strings.TrimSpace(firstNonEmpty(cfg.LastProjectSlug, cfg.LastProjectID)),
+		"DATABASE_URL":                    databaseURLForRuntime,
 		"OIDC_TYPE":                      strings.TrimSpace(cfg.OIDCType),
 		"OIDC_PROVIDER":                  strings.TrimSpace(cfg.OIDCProvider),
 		"OIDC_ISSUER":                    strings.TrimSpace(cfg.OIDCIssuer),
@@ -2099,7 +2212,7 @@ func materializeProjectEnv(cfg config.Config) error {
 		return err
 	}
 
-	for _, key := range []string{"OIDC_TYPE", "OIDC_PROVIDER", "OIDC_ISSUER", "OIDC_DISCOVERY_URL", "OIDC_JWKS_URI", "OIDC_AUTHORIZATION_ENDPOINT", "OIDC_TOKEN_ENDPOINT", "OIDC_USERINFO_ENDPOINT", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_CLIENT_SECRET_REF", "OIDC_REDIRECT_URI", "OIDC_LOGOUT_URI", "OIDC_POST_LOGOUT_REDIRECT_URI", "OIDC_SCOPES", "OIDC_LOGIN_URL", "MACHINE_AUTH_GRANT_TYPE", "MACHINE_AUTH_TOKEN_ENDPOINT", "MACHINE_AUTH_CLIENT_ID", "MACHINE_AUTH_CLIENT_SECRET", "MACHINE_AUTH_CLIENT_SECRET_REF", "MACHINE_AUTH_AUDIENCE", "MACHINE_AUTH_SCOPES"} {
+	for _, key := range []string{"PROJECT_NAME", "DATABASE_URL", "OIDC_TYPE", "OIDC_PROVIDER", "OIDC_ISSUER", "OIDC_DISCOVERY_URL", "OIDC_JWKS_URI", "OIDC_AUTHORIZATION_ENDPOINT", "OIDC_TOKEN_ENDPOINT", "OIDC_USERINFO_ENDPOINT", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_CLIENT_SECRET_REF", "OIDC_REDIRECT_URI", "OIDC_LOGOUT_URI", "OIDC_POST_LOGOUT_REDIRECT_URI", "OIDC_SCOPES", "OIDC_LOGIN_URL", "MACHINE_AUTH_GRANT_TYPE", "MACHINE_AUTH_TOKEN_ENDPOINT", "MACHINE_AUTH_CLIENT_ID", "MACHINE_AUTH_CLIENT_SECRET", "MACHINE_AUTH_CLIENT_SECRET_REF", "MACHINE_AUTH_AUDIENCE", "MACHINE_AUTH_SCOPES"} {
 		if value := strings.TrimSpace(entries[key]); value != "" {
 			lines = append(lines, key+"="+value)
 		}
@@ -2203,63 +2316,8 @@ func setupAndStartMutagen(cfg *config.Config) error {
 		return err
 	}
 
-	// Evita usar un daemon viejo iniciado con otro binario/carpeta de agentes.
-	_ = exec.Command(mutagenBin, "daemon", "stop").Run()
-
-	cmd := exec.Command(mutagenBin, "project", "start")
-	out, err := cmd.CombinedOutput()
-	output := strings.TrimSpace(string(out))
-	if err != nil {
-		lowOut := strings.ToLower(output)
-		if strings.Contains(lowOut, "project already running") {
-			fmt.Println("✅ Mutagen ya estaba corriendo para este proyecto")
-			if err := ensureInitialSyncHealthy(mutagenBin, sessionName, destination); err != nil {
-				fmt.Printf("⚠️  Sync aún no está saludable (continuando): %v\n", err)
-			}
-			return nil
-		}
-		if strings.Contains(lowOut, "unable to connect to daemon") || strings.Contains(lowOut, "connection timed out") {
-			fmt.Println("ℹ️  Reintentando: iniciando daemon Mutagen y relanzando project start...")
-			startDaemon := exec.Command(mutagenBin, "daemon", "start")
-			if dOut, dErr := startDaemon.CombinedOutput(); dErr != nil {
-				daemonMsg := strings.TrimSpace(string(dOut))
-				if daemonMsg != "" {
-					fmt.Println(daemonMsg)
-				}
-				if output != "" {
-					fmt.Println(output)
-				}
-				return dErr
-			}
-			retry := exec.Command(mutagenBin, "project", "start")
-			rOut, rErr := retry.CombinedOutput()
-			rMsg := strings.TrimSpace(string(rOut))
-			if rErr != nil {
-				if rMsg != "" {
-					fmt.Println(rMsg)
-				}
-				if output != "" {
-					fmt.Println(output)
-				}
-				return rErr
-			}
-			if rMsg != "" {
-				fmt.Println(rMsg)
-			}
-			fmt.Println("✅ Mutagen sync iniciado (mutagen project start)")
-			if err := ensureInitialSyncHealthy(mutagenBin, sessionName, destination); err != nil {
-				fmt.Printf("⚠️  Sync aún no está saludable (continuando): %v\n", err)
-			}
-			printMutagenPostInitChecklist(destination, sessionName, strings.TrimSpace(cfg.LastVMHTTPSURL))
-			return nil
-		}
-		if output != "" {
-			fmt.Println(output)
-		}
+	if err := startMutagenProjectWithRetry(mutagenBin); err != nil {
 		return err
-	}
-	if output != "" {
-		fmt.Println(output)
 	}
 	fmt.Println("✅ Mutagen sync iniciado (mutagen project start)")
 	if err := ensureInitialSyncHealthy(mutagenBin, sessionName, destination); err != nil {
@@ -2267,6 +2325,59 @@ func setupAndStartMutagen(cfg *config.Config) error {
 	}
 	printMutagenPostInitChecklist(destination, sessionName, strings.TrimSpace(cfg.LastVMHTTPSURL))
 	return nil
+}
+
+func startMutagenProjectWithRetry(mutagenBin string) error {
+	// Evita usar un daemon viejo iniciado con otro binario/carpeta de agentes.
+	_ = exec.Command(mutagenBin, "daemon", "stop").Run()
+
+	maxAttempts := 5
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		cmd := exec.Command(mutagenBin, "project", "start")
+		out, err := cmd.CombinedOutput()
+		output := strings.TrimSpace(string(out))
+		lowOut := strings.ToLower(output)
+
+		if err == nil {
+			if output != "" {
+				fmt.Println(output)
+			}
+			return nil
+		}
+		if strings.Contains(lowOut, "project already running") {
+			fmt.Println("✅ Mutagen ya estaba corriendo para este proyecto")
+			return nil
+		}
+
+		lastErr = err
+		if output != "" {
+			fmt.Println(output)
+		}
+
+		if strings.Contains(lowOut, "unable to connect to daemon") || strings.Contains(lowOut, "connection timed out") {
+			fmt.Printf("ℹ️  Mutagen intento %d/%d: daemon no disponible; reiniciando y reintentando...\n", attempt, maxAttempts)
+			_ = exec.Command(mutagenBin, "daemon", "stop").Run()
+			startDaemon := exec.Command(mutagenBin, "daemon", "start")
+			dOut, dErr := startDaemon.CombinedOutput()
+			daemonMsg := strings.TrimSpace(string(dOut))
+			if daemonMsg != "" {
+				fmt.Println(daemonMsg)
+			}
+			if dErr != nil {
+				lastErr = dErr
+			}
+			time.Sleep(time.Duration(attempt) * 2 * time.Second)
+			continue
+		}
+
+		return err
+	}
+
+	if lastErr != nil {
+		return fmt.Errorf("mutagen project start falló tras varios reintentos: %w", lastErr)
+	}
+	return fmt.Errorf("mutagen project start falló tras varios reintentos")
 }
 
 func printMutagenPostInitChecklist(destination, sessionName, vmURL string) {

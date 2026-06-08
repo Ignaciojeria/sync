@@ -2,31 +2,46 @@ package cmd
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/Ignaciojeria/sync/internal/config"
 	"github.com/Ignaciojeria/sync/internal/machineauth"
 	"github.com/Ignaciojeria/sync/internal/tunnel"
 
+	"github.com/golang-migrate/migrate/v4"
+	migratepostgres "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/spf13/cobra"
 )
 
-const defaultDBAPIURL = "https://postgresql.exe.xyz:8000"
+const (
+	defaultDBAPIURL          = "https://postgresql.exe.xyz:8000"
+	defaultScaffoldMigrations = "internal/shared/infrastructure/postgresql/migrations"
+)
 
 var (
-	dbProjectFlag  string
-	dbAPIFlag      string
-	dbHostFlag     string
-	dbPortFlag     int
-	dbDevSubFlag   string
-	dbInsecureFlag bool
+	dbProjectFlag        string
+	dbAPIFlag            string
+	dbHostFlag           string
+	dbPortFlag           int
+	dbDevSubFlag         string
+	dbInsecureFlag       bool
+	dbMigrateDirFlag     string
+	dbMigrateDatabaseURL string
+	dbMigrateNoSSHFlag   bool
 )
 
 var dbCmd = &cobra.Command{
@@ -103,6 +118,26 @@ var dbConnectCmd = &cobra.Command{
 	},
 }
 
+var dbMigrateCmd = &cobra.Command{
+	Use:   "migrate",
+	Short: "Ejecuta las migraciones SQL del proyecto",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, err := resolveDBCommandConfig(tokenFlag)
+		if err != nil {
+			return err
+		}
+		migrationsDir := strings.TrimSpace(dbMigrateDirFlag)
+		if migrationsDir == "" {
+			migrationsDir = defaultScaffoldMigrations
+		}
+		if err := runProjectMigrationsWithCurrentConfig(cfg, migrationsDir, strings.TrimSpace(dbMigrateDatabaseURL), !dbMigrateNoSSHFlag); err != nil {
+			return err
+		}
+		fmt.Println("✅ Migraciones aplicadas correctamente")
+		return nil
+	},
+}
+
 func init() {
 	dbConnectCmd.Flags().StringVar(&dbProjectFlag, "project", "", "ID o nombre de proyecto (default: config local)")
 	dbConnectCmd.Flags().StringVar(&dbAPIFlag, "api", envOrDefault("EINAR_DB_API_URL", defaultDBAPIURL), "Base URL del Postgres API")
@@ -111,7 +146,12 @@ func init() {
 	dbConnectCmd.Flags().StringVar(&dbDevSubFlag, "dev-sub", envOrDefault("EINAR_DEV_SUB", "dev-user"), "X-Dev-Sub para testing local")
 	dbConnectCmd.Flags().BoolVar(&dbInsecureFlag, "insecure-unauthenticated-local-test", false, "omite Authorization para testing local")
 
+	dbMigrateCmd.Flags().StringVar(&dbMigrateDirFlag, "dir", defaultScaffoldMigrations, "Carpeta de migraciones SQL del proyecto")
+	dbMigrateCmd.Flags().StringVar(&dbMigrateDatabaseURL, "database-url", "", "DATABASE_URL explícita (default: config del proyecto)")
+	dbMigrateCmd.Flags().BoolVar(&dbMigrateNoSSHFlag, "no-ssh-forward", false, "No abre un port-forward SSH temporal hacia la VM")
+
 	dbCmd.AddCommand(dbConnectCmd)
+	dbCmd.AddCommand(dbMigrateCmd)
 	rootCmd.AddCommand(dbCmd)
 }
 
@@ -196,4 +236,143 @@ func envOrDefault(key, fallback string) string {
 		return strings.TrimSpace(fallback)
 	}
 	return value
+}
+
+func runProjectMigrationsWithCurrentConfig(cfg config.Config, migrationsDir, explicitDatabaseURL string, allowSSHForward bool) error {
+	migrationsDir = strings.TrimSpace(migrationsDir)
+	if migrationsDir == "" {
+		return fmt.Errorf("carpeta de migraciones vacía")
+	}
+	if stat, err := os.Stat(migrationsDir); err != nil || !stat.IsDir() {
+		if err != nil {
+			return fmt.Errorf("carpeta de migraciones no encontrada en %s: %w", migrationsDir, err)
+		}
+		return fmt.Errorf("ruta de migraciones no es carpeta: %s", migrationsDir)
+	}
+
+	databaseURL := strings.TrimSpace(explicitDatabaseURL)
+	if databaseURL == "" {
+		databaseURL = strings.TrimSpace(cfg.ProjectDatabaseURL)
+	}
+	if databaseURL == "" {
+		return fmt.Errorf("falta DATABASE_URL del proyecto")
+	}
+
+	if allowSSHForward {
+		forwardedURL, cleanup, err := forwardedDatabaseURLViaVM(cfg, databaseURL)
+		if err == nil {
+			defer cleanup()
+			databaseURL = forwardedURL
+		} else {
+			fmt.Printf("ℹ️  No se pudo abrir port-forward SSH temporal; se usará DATABASE_URL directa (%v)\n", err)
+		}
+	}
+
+	if err := applyMigrations(databaseURL, migrationsDir); err != nil {
+		return err
+	}
+	return nil
+}
+
+func forwardedDatabaseURLViaVM(cfg config.Config, rawDatabaseURL string) (string, func(), error) {
+	destination := normalizeMutagenDestinationForProject(strings.TrimSpace(cfg.MutagenDestination))
+	if destination == "" {
+		destination = strings.TrimSpace(cfg.LastVMSshDest)
+	}
+	target, _, ok := sshTargetAndPathFromMutagenDestination(destination)
+	if !ok || strings.TrimSpace(target) == "" {
+		return "", nil, fmt.Errorf("no se pudo resolver target SSH de la VM")
+	}
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", nil, err
+	}
+	localPort := listener.Addr().(*net.TCPAddr).Port
+	_ = listener.Close()
+
+	sshCmd := exec.Command("ssh",
+		"-o", "BatchMode=yes",
+		"-o", "ConnectTimeout=10",
+		"-L", fmt.Sprintf("127.0.0.1:%d:127.0.0.1:%d", localPort, defaultRemoteDBListenPort),
+		target,
+		"-N",
+	)
+	sshCmd.Stdout = os.Stdout
+	sshCmd.Stderr = os.Stderr
+	if err := sshCmd.Start(); err != nil {
+		return "", nil, fmt.Errorf("no se pudo iniciar port-forward SSH: %w", err)
+	}
+
+	cleanup := func() {
+		if sshCmd.Process != nil {
+			_ = sshCmd.Process.Kill()
+			_, _ = sshCmd.Process.Wait()
+		}
+	}
+
+	if err := waitForLocalTCP(fmt.Sprintf("127.0.0.1:%d", localPort), 10*time.Second); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("port-forward SSH no quedó listo: %w", err)
+	}
+
+	forwardedURL, err := localDatabaseURL(rawDatabaseURL, "127.0.0.1", localPort)
+	if err != nil {
+		cleanup()
+		return "", nil, err
+	}
+	return forwardedURL, cleanup, nil
+}
+
+func waitForLocalTCP(address string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", address, 700*time.Millisecond)
+		if err == nil {
+			_ = conn.Close()
+			return nil
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	return fmt.Errorf("timeout esperando %s", address)
+}
+
+func applyMigrations(databaseURL, migrationsDir string) error {
+	db, err := sql.Open("pgx", databaseURL)
+	if err != nil {
+		return fmt.Errorf("no se pudo abrir conexión a postgres: %w", err)
+	}
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		return fmt.Errorf("no se pudo conectar a postgres: %w", err)
+	}
+
+	driver, err := migratepostgres.WithInstance(db, &migratepostgres.Config{})
+	if err != nil {
+		return fmt.Errorf("no se pudo crear driver de migraciones: %w", err)
+	}
+
+	absDir, err := filepath.Abs(migrationsDir)
+	if err != nil {
+		return err
+	}
+	absDir = filepath.ToSlash(absDir)
+	if !strings.HasPrefix(absDir, "/") {
+		absDir = "/" + absDir
+	}
+	sourceURL := "file://" + absDir
+
+	m, err := migrate.NewWithDatabaseInstance(sourceURL, "postgres", driver)
+	if err != nil {
+		return fmt.Errorf("no se pudo crear migrator: %w", err)
+	}
+	defer func() {
+		_, _ = m.Close()
+	}()
+
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("falló migrate up: %w", err)
+	}
+	return nil
 }
