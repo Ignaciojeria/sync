@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
@@ -291,7 +290,7 @@ func forwardedDatabaseURLViaVM(cfg config.Config, rawDatabaseURL string) (string
 	localPort := listener.Addr().(*net.TCPAddr).Port
 	_ = listener.Close()
 
-	sshCmd := exec.Command("ssh",
+	sshCmd := newSSHCommand(
 		"-o", "BatchMode=yes",
 		"-o", "ConnectTimeout=10",
 		"-L", fmt.Sprintf("127.0.0.1:%d:127.0.0.1:%d", localPort, defaultRemoteDBListenPort),

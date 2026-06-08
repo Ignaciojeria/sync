@@ -2922,7 +2922,7 @@ func ensureSSHTrustInteractive(destination string) error {
 	if !ok {
 		return nil
 	}
-	check := exec.Command("ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", target, "exit")
+	check := newSSHCommand("-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", target, "exit")
 	checkOut, checkErr := check.CombinedOutput()
 	if checkErr == nil {
 		return nil
@@ -2941,7 +2941,7 @@ func ensureSSHTrustInteractive(destination string) error {
 		return fmt.Errorf("sincronización cancelada por el usuario (host key no confirmada)")
 	}
 
-	accept := exec.Command("ssh", "-o", "StrictHostKeyChecking=accept-new", target, "exit")
+	accept := newSSHCommand("-o", "StrictHostKeyChecking=accept-new", target, "exit")
 	acceptOut, acceptErr := accept.CombinedOutput()
 	acceptMsg := strings.ToLower(strings.TrimSpace(string(acceptOut)))
 	if acceptErr != nil {
@@ -3014,7 +3014,7 @@ func preflightSSHConnection(destination string) error {
 	if !ok {
 		return nil
 	}
-	check := exec.Command("ssh", "-o", "BatchMode=yes", target, "echo", "ok")
+	check := newSSHCommand("-o", "BatchMode=yes", target, "echo", "ok")
 	if out, err := check.CombinedOutput(); err != nil {
 		msg := strings.TrimSpace(string(out))
 		low := strings.ToLower(msg)
@@ -3024,7 +3024,7 @@ func preflightSSHConnection(destination string) error {
 		if strings.Contains(low, "unprotected private key file") || strings.Contains(low, "bad permissions") || strings.Contains(low, "this private key will be ignored") {
 			if keyPath, kerr := projectSSHPrivateKeyPath(); kerr == nil {
 				if fixErr := enforceSSHPrivateKeyPermissions(keyPath); fixErr == nil {
-					retry := exec.Command("ssh", "-o", "BatchMode=yes", target, "echo", "ok")
+					retry := newSSHCommand("-o", "BatchMode=yes", target, "echo", "ok")
 					if retryOut, retryErr := retry.CombinedOutput(); retryErr == nil {
 						fmt.Printf("✅ Permisos SSH corregidos automáticamente: %s\n", keyPath)
 						fmt.Printf("✅ SSH operativo: %s\n", target)
@@ -3060,7 +3060,7 @@ func directVMSSHReady(destination string) (bool, string) {
 	if !ok {
 		return false, "destino mutagen inválido"
 	}
-	check := exec.Command("ssh",
+	check := newSSHCommand(
 		"-o", "BatchMode=yes",
 		"-o", "StrictHostKeyChecking=accept-new",
 		"-o", "ConnectTimeout=10",
@@ -3127,7 +3127,7 @@ func ensureExeDevSSHOnboarding(destination string) error {
 		return fmt.Errorf("falta completar onboarding SSH en exe.dev (modo no interactivo). Ejecuta 'ssh exe.dev' y reintenta")
 	}
 
-	cmd := exec.Command("ssh", "exe.dev")
+	cmd := newSSHCommand("exe.dev")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -3146,7 +3146,7 @@ func ensureExeDevSSHOnboarding(destination string) error {
 }
 
 func exeDevRegistrationRequired() (bool, string, error) {
-	check := exec.Command("ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "exe.dev", "exit")
+	check := newSSHCommand("-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "exe.dev", "exit")
 	out, err := check.CombinedOutput()
 	msg := strings.TrimSpace(string(out))
 	low := strings.ToLower(msg)

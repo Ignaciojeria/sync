@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/Ignaciojeria/sync/internal/config"
@@ -79,7 +78,7 @@ var devLogsCmd = &cobra.Command{
 			return err
 		}
 		logCmd := fmt.Sprintf("cd %q && touch .air.log && tail %s -n 200 .air.log", remotePath, map[bool]string{true: "-f", false: ""}[devFollow])
-		c := exec.Command("ssh", target, "bash", "-s")
+		c := newSSHCommand(target, "bash", "-s")
 		c.Stdin = strings.NewReader(logCmd)
 		c.Stdout = os.Stdout
 		c.Stderr = os.Stderr

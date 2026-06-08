@@ -127,7 +127,7 @@ func buildAndUploadRemoteCLI(target, remotePath string) (string, error) {
 	if _, err := runSSHScript(target, fmt.Sprintf("mkdir -p %s", shellQuote(remotePath))); err != nil {
 		return "", fmt.Errorf("no se pudo preparar raíz remota del proyecto: %w", err)
 	}
-	scp := exec.Command("scp", absOutput, target+":"+remoteBinaryPath)
+	scp := newSCPCommand(absOutput, target+":"+remoteBinaryPath)
 	scp.Stdout = os.Stdout
 	scp.Stderr = os.Stderr
 	if err := scp.Run(); err != nil {
@@ -256,7 +256,7 @@ func uploadRemoteProjectConfig(target, remotePath string) error {
 	if _, err := runSSHScript(target, fmt.Sprintf("mkdir -p %s", shellQuote(remoteConfigDir))); err != nil {
 		return fmt.Errorf("no se pudo preparar .einar remoto: %w", err)
 	}
-	scp := exec.Command("scp", localConfigPath, target+":"+remoteConfigPath)
+	scp := newSCPCommand(localConfigPath, target+":"+remoteConfigPath)
 	scp.Stdout = os.Stdout
 	scp.Stderr = os.Stderr
 	if err := scp.Run(); err != nil {
@@ -396,7 +396,7 @@ func runProjectMigrationsOnVM(cfg config.Config, migrationsDir, explicitDatabase
 		return fmt.Errorf("no se pudo preparar carpeta remota de migraciones: %w", err)
 	}
 
-	scp := exec.Command("scp", "-r", localMigrationsDir, target+":"+remoteParentDir)
+	scp := newSCPCommand("-r", localMigrationsDir, target+":"+remoteParentDir)
 	scp.Stdout = os.Stdout
 	scp.Stderr = os.Stderr
 	if err := scp.Run(); err != nil {
