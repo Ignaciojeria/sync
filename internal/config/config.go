@@ -44,6 +44,8 @@ type Config struct {
 	OIDCPostLogoutRedirectURI  string `json:"oidcPostLogoutRedirectUri,omitempty"`
 	OIDCScopes                 string `json:"oidcScopes,omitempty"`
 	OIDCLoginURL               string `json:"oidcLoginUrl,omitempty"`
+	OIDCGoogleLoginURL         string `json:"oidcGoogleLoginUrl,omitempty"`
+	OIDCUpstreamGoogleClientID string `json:"oidcUpstreamGoogleClientId,omitempty"`
 	CasdoorOrg                 string `json:"casdoorOrg,omitempty"`
 	CasdoorApplication         string `json:"casdoorApplication,omitempty"`
 	MachineAuthGrantType       string `json:"machineAuthGrantType,omitempty"`
@@ -100,6 +102,8 @@ type projectDiskConfig struct {
 		PostLogoutRedirectURI string   `json:"postLogoutRedirectUri,omitempty"`
 		Scopes                []string `json:"scopes,omitempty"`
 		LoginURL              string   `json:"loginUrl,omitempty"`
+		GoogleLoginURL        string   `json:"googleLoginUrl,omitempty"`
+		UpstreamGoogleClientID string  `json:"upstreamGoogleClientId,omitempty"`
 		Organization          string   `json:"organization,omitempty"`
 		Application           string   `json:"application,omitempty"`
 		Machine               struct {
@@ -129,6 +133,8 @@ type projectDiskConfig struct {
 		PostLogoutRedirectURI string   `json:"postLogoutRedirectUri,omitempty"`
 		Scopes                []string `json:"scopes,omitempty"`
 		LoginURL              string   `json:"loginUrl,omitempty"`
+		GoogleLoginURL        string   `json:"googleLoginUrl,omitempty"`
+		UpstreamGoogleClientID string  `json:"upstreamGoogleClientId,omitempty"`
 		Organization          string   `json:"organization,omitempty"`
 		Application           string   `json:"application,omitempty"`
 	} `json:"identity,omitempty"`
@@ -174,6 +180,8 @@ type projectDiskConfig struct {
 	OIDCPostLogoutRedirectURI  string `json:"oidcPostLogoutRedirectUri,omitempty"`
 	OIDCScopes                 string `json:"oidcScopes,omitempty"`
 	OIDCLoginURL               string `json:"oidcLoginUrl,omitempty"`
+	OIDCGoogleLoginURL         string `json:"oidcGoogleLoginUrl,omitempty"`
+	OIDCUpstreamGoogleClientID string `json:"oidcUpstreamGoogleClientId,omitempty"`
 	CasdoorOrg                 string `json:"casdoorOrg,omitempty"`
 	CasdoorApplication         string `json:"casdoorApplication,omitempty"`
 	MachineAuthGrantType       string `json:"machineAuthGrantType,omitempty"`
@@ -227,6 +235,8 @@ func Resolve(apiURLFlag, tokenFlag string) (Config, error) {
 	cfg.OIDCPostLogoutRedirectURI = strings.TrimSpace(projectCfg.OIDCPostLogoutRedirectURI)
 	cfg.OIDCScopes = strings.TrimSpace(projectCfg.OIDCScopes)
 	cfg.OIDCLoginURL = strings.TrimSpace(projectCfg.OIDCLoginURL)
+	cfg.OIDCGoogleLoginURL = strings.TrimSpace(projectCfg.OIDCGoogleLoginURL)
+	cfg.OIDCUpstreamGoogleClientID = strings.TrimSpace(projectCfg.OIDCUpstreamGoogleClientID)
 	cfg.CasdoorOrg = strings.TrimSpace(projectCfg.CasdoorOrg)
 	cfg.CasdoorApplication = strings.TrimSpace(projectCfg.CasdoorApplication)
 	cfg.MachineAuthGrantType = strings.TrimSpace(projectCfg.MachineAuthGrantType)
@@ -408,6 +418,8 @@ func Load() (Config, error) {
 		}
 	}
 	oidcLoginURL := firstNonEmpty(strings.TrimSpace(disk.Identity.LoginURL), strings.TrimSpace(disk.Auth.LoginURL), strings.TrimSpace(disk.OIDCLoginURL))
+	oidcGoogleLoginURL := firstNonEmpty(strings.TrimSpace(disk.Identity.GoogleLoginURL), strings.TrimSpace(disk.Auth.GoogleLoginURL), strings.TrimSpace(disk.OIDCGoogleLoginURL))
+	oidcUpstreamGoogleClientID := firstNonEmpty(strings.TrimSpace(disk.Identity.UpstreamGoogleClientID), strings.TrimSpace(disk.Auth.UpstreamGoogleClientID), strings.TrimSpace(disk.OIDCUpstreamGoogleClientID))
 	casdoorOrg := firstNonEmpty(strings.TrimSpace(disk.Identity.Organization), strings.TrimSpace(disk.Auth.Organization), strings.TrimSpace(disk.CasdoorOrg))
 	casdoorApplication := firstNonEmpty(strings.TrimSpace(disk.Identity.Application), strings.TrimSpace(disk.Auth.Application), strings.TrimSpace(disk.CasdoorApplication))
 	machineAuthGrantType := firstNonEmpty(strings.TrimSpace(disk.Auth.Machine.GrantType), strings.TrimSpace(disk.MachineAuth.GrantType), strings.TrimSpace(disk.MachineAuthGrantType))
@@ -457,6 +469,8 @@ func Load() (Config, error) {
 		OIDCPostLogoutRedirectURI:  oidcPostLogoutRedirectURI,
 		OIDCScopes:                 oidcScopes,
 		OIDCLoginURL:               oidcLoginURL,
+		OIDCGoogleLoginURL:         oidcGoogleLoginURL,
+		OIDCUpstreamGoogleClientID: oidcUpstreamGoogleClientID,
 		CasdoorOrg:                 casdoorOrg,
 		CasdoorApplication:         casdoorApplication,
 		MachineAuthGrantType:       machineAuthGrantType,
@@ -524,6 +538,8 @@ func Save(cfg Config) error {
 		auth["scopes"] = scopes
 	}
 	setIf(auth, "loginUrl", cfg.OIDCLoginURL)
+	setIf(auth, "googleLoginUrl", cfg.OIDCGoogleLoginURL)
+	setIf(auth, "upstreamGoogleClientId", cfg.OIDCUpstreamGoogleClientID)
 	setIf(auth, "organization", cfg.CasdoorOrg)
 	setIf(auth, "application", cfg.CasdoorApplication)
 

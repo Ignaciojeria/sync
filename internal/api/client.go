@@ -127,6 +127,8 @@ type ProjectAuth struct {
 	PostLogoutRedirectURI string   `json:"postLogoutRedirectUri,omitempty"`
 	Scopes                []string `json:"scopes,omitempty"`
 	LoginURL              string   `json:"loginUrl,omitempty"`
+	GoogleLoginURL        string   `json:"googleLoginUrl,omitempty"`
+	UpstreamGoogleClientID string  `json:"upstreamGoogleClientId,omitempty"`
 	Organization          string   `json:"organization,omitempty"`
 	Application           string   `json:"application,omitempty"`
 }

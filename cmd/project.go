@@ -216,6 +216,8 @@ var initCmd = &cobra.Command{
 			cfg.OIDCPostLogoutRedirectURI = strings.TrimSpace(normalizedAuth.PostLogoutRedirectURI)
 			cfg.OIDCScopes = strings.Join(normalizedAuth.Scopes, " ")
 			cfg.OIDCLoginURL = strings.TrimSpace(normalizedAuth.LoginURL)
+			cfg.OIDCGoogleLoginURL = strings.TrimSpace(normalizedAuth.GoogleLoginURL)
+			cfg.OIDCUpstreamGoogleClientID = strings.TrimSpace(normalizedAuth.UpstreamGoogleClientID)
 			cfg.CasdoorOrg = strings.TrimSpace(normalizedAuth.Organization)
 			cfg.CasdoorApplication = strings.TrimSpace(normalizedAuth.Application)
 			if cfg.OIDCClientSecret == "" && cfg.OIDCClientSecretRef != "" {
@@ -651,6 +653,8 @@ type Conf struct {
 	OIDCPostLogoutRedirectURI string ` + "`env:\"OIDC_POST_LOGOUT_REDIRECT_URI\"`" + `
 	OIDCScopes               string ` + "`env:\"OIDC_SCOPES\" envDefault:\"openid profile email\"`" + `
 	OIDCLoginURL             string ` + "`env:\"OIDC_LOGIN_URL\"`" + `
+	OIDCGoogleLoginURL       string ` + "`env:\"OIDC_GOOGLE_LOGIN_URL\"`" + `
+	OIDCUpstreamGoogleClientID string ` + "`env:\"OIDC_UPSTREAM_GOOGLE_CLIENT_ID\"`" + `
 
 	MachineAuthGrantType      string ` + "`env:\"MACHINE_AUTH_GRANT_TYPE\" envDefault:\"client_credentials\"`" + `
 	MachineAuthTokenEndpoint  string ` + "`env:\"MACHINE_AUTH_TOKEN_ENDPOINT\"`" + `
@@ -668,6 +672,12 @@ type Conf struct {
 func NewConf() (Conf, error) {
 	return Parse[Conf]()
 }
+
+func (c Conf) GetOIDCIssuer() string { return c.OIDCIssuer }
+func (c Conf) GetOIDCClientID() string { return c.OIDCClientID }
+func (c Conf) GetOIDCTokenEndpoint() string { return c.OIDCTokenEndpoint }
+func (c Conf) GetOIDCClientSecret() string { return c.OIDCClientSecret }
+func (c Conf) GetJWTAudience() string { return c.JWTAudience }
 `,
 		"internal/shared/configuration/parse.go": `package configuration
 
@@ -865,6 +875,7 @@ import (
 	"github.com/Ignaciojeria/ioc"
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/go-fuego/fuego"
+	"github.com/jmoiron/sqlx"
 )
 
 var _ = ioc.Register(New)
@@ -874,12 +885,12 @@ type Server struct {
 	*fuego.Server
 }
 
-func New(conf configuration.Conf, jwks keyfunc.Keyfunc) *Server {
+func New(conf configuration.Conf, jwks keyfunc.Keyfunc, db *sqlx.DB) *Server {
 	server := fuego.NewServer(fuego.WithAddr(":" + strings.TrimSpace(conf.PORT)))
 	fuego.Use(server, middleware.JWTMiddleware(
 		jwks,
-		strings.TrimSpace(conf.OIDCIssuer),
-		firstNonEmpty(strings.TrimSpace(conf.JWTAudience), strings.TrimSpace(conf.OIDCClientID)),
+		db,
+		conf,
 	))
 	return &Server{Server: server}
 }
@@ -920,26 +931,46 @@ func firstNonEmpty(values ...string) string {
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/jmoiron/sqlx"
 )
 
 type contextKey string
 
 const (
-	claimsContextKey contextKey = "jwt_claims"
+	claimsContextKey          contextKey = "jwt_claims"
+	sessionCookieName                    = "app_session_id"
 )
+
+type oidcConfiguration interface {
+	GetOIDCIssuer() string
+	GetOIDCClientID() string
+	GetOIDCTokenEndpoint() string
+	GetOIDCClientSecret() string
+	GetJWTAudience() string
+}
 
 func JWTMiddleware(
 	jwks keyfunc.Keyfunc,
-	issuer string,
-	audience string,
+	db *sqlx.DB,
+	conf oidcConfiguration,
 ) func(http.Handler) http.Handler {
+	issuer := ""
+	audience := ""
+	if conf != nil {
+		issuer = strings.TrimSpace(conf.GetOIDCIssuer())
+		audience = firstNonEmpty(strings.TrimSpace(conf.GetJWTAudience()), strings.TrimSpace(conf.GetOIDCClientID()))
+	}
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -957,6 +988,14 @@ func JWTMiddleware(
 				return
 			}
 
+			if db != nil {
+				if claims, ok := claimsFromSessionCookie(r, w, db, conf); ok {
+					ctx := context.WithValue(r.Context(), claimsContextKey, claims)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+			}
+
 			authHeader := r.Header.Get("Authorization")
 			if !strings.HasPrefix(authHeader, "Bearer ") {
 				writeUnauthorized(w)
@@ -964,18 +1003,8 @@ func JWTMiddleware(
 			}
 
 			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-
-			opts := []jwt.ParserOption{}
-			if issuer != "" {
-				opts = append(opts, jwt.WithIssuer(issuer))
-			}
-			if audience != "" {
-				opts = append(opts, jwt.WithAudience(audience))
-			}
-
-			claims := jwt.MapClaims{}
-			token, err := jwt.ParseWithClaims(tokenString, claims, jwks.Keyfunc, opts...)
-			if err != nil || !token.Valid {
+			claims, err := parseJWTClaims(jwks, tokenString, issuer, audience)
+			if err != nil {
 				writeUnauthorized(w)
 				return
 			}
@@ -990,6 +1019,18 @@ type Principal struct {
 	Subject         string
 	MachineClientID string
 	IsMachine       bool
+}
+
+type sessionRecord struct {
+	ID           string
+	UserID       string
+	Subject      string
+	Email        sql.NullString
+	DisplayName  sql.NullString
+	AccessToken  sql.NullString
+	RefreshToken sql.NullString
+	IDToken      sql.NullString
+	ExpiresAt    sql.NullTime
 }
 
 func JWTClaimsFromContext(ctx context.Context) (jwt.MapClaims, bool) {
@@ -1024,10 +1065,142 @@ func PrincipalFromClaims(claims jwt.MapClaims) Principal {
 	}
 }
 
+func claimsFromSessionCookie(r *http.Request, w http.ResponseWriter, db *sqlx.DB, conf oidcConfiguration) (jwt.MapClaims, bool) {
+	cookie, err := r.Cookie(sessionCookieName)
+	if err != nil || strings.TrimSpace(cookie.Value) == "" {
+		return nil, false
+	}
+
+	var rec sessionRecord
+	query := "SELECT s.id, s.user_id, s.access_token, s.refresh_token, s.id_token, s.expires_at, u.subject, u.email, u.display_name " +
+		"FROM sessions s JOIN users u ON u.id = s.user_id " +
+		"WHERE s.id = $1 AND s.revoked_at IS NULL"
+	row := db.QueryRowx(query, strings.TrimSpace(cookie.Value))
+	if err := row.Scan(&rec.ID, &rec.UserID, &rec.AccessToken, &rec.RefreshToken, &rec.IDToken, &rec.ExpiresAt, &rec.Subject, &rec.Email, &rec.DisplayName); err != nil {
+		clearSessionCookie(w)
+		return nil, false
+	}
+
+	if rec.ExpiresAt.Valid && time.Now().After(rec.ExpiresAt.Time) {
+		if conf == nil || strings.TrimSpace(conf.GetOIDCTokenEndpoint()) == "" || !rec.RefreshToken.Valid || strings.TrimSpace(rec.RefreshToken.String) == "" {
+			clearSessionCookie(w)
+			return nil, false
+		}
+		if err := refreshSessionTokens(db, conf, &rec); err != nil {
+			clearSessionCookie(w)
+			return nil, false
+		}
+	}
+
+	claims := jwt.MapClaims{
+		"sub": rec.Subject,
+		"sid": rec.ID,
+	}
+	if rec.Email.Valid && strings.TrimSpace(rec.Email.String) != "" {
+		claims["email"] = strings.TrimSpace(rec.Email.String)
+	}
+	if rec.DisplayName.Valid && strings.TrimSpace(rec.DisplayName.String) != "" {
+		claims["name"] = strings.TrimSpace(rec.DisplayName.String)
+	}
+	return claims, true
+}
+
+func refreshSessionTokens(db *sqlx.DB, conf oidcConfiguration, rec *sessionRecord) error {
+	form := url.Values{}
+	form.Set("grant_type", "refresh_token")
+	form.Set("refresh_token", strings.TrimSpace(rec.RefreshToken.String))
+	form.Set("client_id", strings.TrimSpace(conf.GetOIDCClientID()))
+	if secret := strings.TrimSpace(conf.GetOIDCClientSecret()); secret != "" {
+		form.Set("client_secret", secret)
+	}
+
+	resp, err := http.PostForm(strings.TrimSpace(conf.GetOIDCTokenEndpoint()), form)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("refresh token exchange failed with status %d", resp.StatusCode)
+	}
+
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return err
+	}
+	accessToken, _ := out["access_token"].(string)
+	if strings.TrimSpace(accessToken) == "" {
+		return fmt.Errorf("refresh token exchange returned empty access token")
+	}
+	refreshToken, _ := out["refresh_token"].(string)
+	refreshToken = strings.TrimSpace(refreshToken)
+	if refreshToken == "" {
+		refreshToken = strings.TrimSpace(rec.RefreshToken.String)
+	}
+	idToken, _ := out["id_token"].(string)
+	idToken = strings.TrimSpace(idToken)
+	if idToken == "" && rec.IDToken.Valid {
+		idToken = strings.TrimSpace(rec.IDToken.String)
+	}
+	var expiresAt any
+	if expiresIn, ok := out["expires_in"].(float64); ok && int(expiresIn) > 0 {
+		expiresAt = time.Now().Add(time.Duration(int(expiresIn)) * time.Second)
+	}
+	if _, err := db.Exec("UPDATE sessions SET access_token=$1, refresh_token=$2, id_token=$3, expires_at=$4, updated_at=NOW() WHERE id=$5", strings.TrimSpace(accessToken), refreshToken, idToken, expiresAt, rec.ID); err != nil {
+		return err
+	}
+
+	rec.AccessToken = sql.NullString{String: strings.TrimSpace(accessToken), Valid: true}
+	rec.RefreshToken = sql.NullString{String: refreshToken, Valid: refreshToken != ""}
+	rec.IDToken = sql.NullString{String: idToken, Valid: idToken != ""}
+	if ts, ok := expiresAt.(time.Time); ok {
+		rec.ExpiresAt = sql.NullTime{Time: ts, Valid: true}
+	}
+	return nil
+}
+
+func parseJWTClaims(jwks keyfunc.Keyfunc, tokenString, issuer, audience string) (jwt.MapClaims, error) {
+	opts := []jwt.ParserOption{}
+	if issuer != "" {
+		opts = append(opts, jwt.WithIssuer(issuer))
+	}
+	if audience != "" {
+		opts = append(opts, jwt.WithAudience(audience))
+	}
+	claims := jwt.MapClaims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims, jwks.Keyfunc, opts...)
+	if err != nil || !token.Valid {
+		if err == nil {
+			err = fmt.Errorf("invalid token")
+		}
+		return nil, err
+	}
+	return claims, nil
+}
+
+func clearSessionCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
 func normalizeGrantType(value string) string {
 	v := strings.ToLower(strings.TrimSpace(value))
 	v = strings.ReplaceAll(v, "-", "_")
 	return v
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func firstNonEmptyMachineID(values ...string) string {
@@ -1074,7 +1247,7 @@ func firstStringClaim(claims jwt.MapClaims, keys ...string) string {
 
 func isPublicPath(path string) bool {
 	switch strings.TrimSpace(path) {
-	case "/auth/login", "/auth/callback":
+	case "/auth/login", "/auth/login/google", "/auth/callback", "/auth/logout":
 		return true
 	default:
 		return false
@@ -1111,6 +1284,7 @@ func helloHandler(s *server.Server) {
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -1125,7 +1299,7 @@ import (
 var _ = ioc.Register(authLoginHandler)
 
 func authLoginHandler(s *server.Server, conf configuration.Conf) {
-	fuego.Get(s.Server, "/auth/login", func(c fuego.ContextNoBody) (any, error) {
+	handleLogin := func(c fuego.ContextNoBody, preferGoogle bool) (any, error) {
 		state, err := randomState()
 		if err != nil {
 			return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: "cannot generate oauth state"}
@@ -1140,33 +1314,103 @@ func authLoginHandler(s *server.Server, conf configuration.Conf) {
 			SameSite: http.SameSiteLaxMode,
 		})
 
-		loginURL, err := buildLoginURL(conf, state)
+		if preferGoogle && strings.TrimSpace(conf.OIDCUpstreamGoogleClientID) != "" {
+			googleURL, err := buildDirectGoogleLoginURL(conf, state)
+			if err != nil {
+				return nil, fuego.HTTPError{Status: http.StatusBadGateway, Title: "could not build direct google redirect", Detail: err.Error()}
+			}
+			http.Redirect(c.Response(), c.Request(), googleURL, http.StatusFound)
+			return nil, nil
+		}
+
+		loginURL, err := buildLoginURL(conf, state, preferGoogle)
 		if err != nil {
 			return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
 		}
 
 		http.Redirect(c.Response(), c.Request(), loginURL, http.StatusFound)
 		return nil, nil
-		})
+	}
+
+	fuego.Get(s.Server, "/auth/login", func(c fuego.ContextNoBody) (any, error) {
+		return handleLogin(c, false)
+	})
+	fuego.Get(s.Server, "/auth/login/google", func(c fuego.ContextNoBody) (any, error) {
+		return handleLogin(c, true)
+	})
 }
 
-func buildLoginURL(conf configuration.Conf, state string) (string, error) {
-		base := strings.TrimSpace(conf.OIDCLoginURL)
-		if base == "" {
-			base = strings.TrimSpace(conf.OIDCAuthorizationEndpoint)
-		}
-		u, err := url.Parse(base)
-		if err != nil {
-			return "", err
-		}
-		q := u.Query()
-		q.Set("client_id", strings.TrimSpace(conf.OIDCClientID))
-		q.Set("redirect_uri", strings.TrimSpace(conf.OIDCRedirectURI))
-		q.Set("response_type", "code")
-		q.Set("scope", firstNonEmptyScope(strings.TrimSpace(conf.OIDCScopes), "openid profile email"))
-		q.Set("state", state)
-		u.RawQuery = q.Encode()
-		return u.String(), nil
+func buildLoginURL(conf configuration.Conf, state string, preferGoogle bool) (string, error) {
+	base := strings.TrimSpace(conf.OIDCLoginURL)
+	if preferGoogle && strings.TrimSpace(conf.OIDCGoogleLoginURL) != "" {
+		base = strings.TrimSpace(conf.OIDCGoogleLoginURL)
+	}
+	if base == "" {
+		base = strings.TrimSpace(conf.OIDCAuthorizationEndpoint)
+	}
+	u, err := url.Parse(base)
+	if err != nil {
+		return "", err
+	}
+	q := u.Query()
+	q.Set("client_id", strings.TrimSpace(conf.OIDCClientID))
+	q.Set("redirect_uri", strings.TrimSpace(conf.OIDCRedirectURI))
+	q.Set("response_type", "code")
+	q.Set("scope", firstNonEmptyScope(strings.TrimSpace(conf.OIDCScopes), "openid profile email"))
+	q.Set("state", state)
+	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
+
+func buildDirectGoogleLoginURL(conf configuration.Conf, state string) (string, error) {
+	googleClientID := strings.TrimSpace(conf.OIDCUpstreamGoogleClientID)
+	if googleClientID == "" {
+		return "", fmt.Errorf("OIDC_UPSTREAM_GOOGLE_CLIENT_ID is empty")
+	}
+	issuer := strings.TrimRight(strings.TrimSpace(conf.OIDCIssuer), "/")
+	if issuer == "" {
+		return "", fmt.Errorf("OIDC_ISSUER is empty")
+	}
+	appName, err := deriveCasdoorAppName(conf.OIDCClientID, conf.PROJECT_NAME)
+	if err != nil {
+		return "", err
+	}
+
+	scope := firstNonEmptyScope(strings.TrimSpace(conf.OIDCScopes), "openid profile email")
+	packedQ := url.Values{}
+	packedQ.Set("client_id", strings.TrimSpace(conf.OIDCClientID))
+	packedQ.Set("redirect_uri", strings.TrimSpace(conf.OIDCRedirectURI))
+	packedQ.Set("response_type", "code")
+	packedQ.Set("scope", scope)
+	packedQ.Set("state", state)
+
+	packed := "?" + packedQ.Encode() +
+		"&application=" + url.QueryEscape(appName) +
+		"&provider=" + url.QueryEscape("provider_google_einar") +
+		"&method=" + url.QueryEscape("signup")
+	packedState := base64.StdEncoding.EncodeToString([]byte(packed))
+
+	googleQ := url.Values{}
+	googleQ.Set("client_id", googleClientID)
+	googleQ.Set("redirect_uri", issuer+"/callback")
+	googleQ.Set("scope", "openid email profile")
+	googleQ.Set("response_type", "code")
+	googleQ.Set("state", packedState)
+	return "https://accounts.google.com/signin/oauth?" + googleQ.Encode(), nil
+}
+
+func deriveCasdoorAppName(clientID, projectSlug string) (string, error) {
+	clientID = strings.TrimSpace(clientID)
+	projectSlug = strings.TrimSpace(projectSlug)
+	if clientID == "" || projectSlug == "" {
+		return "", fmt.Errorf("cannot derive app name: empty client id or project slug")
+	}
+	needle := "-" + projectSlug + "-"
+	idx := strings.Index(clientID, needle)
+	if idx < 0 {
+		return "", fmt.Errorf("cannot derive app name from client id")
+	}
+	return clientID[:idx+len(needle)-1], nil
 }
 
 func randomState() (string, error) {
@@ -1197,17 +1441,22 @@ func firstNonEmptyScope(values ...string) string {
 		"internal/adapter/in/web/auth_callback.go": fmt.Sprintf(`package in
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	%q
 	%q
 
 	"github.com/Ignaciojeria/ioc"
+	"github.com/MicahParks/keyfunc/v3"
 	"github.com/go-fuego/fuego"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/jmoiron/sqlx"
 )
 
 var _ = ioc.Register(authCallbackHandler)
@@ -1220,22 +1469,36 @@ type authCallbackResponse struct {
 	ExpiresIn    int    `+"`json:\"expires_in,omitempty\"`"+`
 }
 
-func authCallbackHandler(s *server.Server, conf configuration.Conf) {
-	fuego.Get(s.Server, "/auth/callback", func(c fuego.ContextNoBody) (authCallbackResponse, error) {
+type oidcIdentity struct {
+	Subject     string
+	Email       string
+	DisplayName string
+}
+
+func authCallbackHandler(s *server.Server, conf configuration.Conf, db *sqlx.DB, jwks keyfunc.Keyfunc) {
+	fuego.Get(s.Server, "/auth/callback", func(c fuego.ContextNoBody) (any, error) {
 		state := strings.TrimSpace(c.QueryParam("state"))
 		code := strings.TrimSpace(c.QueryParam("code"))
 		if code == "" {
-			return authCallbackResponse{}, fuego.HTTPError{Status: http.StatusBadRequest, Detail: "missing code"}
+			return nil, fuego.HTTPError{Status: http.StatusBadRequest, Detail: "missing code"}
 		}
 
 		stateCookie, err := c.Request().Cookie("oidc_state")
 		if err != nil || strings.TrimSpace(stateCookie.Value) == "" || stateCookie.Value != state {
-			return authCallbackResponse{}, fuego.HTTPError{Status: http.StatusBadRequest, Detail: "invalid oauth state"}
+			return nil, fuego.HTTPError{Status: http.StatusBadRequest, Detail: "invalid oauth state"}
 		}
 
 		resp, err := exchangeAuthorizationCode(conf, code)
 		if err != nil {
-			return authCallbackResponse{}, fuego.HTTPError{Status: http.StatusBadGateway, Detail: err.Error()}
+			return nil, fuego.HTTPError{Status: http.StatusBadGateway, Detail: err.Error()}
+		}
+		identity, err := extractIdentityFromTokens(conf, jwks, resp)
+		if err != nil {
+			return nil, fuego.HTTPError{Status: http.StatusBadGateway, Detail: err.Error()}
+		}
+		sessionID, err := persistUserSession(db, identity, resp)
+		if err != nil {
+			return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
 		}
 
 		http.SetCookie(c.Response(), &http.Cookie{
@@ -1247,8 +1510,26 @@ func authCallbackHandler(s *server.Server, conf configuration.Conf) {
 			Secure:   isHTTPS(conf.OIDCRedirectURI),
 			SameSite: http.SameSiteLaxMode,
 		})
+		http.SetCookie(c.Response(), &http.Cookie{
+			Name:     "app_session_id",
+			Value:    sessionID,
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   isHTTPS(conf.OIDCRedirectURI),
+			SameSite: http.SameSiteLaxMode,
+		})
 
-		return resp, nil
+		http.Redirect(c.Response(), c.Request(), "/", http.StatusFound)
+		return nil, nil
+	})
+
+	fuego.Get(s.Server, "/auth/logout", func(c fuego.ContextNoBody) (any, error) {
+		if cookie, err := c.Request().Cookie("app_session_id"); err == nil && strings.TrimSpace(cookie.Value) != "" {
+			_, _ = db.Exec("UPDATE sessions SET revoked_at = NOW(), updated_at = NOW() WHERE id = $1", strings.TrimSpace(cookie.Value))
+		}
+		http.SetCookie(c.Response(), &http.Cookie{Name: "app_session_id", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: isHTTPS(conf.OIDCRedirectURI), SameSite: http.SameSiteLaxMode})
+		http.Redirect(c.Response(), c.Request(), "/", http.StatusFound)
+		return nil, nil
 	})
 }
 
@@ -1277,6 +1558,100 @@ func exchangeAuthorizationCode(conf configuration.Conf, code string) (authCallba
 		return authCallbackResponse{}, err
 	}
 	return out, nil
+}
+
+func extractIdentityFromTokens(conf configuration.Conf, jwks keyfunc.Keyfunc, resp authCallbackResponse) (oidcIdentity, error) {
+	issuer := strings.TrimSpace(conf.OIDCIssuer)
+	audience := firstNonEmpty(strings.TrimSpace(conf.JWTAudience), strings.TrimSpace(conf.OIDCClientID))
+	for _, tokenString := range []string{strings.TrimSpace(resp.IDToken), strings.TrimSpace(resp.AccessToken)} {
+		if tokenString == "" {
+			continue
+		}
+		claims := jwt.MapClaims{}
+		opts := []jwt.ParserOption{}
+		if issuer != "" {
+			opts = append(opts, jwt.WithIssuer(issuer))
+		}
+		if audience != "" {
+			opts = append(opts, jwt.WithAudience(audience))
+		}
+		token, err := jwt.ParseWithClaims(tokenString, claims, jwks.Keyfunc, opts...)
+		if err != nil || !token.Valid {
+			continue
+		}
+		identity := oidcIdentity{
+			Subject:     strings.TrimSpace(firstStringClaim(claims, "sub")),
+			Email:       strings.TrimSpace(firstStringClaim(claims, "email", "name")),
+			DisplayName: strings.TrimSpace(firstStringClaim(claims, "display_name", "name", "email")),
+		}
+		if identity.Subject != "" {
+			return identity, nil
+		}
+	}
+	return oidcIdentity{}, fmt.Errorf("could not extract authenticated subject from oidc tokens")
+}
+
+func persistUserSession(db *sqlx.DB, identity oidcIdentity, resp authCallbackResponse) (string, error) {
+	if db == nil {
+		return "", fmt.Errorf("db connection is nil")
+	}
+	if strings.TrimSpace(identity.Subject) == "" {
+		return "", fmt.Errorf("oidc subject is empty")
+	}
+
+	tx, err := db.Beginx()
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+
+	var userID string
+	userSQL := "INSERT INTO users (subject, email, display_name, created_at, updated_at) " +
+		"VALUES ($1, $2, $3, NOW(), NOW()) " +
+		"ON CONFLICT (subject) DO UPDATE SET email = EXCLUDED.email, display_name = EXCLUDED.display_name, updated_at = NOW() " +
+		"RETURNING id"
+	if err := tx.Get(&userID, userSQL, identity.Subject, nullableString(identity.Email), nullableString(identity.DisplayName)); err != nil {
+		return "", err
+	}
+
+	var sessionID string
+	var expiresAt any
+	if resp.ExpiresIn > 0 {
+		expiresAt = time.Now().Add(time.Duration(resp.ExpiresIn) * time.Second)
+	}
+	sessionSQL := "INSERT INTO sessions (user_id, access_token, refresh_token, id_token, expires_at, created_at, updated_at) " +
+		"VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) RETURNING id"
+	if err := tx.Get(&sessionID, sessionSQL, userID, nullableString(resp.AccessToken), nullableString(resp.RefreshToken), nullableString(resp.IDToken), expiresAt); err != nil {
+		return "", err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	return sessionID, nil
+}
+
+func nullableString(value string) sql.NullString {
+	value = strings.TrimSpace(value)
+	return sql.NullString{String: value, Valid: value != ""}
+}
+
+func firstStringClaim(claims jwt.MapClaims, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := claims[key].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 `, s+"/internal/shared/configuration", s+"/internal/shared/server"),
 	}
@@ -2043,6 +2418,8 @@ func normalizeProjectAuth(resp *api.CreateProjectResponse) *api.ProjectAuth {
 		PostLogoutRedirectURI: strings.TrimSpace(auth.PostLogoutRedirectURI),
 		Scopes:                scopes,
 		LoginURL:              strings.TrimSpace(auth.LoginURL),
+		GoogleLoginURL:        strings.TrimSpace(auth.GoogleLoginURL),
+		UpstreamGoogleClientID: strings.TrimSpace(auth.UpstreamGoogleClientID),
 		Organization:          strings.TrimSpace(auth.Organization),
 		Application:           strings.TrimSpace(auth.Application),
 	}
@@ -2149,6 +2526,8 @@ func materializeProjectEnv(cfg config.Config) error {
 		"OIDC_POST_LOGOUT_REDIRECT_URI":  strings.TrimSpace(cfg.OIDCPostLogoutRedirectURI),
 		"OIDC_SCOPES":                    strings.TrimSpace(cfg.OIDCScopes),
 		"OIDC_LOGIN_URL":                 strings.TrimSpace(cfg.OIDCLoginURL),
+		"OIDC_GOOGLE_LOGIN_URL":          strings.TrimSpace(cfg.OIDCGoogleLoginURL),
+		"OIDC_UPSTREAM_GOOGLE_CLIENT_ID": strings.TrimSpace(cfg.OIDCUpstreamGoogleClientID),
 		"MACHINE_AUTH_GRANT_TYPE":        strings.TrimSpace(cfg.MachineAuthGrantType),
 		"MACHINE_AUTH_TOKEN_ENDPOINT":    strings.TrimSpace(cfg.MachineAuthTokenEndpoint),
 		"MACHINE_AUTH_CLIENT_ID":         strings.TrimSpace(cfg.MachineAuthClientID),
@@ -2156,6 +2535,12 @@ func materializeProjectEnv(cfg config.Config) error {
 		"MACHINE_AUTH_CLIENT_SECRET_REF": strings.TrimSpace(cfg.MachineAuthClientSecretRef),
 		"MACHINE_AUTH_AUDIENCE":          strings.TrimSpace(cfg.MachineAuthAudience),
 		"MACHINE_AUTH_SCOPES":            strings.TrimSpace(cfg.MachineAuthScopes),
+	}
+
+	if entries["OIDC_UPSTREAM_GOOGLE_CLIENT_ID"] == "" && strings.Contains(strings.ToLower(entries["OIDC_GOOGLE_LOGIN_URL"]), "accounts.google.com/signin/oauth") {
+		if u, err := url.Parse(strings.TrimSpace(entries["OIDC_GOOGLE_LOGIN_URL"])); err == nil {
+			entries["OIDC_UPSTREAM_GOOGLE_CLIENT_ID"] = strings.TrimSpace(u.Query().Get("client_id"))
+		}
 	}
 
 	if entries["MACHINE_AUTH_TOKEN_ENDPOINT"] != "" && entries["MACHINE_AUTH_TOKEN_ENDPOINT"] == entries["OIDC_TOKEN_ENDPOINT"] {
@@ -2212,7 +2597,7 @@ func materializeProjectEnv(cfg config.Config) error {
 		return err
 	}
 
-	for _, key := range []string{"PROJECT_NAME", "DATABASE_URL", "OIDC_TYPE", "OIDC_PROVIDER", "OIDC_ISSUER", "OIDC_DISCOVERY_URL", "OIDC_JWKS_URI", "OIDC_AUTHORIZATION_ENDPOINT", "OIDC_TOKEN_ENDPOINT", "OIDC_USERINFO_ENDPOINT", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_CLIENT_SECRET_REF", "OIDC_REDIRECT_URI", "OIDC_LOGOUT_URI", "OIDC_POST_LOGOUT_REDIRECT_URI", "OIDC_SCOPES", "OIDC_LOGIN_URL", "MACHINE_AUTH_GRANT_TYPE", "MACHINE_AUTH_TOKEN_ENDPOINT", "MACHINE_AUTH_CLIENT_ID", "MACHINE_AUTH_CLIENT_SECRET", "MACHINE_AUTH_CLIENT_SECRET_REF", "MACHINE_AUTH_AUDIENCE", "MACHINE_AUTH_SCOPES"} {
+	for _, key := range []string{"PROJECT_NAME", "DATABASE_URL", "OIDC_TYPE", "OIDC_PROVIDER", "OIDC_ISSUER", "OIDC_DISCOVERY_URL", "OIDC_JWKS_URI", "OIDC_AUTHORIZATION_ENDPOINT", "OIDC_TOKEN_ENDPOINT", "OIDC_USERINFO_ENDPOINT", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_CLIENT_SECRET_REF", "OIDC_REDIRECT_URI", "OIDC_LOGOUT_URI", "OIDC_POST_LOGOUT_REDIRECT_URI", "OIDC_SCOPES", "OIDC_LOGIN_URL", "OIDC_GOOGLE_LOGIN_URL", "OIDC_UPSTREAM_GOOGLE_CLIENT_ID", "MACHINE_AUTH_GRANT_TYPE", "MACHINE_AUTH_TOKEN_ENDPOINT", "MACHINE_AUTH_CLIENT_ID", "MACHINE_AUTH_CLIENT_SECRET", "MACHINE_AUTH_CLIENT_SECRET_REF", "MACHINE_AUTH_AUDIENCE", "MACHINE_AUTH_SCOPES"} {
 		if value := strings.TrimSpace(entries[key]); value != "" {
 			lines = append(lines, key+"="+value)
 		}
