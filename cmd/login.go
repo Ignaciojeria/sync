@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"os"
 	"os/exec"
@@ -30,11 +31,20 @@ var (
 )
 
 var loginCmd = &cobra.Command{
-	Use:   "login",
+	Use:   "login [email]",
 	Short: "Login en Einar (browser + Casdoor) o guarda token manual",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		loginEmail, err := parseLoginEmailArg(args)
+		if err != nil {
+			return err
+		}
+
 		manual := strings.TrimSpace(tokenFlag)
 		if manual != "" {
+			if loginEmail != "" {
+				return fmt.Errorf("no puedes combinar --token con email posicional")
+			}
 			return saveManualToken(manual)
 		}
 
@@ -46,7 +56,7 @@ var loginCmd = &cobra.Command{
 		casdoorOrigin := resolvedCasdoorOrigin(cfg.APIURL)
 		clientID := resolvedClientID()
 
-		idToken, refreshToken, err := runDeviceLogin(casdoorOrigin, clientID)
+		idToken, refreshToken, err := runDeviceLogin(casdoorOrigin, clientID, loginEmail)
 		if err != nil {
 			return err
 		}
@@ -64,6 +74,21 @@ var loginCmd = &cobra.Command{
 		fmt.Printf("Token: %s\n", config.MaskToken(idToken))
 		return nil
 	},
+}
+
+func parseLoginEmailArg(args []string) (string, error) {
+	if len(args) == 0 {
+		return "", nil
+	}
+	email := strings.TrimSpace(args[0])
+	if email == "" {
+		return "", nil
+	}
+	parsed, err := mail.ParseAddress(email)
+	if err != nil || !strings.EqualFold(strings.TrimSpace(parsed.Address), email) {
+		return "", fmt.Errorf("email inválido: %q", email)
+	}
+	return parsed.Address, nil
 }
 
 func saveManualToken(token string) error {
@@ -216,7 +241,7 @@ func runPKCELogin(casdoorOrigin, clientID, provider string) (string, string, err
 	return exchangeCodeForTokens(ctx, casdoorOrigin, clientID, code, verifier, redirectURI)
 }
 
-func runDeviceLogin(casdoorOrigin, clientID string) (string, string, error) {
+func runDeviceLogin(casdoorOrigin, clientID, loginEmail string) (string, string, error) {
 	codeEndpoint := strings.TrimRight(casdoorOrigin, "/") + "/api/auth/device/code"
 	tokenEndpoint := strings.TrimRight(casdoorOrigin, "/") + "/api/auth/device/token"
 
@@ -263,8 +288,12 @@ func runDeviceLogin(casdoorOrigin, clientID string) (string, string, error) {
 	if verificationURL == "" {
 		return "", "", fmt.Errorf("verification_uri ausente")
 	}
+	verificationURL = appendLoginHint(verificationURL, loginEmail)
 
 	fmt.Printf("\n🔐 Login por código de dispositivo\n")
+	if loginEmail != "" {
+		fmt.Printf("Cuenta sugerida: %s\n", loginEmail)
+	}
 	if device.UserCode != "" {
 		fmt.Printf("Código: %s\n", device.UserCode)
 	}
@@ -337,6 +366,20 @@ func runDeviceLogin(casdoorOrigin, clientID string) (string, string, error) {
 
 		time.Sleep(time.Duration(interval) * time.Second)
 	}
+}
+
+func appendLoginHint(rawURL, loginEmail string) string {
+	if strings.TrimSpace(loginEmail) == "" {
+		return rawURL
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	q := u.Query()
+	q.Set("login_hint", strings.TrimSpace(loginEmail))
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 func buildAuthorizeURL(casdoorOrigin, clientID, redirectURI, state, challenge, provider string) (string, error) {

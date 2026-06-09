@@ -110,6 +110,12 @@ Bash:
 ./local-cli login
 ```
 
+Si quieres sugerir una cuenta específica desde el comando:
+
+```bash
+./local-cli login tu-email@empresa.com
+```
+
 Qué hace este flujo:
 
 1. Resuelve `APIURL`
