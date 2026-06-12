@@ -2459,7 +2459,7 @@ func ensureRemoteWedeReady(cfg *config.Config) error {
 		remotePath = "$HOME"
 	}
 
-	downloadURL, err := resolveGitHubReleaseAssetDownloadURL("Ignaciojeria", "wede", "v1.0.1", "linux", "amd64")
+	downloadURL, err := resolveGitHubReleaseAssetDownloadURL("Ignaciojeria", "wede", "v1.0.2", "linux", "amd64")
 	if err != nil {
 		return err
 	}
@@ -2528,14 +2528,20 @@ if [ -f "$HOME/.einar/wede.pid" ] && kill -0 "$(cat "$HOME/.einar/wede.pid")" 2>
   sleep 1
 fi
 cd "$PROJECT_DIR"
-nohup "$HOME/.local/bin/wede" > "$HOME/.einar/wede.log" 2>&1 &
+nohup "$HOME/.local/bin/wede" "$PROJECT_DIR" -p 9090 > "$HOME/.einar/wede.log" 2>&1 &
 echo $! > "$HOME/.einar/wede.pid"
 sleep 2
 if ! kill -0 "$(cat "$HOME/.einar/wede.pid")" 2>/dev/null; then
   tail -n 120 "$HOME/.einar/wede.log" 2>/dev/null || true
   exit 24
 fi
-echo "wede ready: $HOME/.local/bin/wede config=$CONFIG_FILE project_config=$PROJECT_CONFIG_FILE"
+if command -v curl >/dev/null 2>&1; then
+  curl -fsSI http://127.0.0.1:9090/ >/dev/null || {
+    tail -n 120 "$HOME/.einar/wede.log" 2>/dev/null || true
+    exit 25
+  }
+fi
+echo "wede ready: $HOME/.local/bin/wede project=$PROJECT_DIR config=$CONFIG_FILE project_config=$PROJECT_CONFIG_FILE"
 `, shellQuote(remotePath), shellQuote(downloadURL))
 	msg, err := runSSHScriptWithTimeout(target, script, 4*time.Minute)
 	if err != nil {
