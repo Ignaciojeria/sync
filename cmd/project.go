@@ -1332,7 +1332,7 @@ func shouldRedirectToLogin(r *http.Request) bool {
 func isEditorPath(path string) bool {
 	path = strings.TrimSpace(path)
 	switch path {
-	case "/editor", "/api", "/manifest.json", "/favicon.ico", "/icon.svg", "/icon-180.png":
+	case "/editor", "/api":
 		return true
 	default:
 		return strings.HasPrefix(path, "/editor/") ||
@@ -1343,7 +1343,7 @@ func isEditorPath(path string) bool {
 
 func isPublicPath(path string) bool {
 	switch strings.TrimSpace(path) {
-	case "/auth/login", "/auth/login/google", "/auth/callback", "/auth/logout":
+	case "/auth/login", "/auth/login/google", "/auth/callback", "/auth/logout", "/manifest.json", "/favicon.ico", "/icon.svg", "/icon-180.png":
 		return true
 	default:
 		return false
