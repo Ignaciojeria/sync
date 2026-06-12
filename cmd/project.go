@@ -7,6 +7,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -123,7 +124,8 @@ var initCmd = &cobra.Command{
 			return fmt.Errorf("no se pudo entrar a la carpeta local del proyecto: %w", err)
 		}
 
-		if err := ensureGoProjectScaffold(slug); err != nil {
+		bootstrapEmail := extractEmailFromJWT(cfg.Token)
+		if err := ensureGoProjectScaffold(slug, bootstrapEmail); err != nil {
 			return fmt.Errorf("no se pudo preparar scaffold Go base: %w", err)
 		}
 		if err := ensureProjectGitRepository(); err != nil {
@@ -358,6 +360,7 @@ var initCmd = &cobra.Command{
 
 		airStarted := false
 		mutagenReady := false
+		wedeReady := false
 		httpChecked := false
 		httpReady := false
 		httpCode := 0
@@ -405,6 +408,12 @@ var initCmd = &cobra.Command{
 			}
 		}
 
+		fmt.Println("🧩 Instalando y levantando Wede en la VM provisionada...")
+		if err := ensureRemoteWedeReady(&cfg); err != nil {
+			return fmt.Errorf("init incompleto: no se pudo instalar/iniciar wede: %w", err)
+		}
+		wedeReady = true
+
 		if strings.TrimSpace(cfg.LastVMHTTPSURL) != "" {
 			httpChecked = true
 			if airStarted {
@@ -439,6 +448,11 @@ var initCmd = &cobra.Command{
 			fmt.Println("   - Air: ⏭️  omitido (--skip-air-auto-start)")
 		} else {
 			fmt.Println("   - Air: ⚠️")
+		}
+		if wedeReady {
+			fmt.Println("   - Wede: ✅")
+		} else {
+			fmt.Println("   - Wede: ⚠️")
 		}
 		if !httpChecked {
 			fmt.Println("   - HTTP: ⏭️  sin URL")
@@ -548,6 +562,31 @@ func buildDatabaseURL(user, password, host string, port int, dbName string) stri
 	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", url.QueryEscape(user), url.QueryEscape(password), host, port, url.QueryEscape(dbName))
 }
 
+func extractEmailFromJWT(rawToken string) string {
+	rawToken = strings.TrimSpace(rawToken)
+	if rawToken == "" {
+		return ""
+	}
+	parts := strings.Split(rawToken, ".")
+	if len(parts) < 2 {
+		return ""
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return ""
+	}
+	var claims map[string]any
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return ""
+	}
+	for _, key := range []string{"email", "upn", "preferred_username"} {
+		if value, ok := claims[key].(string); ok && strings.Contains(strings.TrimSpace(value), "@") {
+			return strings.ToLower(strings.TrimSpace(value))
+		}
+	}
+	return ""
+}
+
 func maskDatabaseURL(raw string) string {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || u == nil || u.User == nil {
@@ -563,10 +602,15 @@ func maskDatabaseURL(raw string) string {
 	return u.String()
 }
 
-func ensureGoProjectScaffold(slug string) error {
+func ensureGoProjectScaffold(slug, bootstrapEmail string) error {
 	s := strings.TrimSpace(slug)
 	if s == "" {
 		s = "app"
+	}
+	bootstrapEmail = strings.ToLower(strings.TrimSpace(bootstrapEmail))
+	allowlistEntry := ""
+	if bootstrapEmail != "" {
+		allowlistEntry = fmt.Sprintf("\t%q: {},\n", bootstrapEmail)
 	}
 
 	if _, err := os.Stat("go.mod"); os.IsNotExist(err) {
@@ -927,7 +971,7 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 `, s+"/internal/shared/configuration", s+"/internal/shared/server/middleware"),
-		"internal/shared/server/middleware/middleware.go": `package middleware
+		"internal/shared/server/middleware/middleware.go": fmt.Sprintf(`package middleware
 
 import (
 	"context"
@@ -939,6 +983,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	%q
 
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"
@@ -990,6 +1036,10 @@ func JWTMiddleware(
 
 			if db != nil {
 				if claims, ok := claimsFromSessionCookie(r, w, db, conf); ok {
+					if !isAuthorizedPathClaims(r.URL.Path, claims) {
+						writeForbidden(w)
+						return
+					}
 					ctx := context.WithValue(r.Context(), claimsContextKey, claims)
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
@@ -998,6 +1048,10 @@ func JWTMiddleware(
 
 			authHeader := r.Header.Get("Authorization")
 			if !strings.HasPrefix(authHeader, "Bearer ") {
+				if shouldRedirectToLogin(r) {
+					http.Redirect(w, r, "/auth/login", http.StatusFound)
+					return
+				}
 				writeUnauthorized(w)
 				return
 			}
@@ -1005,7 +1059,15 @@ func JWTMiddleware(
 			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 			claims, err := parseJWTClaims(jwks, tokenString, issuer, audience)
 			if err != nil {
+				if shouldRedirectToLogin(r) {
+					http.Redirect(w, r, "/auth/login", http.StatusFound)
+					return
+				}
 				writeUnauthorized(w)
+				return
+			}
+			if !isAuthorizedPathClaims(r.URL.Path, claims) {
+				writeForbidden(w)
 				return
 			}
 
@@ -1245,6 +1307,40 @@ func firstStringClaim(claims jwt.MapClaims, keys ...string) string {
 	return ""
 }
 
+func isAuthorizedPathClaims(path string, claims jwt.MapClaims) bool {
+	email := firstStringClaim(claims, "email")
+	if strings.TrimSpace(email) == "" {
+		return true
+	}
+	if isEditorPath(path) {
+		return access.IsAllowedEditorEmail(email)
+	}
+	return access.IsAllowedAppEmail(email)
+}
+
+func shouldRedirectToLogin(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return false
+	}
+	accept := strings.ToLower(strings.TrimSpace(r.Header.Get("Accept")))
+	return strings.Contains(accept, "text/html") || strings.Contains(accept, "application/xhtml+xml")
+}
+
+func isEditorPath(path string) bool {
+	path = strings.TrimSpace(path)
+	switch path {
+	case "/editor", "/api", "/manifest.json", "/favicon.ico", "/icon.svg", "/icon-180.png":
+		return true
+	default:
+		return strings.HasPrefix(path, "/editor/") ||
+			strings.HasPrefix(path, "/assets/") ||
+			strings.HasPrefix(path, "/api/")
+	}
+}
+
 func isPublicPath(path string) bool {
 	switch strings.TrimSpace(path) {
 	case "/auth/login", "/auth/login/google", "/auth/callback", "/auth/logout":
@@ -1261,7 +1357,51 @@ func writeUnauthorized(w http.ResponseWriter) {
 		"error": "unauthorized",
 	})
 }
-`,
+
+func writeForbidden(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusForbidden)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error": "forbidden",
+	})
+}
+`, s+"/internal/shared/access"),
+		"internal/shared/access/allowlist.go": fmt.Sprintf(`package access
+
+import "strings"
+
+func IsAllowedAppEmail(email string) bool {
+	email = normalizeEmail(email)
+	if email == "" {
+		return false
+	}
+	_, ok := allowedAppEmails[email]
+	return ok
+}
+
+func IsAllowedEditorEmail(email string) bool {
+	email = normalizeEmail(email)
+	if email == "" {
+		return false
+	}
+	_, ok := allowedEditorEmails[email]
+	return ok
+}
+
+func IsAllowedAnyEmail(email string) bool {
+	return IsAllowedAppEmail(email) || IsAllowedEditorEmail(email)
+}
+
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+var allowedAppEmails = map[string]struct{}{
+%s}
+
+var allowedEditorEmails = map[string]struct{}{
+%s}
+`, allowlistEntry, allowlistEntry),
 		"internal/adapter/in/web/hello.go": fmt.Sprintf(`package in
 
 import (
@@ -1271,12 +1411,85 @@ import (
 	"github.com/go-fuego/fuego"
 )
 
-var _ = ioc.Register(helloHandler)
+var _ = ioc.Register(helloWorldHandler)
 
-func helloHandler(s *server.Server) {
-	fuego.Get(s.Server, "/", func(c fuego.ContextNoBody) (string, error) {
-		return "Hello, World!", nil
+func helloWorldHandler(s *server.Server) {
+	fuego.All(s.Server, "/", func(c fuego.ContextNoBody) (string, error) {
+		return "hello world!", nil
 	})
+}
+`, s+"/internal/shared/server"),
+		"internal/adapter/in/web/wede.go": fmt.Sprintf(`package in
+
+import (
+	"log"
+	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"os"
+	"strings"
+	%q
+
+	"github.com/Ignaciojeria/ioc"
+	"github.com/go-fuego/fuego"
+)
+
+var _ = ioc.Register(wedeHandler)
+
+func wedeHandler(s *server.Server) {
+	upstream := strings.TrimSpace(os.Getenv("WEDE_UPSTREAM_URL"))
+	if upstream == "" {
+		upstream = "http://127.0.0.1:9090"
+	}
+
+	target, err := url.Parse(upstream)
+	if err != nil {
+		log.Printf("invalid WEDE_UPSTREAM_URL %q: %v", upstream, err)
+		return
+	}
+
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	originalDirector := proxy.Director
+	proxy.Director = func(r *http.Request) {
+		originalDirector(r)
+		r.Host = target.Host
+		r.URL.Path = strings.TrimPrefix(r.URL.Path, "/editor")
+		if r.URL.Path == "" {
+			r.URL.Path = "/"
+		}
+		r.URL.RawPath = r.URL.Path
+		r.Header.Set("X-Forwarded-Host", r.Header.Get("Host"))
+		r.Header.Set("X-Forwarded-Proto", forwardedProto(r))
+		if prefix := strings.TrimSpace(r.Header.Get("X-Forwarded-Prefix")); prefix == "" {
+			r.Header.Set("X-Forwarded-Prefix", "/editor")
+		}
+	}
+	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		log.Printf("wede proxy error: %v", err)
+		http.Error(w, "wede upstream unavailable", http.StatusBadGateway)
+	}
+
+	for _, path := range []string{
+		"/editor", "/editor/",
+		"/assets/",
+		"/api/", "/api",
+		"/manifest.json",
+		"/favicon.ico",
+		"/icon.svg",
+		"/icon-180.png",
+	} {
+		fuego.Handle(s.Server, path, proxy)
+	}
+}
+
+func forwardedProto(r *http.Request) string {
+	if proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); proto != "" {
+		return proto
+	}
+	if r.TLS != nil {
+		return "https"
+	}
+	return "http"
 }
 `, s+"/internal/shared/server"),
 		"internal/adapter/in/web/auth_login.go": fmt.Sprintf(`package in
@@ -1451,6 +1664,7 @@ import (
 
 	%q
 	%q
+	%q
 
 	"github.com/Ignaciojeria/ioc"
 	"github.com/MicahParks/keyfunc/v3"
@@ -1495,6 +1709,9 @@ func authCallbackHandler(s *server.Server, conf configuration.Conf, db *sqlx.DB,
 		identity, err := extractIdentityFromTokens(conf, jwks, resp)
 		if err != nil {
 			return nil, fuego.HTTPError{Status: http.StatusBadGateway, Detail: err.Error()}
+		}
+		if !access.IsAllowedAnyEmail(identity.Email) {
+			return nil, fuego.HTTPError{Status: http.StatusForbidden, Detail: "email sin acceso autorizado al sistema"}
 		}
 		sessionID, err := persistUserSession(db, identity, resp)
 		if err != nil {
@@ -1653,7 +1870,7 @@ func firstNonEmpty(values ...string) string {
 	}
 	return ""
 }
-`, s+"/internal/shared/configuration", s+"/internal/shared/server"),
+`, s+"/internal/shared/access", s+"/internal/shared/configuration", s+"/internal/shared/server"),
 	}
 
 	for path, content := range sharedFiles {
@@ -2222,6 +2439,165 @@ func setupAndStartRemoteAir(cfg *config.Config) error {
 	return nil
 }
 
+func ensureRemoteWedeReady(cfg *config.Config) error {
+	if err := ensureWorkspaceBranchLock(cfg); err != nil {
+		return err
+	}
+	if err := ensureWorkspaceOwnership(cfg, false); err != nil {
+		return err
+	}
+	destination := strings.TrimSpace(initMutagenDestination)
+	if destination == "" {
+		destination = strings.TrimSpace(cfg.MutagenDestination)
+	}
+	destination = normalizeMutagenDestinationForProject(destination)
+	target, remotePath, ok := sshTargetAndPathFromMutagenDestination(destination)
+	if !ok {
+		return fmt.Errorf("no se pudo resolver destino remoto para wede")
+	}
+	if strings.TrimSpace(remotePath) == "" {
+		remotePath = "$HOME"
+	}
+
+	downloadURL, err := resolveGitHubReleaseAssetDownloadURL("Ignaciojeria", "wede", "v1.0.1", "linux", "amd64")
+	if err != nil {
+		return err
+	}
+
+	script := fmt.Sprintf(`set -eu
+PROJECT_DIR=%s
+CONFIG_DIR="$HOME/.config/wede"
+CONFIG_FILE="$CONFIG_DIR/wede.config.json"
+PROJECT_CONFIG_FILE="$PROJECT_DIR/wede.config.json"
+WEDE_PASSWORD="wede-dev"
+mkdir -p "$HOME/.local/bin" "$HOME/.cache/einar" "$HOME/.einar" "$CONFIG_DIR" "$PROJECT_DIR"
+if ! grep -F 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc" >/dev/null 2>&1; then
+  printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$HOME/.bashrc"
+fi
+tmpdir=$(mktemp -d)
+cleanup() { rm -rf "$tmpdir"; }
+trap cleanup EXIT
+asset_url=%s
+asset_file="$tmpdir/$(basename "$asset_url")"
+if command -v curl >/dev/null 2>&1; then
+  curl -fsSL "$asset_url" -o "$asset_file"
+elif command -v wget >/dev/null 2>&1; then
+  wget -qO "$asset_file" "$asset_url"
+else
+  echo "missing curl/wget"
+  exit 21
+fi
+case "$asset_file" in
+  *.tar.gz|*.tgz)
+    tar -xzf "$asset_file" -C "$tmpdir"
+    ;;
+  *.zip)
+    if ! command -v unzip >/dev/null 2>&1; then
+      echo "missing unzip"
+      exit 22
+    fi
+    unzip -q "$asset_file" -d "$tmpdir"
+    ;;
+  *)
+    chmod +x "$asset_file"
+    install -m 0755 "$asset_file" "$HOME/.local/bin/wede"
+    ;;
+esac
+if [ ! -x "$HOME/.local/bin/wede" ]; then
+  found=$(find "$tmpdir" -type f \( -name wede -o -name 'wede-*' \) | head -n 1 || true)
+  if [ -z "$found" ]; then
+    echo "wede binary not found in release asset"
+    exit 23
+  fi
+  install -m 0755 "$found" "$HOME/.local/bin/wede"
+fi
+cat > "$CONFIG_FILE" <<EOF
+{
+  "password": "$WEDE_PASSWORD",
+  "port": "9090"
+}
+EOF
+cat > "$PROJECT_CONFIG_FILE" <<EOF
+{
+  "password": "$WEDE_PASSWORD",
+  "port": "9090"
+}
+EOF
+if [ -f "$HOME/.einar/wede.pid" ] && kill -0 "$(cat "$HOME/.einar/wede.pid")" 2>/dev/null; then
+  kill "$(cat "$HOME/.einar/wede.pid")" 2>/dev/null || true
+  sleep 1
+fi
+cd "$PROJECT_DIR"
+nohup "$HOME/.local/bin/wede" > "$HOME/.einar/wede.log" 2>&1 &
+echo $! > "$HOME/.einar/wede.pid"
+sleep 2
+if ! kill -0 "$(cat "$HOME/.einar/wede.pid")" 2>/dev/null; then
+  tail -n 120 "$HOME/.einar/wede.log" 2>/dev/null || true
+  exit 24
+fi
+echo "wede ready: $HOME/.local/bin/wede config=$CONFIG_FILE project_config=$PROJECT_CONFIG_FILE"
+`, shellQuote(remotePath), shellQuote(downloadURL))
+	msg, err := runSSHScriptWithTimeout(target, script, 4*time.Minute)
+	if err != nil {
+		if strings.TrimSpace(msg) != "" {
+			return fmt.Errorf("falló instalación/inicio de wede: %s", strings.TrimSpace(msg))
+		}
+		return fmt.Errorf("falló instalación/inicio de wede: %w", err)
+	}
+	fmt.Printf("✅ Wede listo en %s\n", target)
+	return nil
+}
+
+type githubReleaseAsset struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+}
+
+type githubRelease struct {
+	Assets []githubReleaseAsset `json:"assets"`
+}
+
+func resolveGitHubReleaseAssetDownloadURL(owner, repo, tag, goos, goarch string) (string, error) {
+	endpoint := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/tags/%s", owner, repo, tag)
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return "", fmt.Errorf("github release request falló: %s body=%s", resp.Status, strings.TrimSpace(string(body)))
+	}
+	var release githubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return "", err
+	}
+	wantOS := strings.ToLower(strings.TrimSpace(goos))
+	wantArch := strings.ToLower(strings.TrimSpace(goarch))
+	for _, asset := range release.Assets {
+		name := strings.ToLower(strings.TrimSpace(asset.Name))
+		if name == "" || strings.TrimSpace(asset.BrowserDownloadURL) == "" {
+			continue
+		}
+		if !strings.Contains(name, wantOS) {
+			continue
+		}
+		if !(strings.Contains(name, wantArch) || (wantArch == "amd64" && strings.Contains(name, "x86_64"))) {
+			continue
+		}
+		if strings.Contains(name, ".sha") || strings.Contains(name, "checksum") || strings.Contains(name, "checksums") {
+			continue
+		}
+		return strings.TrimSpace(asset.BrowserDownloadURL), nil
+	}
+	return "", fmt.Errorf("no se encontró asset de wede %s/%s para release %s", goos, goarch, tag)
+}
+
 func ensureMutagenOnWindows() error {
 	if _, err := exec.LookPath("mutagen"); err == nil {
 		return nil
@@ -2402,26 +2778,26 @@ func normalizeProjectAuth(resp *api.CreateProjectResponse) *api.ProjectAuth {
 	}
 
 	normalized := &api.ProjectAuth{
-		Type:                  firstNonEmptyTrimmed(strings.TrimSpace(auth.Type), "oidc"),
-		Provider:              firstNonEmptyTrimmed(strings.TrimSpace(auth.Provider), "casdoor"),
-		Issuer:                issuer,
-		DiscoveryURL:          firstNonEmptyTrimmed(strings.TrimSpace(auth.DiscoveryURL), issuer+"/.well-known/openid-configuration"),
-		JWKSURI:               firstNonEmptyTrimmed(strings.TrimSpace(auth.JWKSURI), issuer+"/api/certs"),
-		AuthorizationEndpoint: firstNonEmptyTrimmed(strings.TrimSpace(auth.AuthorizationEndpoint), issuer+"/login/oauth/authorize"),
-		TokenEndpoint:         firstNonEmptyTrimmed(strings.TrimSpace(auth.TokenEndpoint), issuer+"/api/login/oauth/access_token"),
-		UserinfoEndpoint:      firstNonEmptyTrimmed(strings.TrimSpace(auth.UserinfoEndpoint), issuer+"/api/userinfo"),
-		ClientID:              strings.TrimSpace(auth.ClientID),
-		ClientSecret:          clientSecret,
-		ClientSecretRef:       clientSecretRef,
-		RedirectURI:           strings.TrimSpace(auth.RedirectURI),
-		LogoutURI:             strings.TrimSpace(auth.LogoutURI),
-		PostLogoutRedirectURI: strings.TrimSpace(auth.PostLogoutRedirectURI),
-		Scopes:                scopes,
-		LoginURL:              strings.TrimSpace(auth.LoginURL),
-		GoogleLoginURL:        strings.TrimSpace(auth.GoogleLoginURL),
+		Type:                   firstNonEmptyTrimmed(strings.TrimSpace(auth.Type), "oidc"),
+		Provider:               firstNonEmptyTrimmed(strings.TrimSpace(auth.Provider), "casdoor"),
+		Issuer:                 issuer,
+		DiscoveryURL:           firstNonEmptyTrimmed(strings.TrimSpace(auth.DiscoveryURL), issuer+"/.well-known/openid-configuration"),
+		JWKSURI:                firstNonEmptyTrimmed(strings.TrimSpace(auth.JWKSURI), issuer+"/api/certs"),
+		AuthorizationEndpoint:  firstNonEmptyTrimmed(strings.TrimSpace(auth.AuthorizationEndpoint), issuer+"/login/oauth/authorize"),
+		TokenEndpoint:          firstNonEmptyTrimmed(strings.TrimSpace(auth.TokenEndpoint), issuer+"/api/login/oauth/access_token"),
+		UserinfoEndpoint:       firstNonEmptyTrimmed(strings.TrimSpace(auth.UserinfoEndpoint), issuer+"/api/userinfo"),
+		ClientID:               strings.TrimSpace(auth.ClientID),
+		ClientSecret:           clientSecret,
+		ClientSecretRef:        clientSecretRef,
+		RedirectURI:            strings.TrimSpace(auth.RedirectURI),
+		LogoutURI:              strings.TrimSpace(auth.LogoutURI),
+		PostLogoutRedirectURI:  strings.TrimSpace(auth.PostLogoutRedirectURI),
+		Scopes:                 scopes,
+		LoginURL:               strings.TrimSpace(auth.LoginURL),
+		GoogleLoginURL:         strings.TrimSpace(auth.GoogleLoginURL),
 		UpstreamGoogleClientID: strings.TrimSpace(auth.UpstreamGoogleClientID),
-		Organization:          strings.TrimSpace(auth.Organization),
-		Application:           strings.TrimSpace(auth.Application),
+		Organization:           strings.TrimSpace(auth.Organization),
+		Application:            strings.TrimSpace(auth.Application),
 	}
 	if normalized.LoginURL == "" {
 		normalized.LoginURL = buildOIDCLoginURL(normalized.AuthorizationEndpoint, normalized.ClientID, normalized.RedirectURI, normalized.Scopes)
@@ -2508,8 +2884,8 @@ func materializeProjectEnv(cfg config.Config) error {
 		}
 	}
 	entries := map[string]string{
-		"PROJECT_NAME":                    strings.TrimSpace(firstNonEmpty(cfg.LastProjectSlug, cfg.LastProjectID)),
-		"DATABASE_URL":                    databaseURLForRuntime,
+		"PROJECT_NAME":                   strings.TrimSpace(firstNonEmpty(cfg.LastProjectSlug, cfg.LastProjectID)),
+		"DATABASE_URL":                   databaseURLForRuntime,
 		"OIDC_TYPE":                      strings.TrimSpace(cfg.OIDCType),
 		"OIDC_PROVIDER":                  strings.TrimSpace(cfg.OIDCProvider),
 		"OIDC_ISSUER":                    strings.TrimSpace(cfg.OIDCIssuer),
