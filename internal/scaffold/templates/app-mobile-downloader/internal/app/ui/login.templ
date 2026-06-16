@@ -1,0 +1,140 @@
+package ui
+
+templ LoginPage() {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>Sync 4 Run Login</title>
+			<link rel="preconnect" href="https://fonts.googleapis.com"/>
+			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+			<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+			<style>
+				:root {
+					--bg: #f6f8fc;
+				}
+				* { box-sizing: border-box; }
+				body {
+					margin: 0;
+					min-height: 100vh;
+					font-family: "Sora", "Avenir Next", "Helvetica Neue", sans-serif;
+					background: var(--bg) url("/login-bg.svg") center / cover no-repeat;
+					color: #0b1b3f;
+					display: grid;
+					place-items: center;
+					padding: 24px;
+				}
+				.wrap {
+					width: min(760px, 100%);
+					text-align: center;
+				}
+				.logo {
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					gap: 12px;
+					margin-bottom: 0;
+					color: #00153d;
+					font-size: clamp(58px, 6.2vw, 86px);
+					font-weight: 600;
+					letter-spacing: 0.015em;
+					line-height: 1;
+				}
+				.logo-four,
+				.logo-dot {
+					color: #1677ff;
+				}
+				.logo-four {
+					font-size: 1.16em;
+					font-weight: 500;
+					letter-spacing: -0.08em;
+				}
+				.logo-word {
+					display: inline-block;
+				}
+				.tagline {
+					margin: 14px 0 74px;
+					color: #10213f;
+					font-size: clamp(12px, 1.15vw, 16px);
+					font-weight: 600;
+					letter-spacing: 0.34em;
+					line-height: 1.25;
+					white-space: nowrap;
+				}
+				.btn {
+					width: min(470px, 100%);
+					margin: 0 auto;
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					gap: 18px;
+					background: #ffffff;
+					color: #1f232b;
+					border: 1px solid #d9e1ef;
+					border-radius: 10px;
+					box-shadow: 0 10px 30px rgba(15, 31, 74, 0.08);
+					font-size: 22px;
+					font-weight: 600;
+					line-height: 1;
+					text-decoration: none;
+					padding: 18px 24px;
+					transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+				}
+				.btn:hover {
+					transform: translateY(-1px);
+					border-color: #c9d5eb;
+					box-shadow: 0 14px 34px rgba(15, 31, 74, 0.12);
+				}
+				.btn:focus-visible {
+					outline: 3px solid #1677ff;
+					outline-offset: 4px;
+				}
+				.google-icon {
+					width: 30px;
+					height: 30px;
+					display: block;
+					flex: 0 0 auto;
+				}
+				.btn-label {
+					display: block;
+					line-height: 1;
+					transform: translateY(1px);
+				}
+				.secure {
+					margin-top: 28px;
+					color: #8a9ab6;
+					font-size: 15px;
+				}
+				.secure strong { color: #7f91af; font-weight: 500; }
+				@media (max-width: 560px) {
+					.logo { gap: 8px; font-size: clamp(42px, 13vw, 60px); margin-bottom: 0; }
+					.tagline { margin: 12px 0 44px; font-size: 10px; letter-spacing: 0.26em; white-space: normal; }
+					.btn { gap: 14px; font-size: 18px; padding: 16px 18px; }
+					.google-icon { width: 27px; height: 27px; }
+					.secure { font-size: 14px; }
+				}
+			</style>
+		</head>
+		<body>
+			<main class="wrap">
+				<div class="logo" aria-label="Sync 4 Run">
+					<span class="logo-word">sync</span>
+					<span><span class="logo-four">4</span><span class="logo-dot">.</span></span>
+					<span class="logo-word">run</span>
+				</div>
+				<div class="tagline">PERSISTENT CLOUD WORKSPACES FOR AI AGENTS</div>
+				<a class="btn" href="/auth/login/google" aria-label="Continue with Google">
+					<svg class="google-icon" viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+						<path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.91c1.7-1.57 2.69-3.88 2.69-6.62z"></path>
+						<path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.26c-.8.54-1.84.86-3.05.86-2.35 0-4.34-1.59-5.05-3.72H.94v2.33A9 9 0 0 0 9 18z"></path>
+						<path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.16.28-1.7V4.97H.94A9 9 0 0 0 0 9c0 1.45.34 2.82.94 4.03l3.01-2.33z"></path>
+						<path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58A8.64 8.64 0 0 0 9 0 9 9 0 0 0 .94 4.97L3.95 7.3C4.66 5.17 6.65 3.58 9 3.58z"></path>
+					</svg>
+					<span class="btn-label">Continue with Google</span>
+				</a>
+				<p class="secure">Secure authentication powered by <strong>Sync.</strong></p>
+			</main>
+		</body>
+	</html>
+}

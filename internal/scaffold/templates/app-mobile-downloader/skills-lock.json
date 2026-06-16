@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "daisyui": {
+      "source": "saadeghi/daisyui",
+      "sourceType": "github",
+      "skillPath": "skills/daisyui/SKILL.md",
+      "computedHash": "a98221a5c8f50bfb0dbaf4d0e52982598981bc5e472806814e118ee7df2a9712"
+    },
+    "htmx": {
+      "source": "gopherguides/gopher-ai",
+      "sourceType": "github",
+      "skillPath": "plugins/go-web/skills/htmx/SKILL.md",
+      "computedHash": "554118dda7a493a0fa2b33cfc3c1e04de1989541fcdc37cab701eae231e6bfb3"
+    },
+    "modern-web-guidance": {
+      "source": "GoogleChrome/modern-web-guidance",
+      "sourceType": "github",
+      "skillPath": "skills/modern-web-guidance/SKILL.md",
+      "computedHash": "9f4a50b16567d3e146014ca1e36cf31d11a9b28468eebdbbbee06ffe3b08dda8"
+    }
+  }
+}

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="170" viewBox="0 0 760 170" role="img" aria-label="Sync 4 Run logo">
+  <title>Sync 4 Run logo</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@700;800&amp;display=swap');
+  </style>
+  <text x="380" y="82" text-anchor="middle" dominant-baseline="middle" font-family="Sora, Arial Rounded MT Bold, Avenir Next, Helvetica Neue, Segoe UI, sans-serif" font-size="86" font-weight="800" letter-spacing="5">
+    <tspan fill="#00153d">sync</tspan>
+    <tspan dx="18" fill="#1677ff" font-size="96">4</tspan>
+    <tspan dx="-2" fill="#1677ff">.</tspan>
+    <tspan dx="4" fill="#00153d">run</tspan>
+  </text>
+  <text x="380" y="139" text-anchor="middle" font-family="Sora, Avenir Next, Helvetica Neue, Segoe UI, sans-serif" font-size="16" font-weight="700" letter-spacing="8" fill="#10213f">
+    PERSISTENT CLOUD WORKSPACES FOR AI AGENTS
+  </text>
+</svg>

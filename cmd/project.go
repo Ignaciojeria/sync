@@ -23,6 +23,7 @@ import (
 
 	"github.com/Ignaciojeria/sync/internal/api"
 	"github.com/Ignaciojeria/sync/internal/config"
+	"github.com/Ignaciojeria/sync/internal/scaffold"
 
 	"github.com/spf13/cobra"
 )
@@ -612,6 +613,13 @@ func ensureGoProjectScaffold(slug, bootstrapEmail string) error {
 	if bootstrapEmail != "" {
 		allowlistEntry = fmt.Sprintf("\t%q: {},\n", bootstrapEmail)
 	}
+	if err := scaffold.MaterializeAppMobileDownloader(".", s, bootstrapEmail); err != nil {
+		return err
+	}
+	fmt.Println("✅ scaffold app-mobile-downloader generado")
+	if strings.TrimSpace(os.Getenv("EINAR_USE_LEGACY_INLINE_SCAFFOLD")) != "true" {
+		return nil
+	}
 
 	if _, err := os.Stat("go.mod"); os.IsNotExist(err) {
 		goMod := fmt.Sprintf("module %s\n\ngo 1.22\n", s)
@@ -1182,7 +1190,7 @@ func refreshSessionTokens(db *sqlx.DB, conf oidcConfiguration, rec *sessionRecor
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("refresh token exchange failed with status %d", resp.StatusCode)
+		return fmt.Errorf("refresh token exchange failed with status %%d", resp.StatusCode)
 	}
 
 	var out map[string]any
@@ -1444,7 +1452,7 @@ func wedeHandler(s *server.Server) {
 
 	target, err := url.Parse(upstream)
 	if err != nil {
-		log.Printf("invalid WEDE_UPSTREAM_URL %q: %v", upstream, err)
+		log.Printf("invalid WEDE_UPSTREAM_URL %%q: %%v", upstream, err)
 		return
 	}
 
@@ -1465,7 +1473,7 @@ func wedeHandler(s *server.Server) {
 		}
 	}
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		log.Printf("wede proxy error: %v", err)
+		log.Printf("wede proxy error: %%v", err)
 		http.Error(w, "wede upstream unavailable", http.StatusBadGateway)
 	}
 
@@ -1894,9 +1902,10 @@ func airTomlContent() string {
 tmp_dir = "tmp"
 
 [build]
-  cmd = "sh -c 'if [ -f ./cmd/api/main.go ]; then go build -o ./tmp/main ./cmd/api; elif [ -f ./cmd/main.go ]; then go build -o ./tmp/main ./cmd; else go build -o ./tmp/main .; fi'"
+	cmd = "sh -c 'TEMPL_BIN=$(command -v templ || true); if [ -z \"$TEMPL_BIN\" ] && [ -x \"$HOME/go/bin/templ\" ]; then TEMPL_BIN=\"$HOME/go/bin/templ\"; fi; if [ -z \"$TEMPL_BIN\" ]; then echo \"templ not found; run: go install github.com/a-h/templ/cmd/templ@latest\"; exit 127; fi; \"$TEMPL_BIN\" generate && if [ -f ./cmd/api/main.go ]; then go build -o ./tmp/main ./cmd/api; elif [ -f ./cmd/main.go ]; then go build -o ./tmp/main ./cmd; else go build -o ./tmp/main .; fi'"
   bin = "./tmp/main"
-  include_ext = ["go", "tpl", "tmpl", "html"]
+	include_ext = ["go", "templ", "tpl", "tmpl", "html"]
+	exclude_ext = ["_templ.go"]
   exclude_dir = ["assets", "tmp", "vendor", "node_modules", ".git", ".einar"]
   delay = 500
 
@@ -2400,7 +2409,7 @@ func setupAndStartRemoteAir(cfg *config.Config) error {
 		return fmt.Errorf("no se pudo resolver destino remoto para air")
 	}
 
-	installCmd := `if ! command -v go >/dev/null 2>&1; then echo "missing go"; exit 21; fi; if ! command -v air >/dev/null 2>&1 && [ ! -x "$HOME/go/bin/air" ]; then go install github.com/air-verse/air@latest; fi; if command -v air >/dev/null 2>&1; then echo "air ready: $(command -v air)"; elif [ -x "$HOME/go/bin/air" ]; then echo "air ready: $HOME/go/bin/air"; else echo "missing air after install"; exit 22; fi`
+	installCmd := `if ! command -v go >/dev/null 2>&1; then echo "missing go"; exit 21; fi; if ! command -v air >/dev/null 2>&1 && [ ! -x "$HOME/go/bin/air" ]; then go install github.com/air-verse/air@latest; fi; if ! command -v templ >/dev/null 2>&1 && [ ! -x "$HOME/go/bin/templ" ]; then go install github.com/a-h/templ/cmd/templ@v0.3.1020; fi; if command -v air >/dev/null 2>&1; then echo "air ready: $(command -v air)"; elif [ -x "$HOME/go/bin/air" ]; then echo "air ready: $HOME/go/bin/air"; else echo "missing air after install"; exit 22; fi; if command -v templ >/dev/null 2>&1; then echo "templ ready: $(command -v templ)"; elif [ -x "$HOME/go/bin/templ" ]; then echo "templ ready: $HOME/go/bin/templ"; else echo "missing templ after install"; exit 23; fi`
 	msg, err := runSSHScriptWithTimeout(target, installCmd, 4*time.Minute)
 	if err != nil {
 		if msg != "" {
@@ -2412,7 +2421,7 @@ func setupAndStartRemoteAir(cfg *config.Config) error {
 		return fmt.Errorf("falló instalación/verificación de air: %w", err)
 	}
 
-	remoteEnsureAirToml := fmt.Sprintf("cd %q && if [ ! -f .air.toml ]; then cat > .air.toml <<'EOF'\n%s\nEOF\n echo 'generated .air.toml remotely'; fi", remotePath, airTomlContent())
+	remoteEnsureAirToml := fmt.Sprintf("cd %q && cat > .air.toml <<'EOF'\n%s\nEOF\n echo 'synced .air.toml remotely'", remotePath, airTomlContent())
 	msg, err = runSSHScriptWithTimeout(target, remoteEnsureAirToml, 45*time.Second)
 	if err != nil {
 		if msg != "" {
@@ -2421,7 +2430,7 @@ func setupAndStartRemoteAir(cfg *config.Config) error {
 		return fmt.Errorf("falló preparación remota de .air.toml: %w", err)
 	}
 
-	startCmd := fmt.Sprintf(`cd %q && mkdir -p tmp && AIR_BIN="$(command -v air || echo $HOME/go/bin/air)" && if [ ! -f .air.toml ]; then echo "missing .air.toml"; exit 12; fi && if [ -f .air.pid ] && kill -0 "$(cat .air.pid)" 2>/dev/null; then echo "air ya corriendo"; exit 0; fi && nohup "$AIR_BIN" -c .air.toml > .air.log 2>&1 & echo $! > .air.pid && sleep 1 && if [ -f .air.pid ] && kill -0 "$(cat .air.pid)" 2>/dev/null; then echo "air started pid=$(cat .air.pid)"; else echo "air exited"; tail -n 120 .air.log 2>/dev/null || true; exit 13; fi`, remotePath)
+	startCmd := fmt.Sprintf(`cd %q && mkdir -p tmp && AIR_BIN="$(command -v air || echo $HOME/go/bin/air)" && if [ ! -f .air.toml ]; then echo "missing .air.toml"; exit 12; fi && if [ -f .air.pid ] && kill -0 "$(cat .air.pid)" 2>/dev/null; then kill "$(cat .air.pid)" 2>/dev/null || true; rm -f .air.pid; fi && nohup "$AIR_BIN" -c .air.toml > .air.log 2>&1 & echo $! > .air.pid && sleep 1 && if [ -f .air.pid ] && kill -0 "$(cat .air.pid)" 2>/dev/null; then echo "air started pid=$(cat .air.pid)"; else echo "air exited"; tail -n 120 .air.log 2>/dev/null || true; exit 13; fi`, remotePath)
 	msg, err = runSSHScriptWithTimeout(target, startCmd, 60*time.Second)
 	if err != nil {
 		low := strings.ToLower(msg)
