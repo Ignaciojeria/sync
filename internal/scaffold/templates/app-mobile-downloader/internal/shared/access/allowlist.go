@@ -28,12 +28,6 @@ func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
 
-var allowedAppEmails = map[string]struct{}{
-	"ignaciovl.j@gmail.com":    {},
-	"ignaajeriag@falabella.cl": {},
-}
+var allowedAppEmails = map[string]struct{}{}
 
-var allowedEditorEmails = map[string]struct{}{
-	"ignaciovl.j@gmail.com":    {},
-	"ignaajeriag@falabella.cl": {},
-}
+var allowedEditorEmails = map[string]struct{}{}
