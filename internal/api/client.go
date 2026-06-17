@@ -200,6 +200,14 @@ func (c *Client) CreatePostgresProject(ctx context.Context, name, machineClientI
 	return &out, nil
 }
 
+type InviteProjectMemberResponse struct {
+	ProjectID string `json:"projectId"`
+	Slug      string `json:"slug"`
+	Email     string `json:"email"`
+	Role      string `json:"role"`
+	Granted   bool   `json:"granted"`
+}
+
 func (c *Client) GetProjectBySlug(ctx context.Context, slug string) (*ProjectPublicConfig, error) {
 	if c.token == "" {
 		return nil, fmt.Errorf("falta token (usa EINAR_TOKEN o 'login --token')")
@@ -210,6 +218,25 @@ func (c *Client) GetProjectBySlug(ctx context.Context, slug string) (*ProjectPub
 	escaped := url.PathEscape(slug)
 	var out ProjectPublicConfig
 	if err := c.doWithRetry(ctx, http.MethodGet, "/api/projects/by-slug/"+escaped, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) InviteProjectMember(ctx context.Context, slug, email string) (*InviteProjectMemberResponse, error) {
+	if c.token == "" {
+		return nil, fmt.Errorf("falta token (usa EINAR_TOKEN o 'login --token')")
+	}
+	if strings.TrimSpace(slug) == "" {
+		return nil, fmt.Errorf("slug requerido")
+	}
+	if strings.TrimSpace(email) == "" {
+		return nil, fmt.Errorf("email requerido")
+	}
+	escaped := url.PathEscape(strings.TrimSpace(slug))
+	payload := map[string]string{"email": strings.TrimSpace(email)}
+	var out InviteProjectMemberResponse
+	if err := c.doWithRetry(ctx, http.MethodPost, "/api/projects/"+escaped+"/invite", payload, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
