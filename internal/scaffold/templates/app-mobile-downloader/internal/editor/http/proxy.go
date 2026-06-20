@@ -33,6 +33,10 @@ func editorHandler(s *server.Server) {
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		handleEditorProxyError(w, err)
 	}
+	proxy.ModifyResponse = func(r *http.Response) error {
+		stripFrameDenyHeaders(r)
+		return nil
+	}
 
 	for _, path := range []string{
 		"/editor", "/editor/",
@@ -73,6 +77,12 @@ func rewriteEditorRequest(target *url.URL, originalDirector func(*http.Request),
 func handleEditorProxyError(w http.ResponseWriter, err error) {
 	log.Printf("editor proxy error: %v", err)
 	http.Error(w, "editor upstream unavailable", http.StatusBadGateway)
+}
+
+func stripFrameDenyHeaders(r *http.Response) {
+	// Eliminar headers que impiden embeber el upstream en un iframe
+	r.Header.Del("X-Frame-Options")
+	r.Header.Del("Content-Security-Policy")
 }
 
 func forwardedProto(r *http.Request) string {

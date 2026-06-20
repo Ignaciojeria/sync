@@ -30,69 +30,82 @@ Para cualquier tarea de frontend, páginas, layouts o componentes:
 
 ## Estructura del proyecto
 
-### Arquitectura hexagonal
+> **La estructura real y viva del proyecto está en `STRUCTURE.md`.**
+> **No confiar en el diagrama de esta sección para rutas de archivos.**
 
-```
-app-mobile-downloader/
-├── cmd/api/main.go                    # Punto de entrada. Carga dependencias vía IoC.
-├── internal/
-│   ├── adapter/in/web/               # Entrada HTTP (handlers)
-│   │   ├── hello.go                  # Handler raíz "/"
-│   │   ├── auth_login.go             # GET /auth/login, /auth/login/google
-│   │   ├── auth_callback.go          # GET /auth/callback, /auth/logout
-│   │   ├── wede.go                   # Proxy /editor/* → wede upstream
-│   │   └── test_report.go            # GET|POST /report/tests/* (tests + cobertura)
-│   ├── shared/
-│   │   ├── access/                   # Allowlists (editor/app emails)
-│   │   ├── configuration/            # Parseo de env vars
-│   │   ├── jwks/                     # Fetch de JWKS
-│   │   ├── server/                   # Setup de Fuego + middleware
-│   │   │   └── middleware/
-│   │   │       └── middleware.go     # JWT, session cookie, auth paths
-│   │   └── infrastructure/
-│   │       └── postgresql/           # Conexión y migraciones
-├── templates/                         # Plantillas go/templ
-│   ├── layout.templ                   # Layout base (DaisyUI + HTMX)
-│   ├── test_report.templ              # Página de reporte de tests
-│   └── *_templ.go                     # Auto-generados por `templ generate`
-└── .agents/skills/                    # Skills del proyecto (daisyui, htmx, modern-web-guidance)
-```
+### Arquitectura del proyecto
+
+El proyecto sigue una **arquitectura modular con capas** organizada por **bounded contexts** (feature-based layered architecture), con elementos de Clean Architecture. No es arquitectura hexagonal pura.
+
+Está organizado por **módulos de negocio** dentro de `internal/`. Cada módulo es una vertical autónoma con separación de capas internas:
+
+- `application/` — Lógica de negocio, casos de uso e **interfaces** (ej. `Repository`).
+  - No importa `http`, `infrastructure` ni `ui`.
+  - Define contratos que la infraestructura implementa (Inversión de Dependencias).
+- `http/` — Handlers HTTP, entrada del sistema.
+  - Orquesta llamadas a `application/`.
+  - Devuelve páginas completas o fragmentos HTMX según el request.
+- `infrastructure/` — Adaptadores de salida (ej. PostgreSQL).
+  - Implementa las interfaces definidas en `application/`.
+- `ui/` — Plantillas go/templ (`*.templ` y `*_templ.go`).
+  - Componentes visuales sin lógica de negocio.
+- `middleware/` — Middleware específico del módulo (ej. JWT para auth).
+
+Código compartido: `internal/shared/` (configuración, server, infraestructura común).
+
+**Módulos actuales (bounded contexts):**
+- `internal/auth/` — Autenticación OIDC, sesiones, JWT
+- `internal/editor/` — Proxy al editor upstream
+- `internal/home/` — Página de inicio
+- `internal/quality/` — Reporte de tests y cobertura
+- `internal/scheduler/` — Configuración de jobs (placeholder)
 
 ### Flujo de autenticación
 
-1. **Middleware JWT** (`middleware.go`) se aplica a todo el servidor.
+1. **Middleware JWT** (`internal/auth/middleware/middleware.go`) se aplica a todo el servidor.
 2. Rutas públicas: `/auth/login`, `/auth/callback`, `/auth/logout`, `/manifest.json`, `/favicon.ico`, `/icon.svg`, `/icon-180.png`.
-3. Rutas de editor (`/editor/*`, `/assets/*`, `/api/*`, `/report/*`) requieren email en `allowedEditorEmails`.
+3. Rutas de editor (`/editor/*`, `/assets/*`, `/api/*`, `/report/*`, `/scheduler/*`, `/editor-view`) requieren email en `allowedEditorEmails`.
 4. Para el resto, el email debe estar en `allowedAppEmails`.
 5. Modo dev: `AUTH_DISABLED=true` + header `X-Dev-Sub` salta la autenticación.
 
 ### Flujo de templates (go/templ)
 
-1. **Layout base** (`templates/layout.templ`):
+1. **Layout base** (`internal/ui/layout/layout.templ`):
    - Carga HTMX v2, DaisyUI v5, Tailwind CSS v4 vía CDN.
    - Define `data-theme="light"`.
    - Usa `children...` para contenido.
 
-2. **Página completa** (`templates/test_report.templ`):
-   - `@Layout("Título") { ... }` para render full page.
+2. **Layout con navegación** (`internal/ui/layout/layout_with_nav.templ`):
+   - Usa drawer de DaisyUI con sidebar colapsable.
+   - Incluye `@SideNav(nav)` para renderizar el menú lateral.
+   - Se usa vía `layout.RenderPage(c, "Título", contenido)`.
+
+3. **Sidenav** (`internal/ui/layout/sidenav.templ`):
+   - Renderiza el menú lateral con ítems según permisos (`nav.IsEditor`).
+   - Ítems: Inicio, Editor (Console), Quality, Scheduler, Cerrar sesión.
+
+4. **Página completa** (ej. `internal/dev/ui/page.templ`):
+   - El handler usa `layout.RenderPage(c, "Título", ui.Page(state))`.
+   - El template `.templ` NO debe envolver con `@Layout(...)`; es solo contenido.
    - Botón con `templ.Attributes` inyectando `hx-post`, `hx-target`, `hx-swap`, `hx-indicator`.
 
-3. **Fragmento parcial** (`templates/test_report.templ`):
-   - `templ TestResult(success bool, output string, coverPath string)` se usa para swaps HTMX.
-   - El handler `POST /report/tests/run` devuelve solo este fragmento, no la página completa.
+5. **Fragmento parcial** (ej. `internal/dev/ui/fragments.templ`):
+   - Componente `templ` sin layout, para usar en swaps HTMX (`hx-target`).
+   - El handler devuelve solo el fragmento, no la página completa, cuando detecta `HX-Request`.
 
 ### Reglas para agregar nuevos templates
 
-1. Crear archivo `.templ` en `templates/`.
-2. Para páginas: `@Layout("Título") { ... }`.
-3. Para fragmentos HTMX: componente `templ` sin layout, para usar en `hx-target`.
-4. Inyectar `hx-*` vía `templ.Attributes` para mantener componentes desacoplados.
-5. Ejecutar `templ generate` antes de compilar.
-6. Nunca editar manualmente los archivos `*_templ.go`.
+1. Crear archivo `.templ` dentro del módulo correspondiente (`internal/<modulo>/ui/`).
+2. Para layouts compartidos: `internal/ui/layout/`.
+3. Para páginas: definir componente `templ` sin layout; el handler aplica `layout.RenderPage(...)`.
+4. Para fragmentos HTMX: componente `templ` sin layout.
+5. Inyectar `hx-*` vía `templ.Attributes` para mantener componentes desacoplados.
+6. Ejecutar `templ generate` antes de compilar.
+7. Nunca editar manualmente los archivos `*_templ.go`.
 
 ### Reglas para agregar nuevos handlers
 
-1. Crear archivo en `internal/adapter/in/web/`.
+1. Crear archivo en el módulo correspondiente (`internal/<modulo>/http/`).
 2. Registrar con `ioc.Register(nombreHandler)`.
 3. Inyectar `*server.Server` como dependencia.
 4. Usar `fuego.Get`, `fuego.Post`, `fuego.Handle` según método.
@@ -113,6 +126,7 @@ app-mobile-downloader/
 3. Antes de usar componentes: revisar docs en `.agents/skills/daisyui/components/`.
 4. Después de editar `.templ`: `templ generate && go build ./...`.
 5. Antes de commit: `go test ./...` y verificar que compila.
+6. Después de cambios estructurales: ejecutar `scripts/generate-structure.sh` para regenerar `STRUCTURE.md`.
 
 ---
 

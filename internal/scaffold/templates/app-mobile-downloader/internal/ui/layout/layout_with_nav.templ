@@ -1,0 +1,57 @@
+package layout
+
+templ LayoutWithNav(title string, nav NavigationContext) {
+	<!DOCTYPE html>
+	<html lang="es" data-theme="light">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ title }</title>
+			<script src="https://unpkg.com/htmx.org@2.0.4" crossorigin="anonymous"></script>
+			<link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css"/>
+			<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+			<style>
+				/* Override DaisyUI drawer-side overflow */
+				.drawer-side {
+					overflow-y: visible !important;
+					max-height: none !important;
+				}
+				.drawer-side > *:not(.drawer-overlay) {
+					overflow-y: visible !important;
+				}
+			</style>
+		</head>
+		<body class="min-h-screen bg-base-100">
+		<div class="drawer lg:drawer-open min-h-screen">
+			<input id="nav-drawer" type="checkbox" class="drawer-toggle"/>
+			<div class="drawer-content flex flex-col min-h-screen">
+				<div class="navbar bg-base-100 lg:hidden border-b border-base-200">
+					<label for="nav-drawer" class="btn btn-square btn-ghost drawer-button">
+						<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+					</label>
+					<span class="text-lg font-semibold">{ title }</span>
+				</div>
+				<main class="p-4 md:p-6 flex-1 min-h-0 flex flex-col">
+					{ children... }
+				</main>
+			</div>
+				<div class="drawer-side">
+					<label for="nav-drawer" class="drawer-overlay"></label>
+					<div class="group bg-base-200 h-full flex flex-col min-h-0">
+						<input type="checkbox" id="sidebar-collapse" class="hidden" />
+						<div class="flex items-center justify-between px-4 py-3 border-b border-base-300">
+							<span class="text-sm font-bold tracking-tight group-has-checked:hidden">Sync 4 Run</span>
+							<span class="text-sm font-bold tracking-tight hidden group-has-checked:block">S4</span>
+							<label for="sidebar-collapse" class="btn btn-xs btn-ghost">
+								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 group-has-checked:rotate-180 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+							</label>
+						</div>
+						<div class="group-has-checked:w-16 w-52 transition-all duration-300 overflow-hidden flex-1 min-h-0">
+							@SideNav(nav)
+						</div>
+					</div>
+				</div>
+			</div>
+		</body>
+	</html>
+}

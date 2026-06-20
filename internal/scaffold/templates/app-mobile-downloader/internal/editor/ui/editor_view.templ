@@ -1,0 +1,12 @@
+package ui
+
+templ EditorView() {
+	<div class="flex flex-col h-[calc(100vh-4rem)]">
+		<iframe
+			src="/editor"
+			class="w-full flex-1 min-h-0 border-0"
+			title="Console"
+			sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+		></iframe>
+	</div>
+}

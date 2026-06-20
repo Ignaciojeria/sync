@@ -1,0 +1,141 @@
+package ui
+
+import (
+	"time"
+
+	schedulerapp "app-mobile-downloader/internal/scheduler/application"
+)
+
+func formatTime(t *time.Time) string {
+	if t == nil {
+		return "Nunca"
+	}
+	return t.Format("2006-01-02 15:04:05")
+}
+
+templ JobsPage(configs []schedulerapp.JobConfig) {
+	<div class="container mx-auto p-6">
+		<h1 class="text-3xl font-bold mb-6">Configuración de Jobs</h1>
+		<div class="mb-6">
+			<button
+				class="btn btn-primary"
+				hx-get="/scheduler/jobs/new"
+				hx-target="#job-form-container"
+				hx-swap="innerHTML"
+			>
+				Nuevo Job
+			</button>
+		</div>
+		<div id="job-form-container" class="mb-6"></div>
+		<div class="overflow-x-auto">
+			<table class="table table-zebra w-full">
+				<thead>
+					<tr>
+						<th>Nombre</th>
+						<th>Descripción</th>
+						<th>Schedule</th>
+						<th>Endpoint</th>
+						<th>Última ejecución</th>
+						<th>Estado</th>
+						<th>Acciones</th>
+					</tr>
+				</thead>
+				<tbody id="job-table-body">
+					for _, job := range configs {
+						@JobRow(job)
+					}
+				</tbody>
+			</table>
+		</div>
+	</div>
+}
+
+templ JobForm() {
+	<div class="card bg-base-100 shadow-xl border border-base-200">
+		<div class="card-body">
+			<h2 class="card-title text-lg">Nuevo Job</h2>
+			<form
+				hx-post="/scheduler/jobs"
+				hx-target="#job-table-body"
+				hx-swap="beforeend"
+				hx-on::after-request="if(event.detail.successful) this.reset()"
+				class="space-y-3"
+			>
+				<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+					<div class="form-control">
+						<label class="label"><span class="label-text">Nombre</span></label>
+						<input type="text" name="name" class="input input-bordered" required placeholder="nombre_unico"/>
+					</div>
+					<div class="form-control">
+						<label class="label"><span class="label-text">Schedule (cron)</span></label>
+						<input type="text" name="schedule" class="input input-bordered" required value="*/5 * * * *"/>
+					</div>
+					<div class="form-control md:col-span-2">
+						<label class="label"><span class="label-text">Descripción</span></label>
+						<input type="text" name="description" class="input input-bordered" placeholder="Descripción del job"/>
+					</div>
+					<div class="form-control md:col-span-2">
+						<label class="label"><span class="label-text">Endpoint</span></label>
+						<input type="text" name="endpoint" class="input input-bordered" required placeholder="/api/internal/anomaly/detect"/>
+					</div>
+				</div>
+				<div class="card-actions justify-end mt-2">
+					<button type="submit" class="btn btn-primary btn-sm">Crear</button>
+					<button type="button" class="btn btn-ghost btn-sm" hx-get="/scheduler/jobs/cancel" hx-target="#job-form-container" hx-swap="innerHTML">Cancelar</button>
+				</div>
+			</form>
+		</div>
+	</div>
+}
+
+templ EmptyForm() {
+	<div></div>
+}
+
+templ JobRow(job schedulerapp.JobConfig) {
+	<tr id={ "job-row-" + job.ID }>
+		<td class="font-medium">{ job.Name }</td>
+		<td>{ job.Description }</td>
+		<td><code class="badge badge-neutral whitespace-nowrap text-xs">{ job.Schedule }</code></td>
+		<td><code class="text-xs">{ job.Endpoint }</code></td>
+		<td>{ formatTime(job.LastRunAt) }</td>
+		<td>
+			if job.Enabled {
+				<span class="badge badge-success">Activo</span>
+			} else {
+				<span class="badge badge-ghost">Inactivo</span>
+			}
+		</td>
+		<td>
+			<div class="flex gap-2">
+				<button
+					class="btn btn-sm"
+					if job.Enabled {
+						class="btn btn-sm btn-warning"
+					} else {
+						class="btn btn-sm btn-success"
+					}
+					hx-post={ "/scheduler/jobs/" + job.ID + "/toggle" }
+					hx-target={ "#job-row-" + job.ID }
+					hx-swap="outerHTML"
+					hx-indicator=".htmx-indicator"
+				>
+					if job.Enabled {
+						Desactivar
+					} else {
+						Activar
+					}
+				</button>
+				<button
+					class="btn btn-sm btn-error btn-outline"
+					hx-delete={ "/scheduler/jobs/" + job.ID }
+					hx-target={ "#job-row-" + job.ID }
+					hx-swap="outerHTML swap:1s"
+					hx-confirm="¿Eliminar este job?"
+				>
+					Eliminar
+				</button>
+			</div>
+		</td>
+	</tr>
+}

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"app-mobile-downloader/internal/dev/ui"
+	"app-mobile-downloader/internal/quality/ui"
 )
 
 func TestFilterCoverageFile(t *testing.T) {

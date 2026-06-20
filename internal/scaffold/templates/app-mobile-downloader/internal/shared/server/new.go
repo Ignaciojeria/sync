@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
+	authmiddleware "app-mobile-downloader/internal/auth/middleware"
+	authpostgresql "app-mobile-downloader/internal/auth/infrastructure/postgresql"
 	"app-mobile-downloader/internal/shared/configuration"
-	"app-mobile-downloader/internal/shared/infrastructure/postgresql"
-	"app-mobile-downloader/internal/shared/server/middleware"
 
 	"github.com/Ignaciojeria/ioc"
 	"github.com/MicahParks/keyfunc/v3"
@@ -21,9 +21,9 @@ type Server struct {
 	*fuego.Server
 }
 
-func New(conf configuration.Conf, jwks keyfunc.Keyfunc, store *postgresql.SessionStore) *Server {
+func New(conf configuration.Conf, jwks keyfunc.Keyfunc, store *authpostgresql.SessionRepository) *Server {
 	server := fuego.NewServer(fuego.WithAddr(":" + strings.TrimSpace(conf.PORT)))
-	fuego.Use(server, middleware.JWTMiddleware(
+	fuego.Use(server, authmiddleware.JWTMiddleware(
 		jwks,
 		store,
 		conf,
