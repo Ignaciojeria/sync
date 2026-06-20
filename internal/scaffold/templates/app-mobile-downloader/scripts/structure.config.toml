@@ -1,0 +1,68 @@
+[tree]
+exclude_dirs = [
+  ".git",
+  ".einar",
+  "tmp",
+  "node_modules",
+  ".npm-cache",
+  ".agents",
+  "doc",
+  ".githooks",
+  ".vscode",
+  "__pycache__",
+]
+
+exclude_files = [
+  ".env",
+  "go.sum",
+  "mutagen.yml",
+  "mutagen.yml.lock",
+  "skills-lock.json",
+  "workspaces.yaml",
+  "wede.config.json",
+  "coverage.out",
+  "coverage_filtered.out",
+  "coverage.html",
+  "last_run.json",
+]
+
+exclude_globs = [
+  "*.jpg",
+  "*.jpeg",
+  "*.png",
+  "*.ico",
+  "*.log",
+  "*.lock",
+  "*.csv",
+  "*.json",
+]
+
+include_globs = [
+  "*.go",
+  "*.templ",
+  "*.md",
+  "*.sh",
+  "*.toml",
+  "*.yml",
+  "*.yaml",
+  "*.mod",
+  "*.sql",
+  "*.py",
+]
+
+skip_hidden_dirs = true
+files_first = true
+
+[document]
+title = "Estructura del Proyecto"
+regenerate_command = "scripts/generate-structure.sh"
+footer_heading = "Convenciones de estructura"
+conventions = [
+  "Cada módulo de negocio vive en `internal/<modulo>/` con sus capas: `application`, `http`, `infrastructure`, `ui`.",
+  "Código compartido: `internal/shared/` (config, auth, server, infra).",
+  "Punto de entrada: `cmd/api/main.go`.",
+  "Plantillas: `internal/<modulo>/ui/` o `internal/ui/layout/`.",
+  "Tests: junto al código (`*_test.go`).",
+  "Skills: `.agents/skills/`.",
+  "Scripts: `scripts/` para automatización (ej. `generate-structure.sh`).",
+]

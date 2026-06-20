@@ -3,6 +3,7 @@ package scaffold
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -22,7 +23,7 @@ func TestMaterializeAppMobileDownloader(t *testing.T) {
 	}
 
 	mainGo := readGeneratedFile(t, dir, "cmd/api/main.go")
-	if !strings.Contains(mainGo, "my-project/internal/app/http") {
+	if !strings.Contains(mainGo, "my-project/internal/home/http") {
 		t.Fatalf("imports were not rendered with module name: %q", mainGo)
 	}
 
@@ -31,7 +32,7 @@ func TestMaterializeAppMobileDownloader(t *testing.T) {
 		t.Fatalf("bootstrap email count = %d, want 2 in allowlists: %q", count, allowlist)
 	}
 
-	for _, path := range []string{".air.toml", ".gitignore", "logo.svg", "login.jpeg", "internal/editor/application/.gitkeep"} {
+	for _, path := range []string{".air.toml", ".gitignore", "logo.svg", "login.jpeg", "internal/editor/application/.gitkeep", "scripts/_tree_generator.py", "scripts/structure.config.toml"} {
 		if _, err := os.Stat(filepath.Join(dir, path)); err != nil {
 			t.Fatalf("expected %s to be materialized: %v", path, err)
 		}
@@ -41,7 +42,7 @@ func TestMaterializeAppMobileDownloader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected post-checkout hook to be materialized: %v", err)
 	}
-	if hookInfo.Mode().Perm()&0o700 != 0o700 {
+	if runtime.GOOS != "windows" && hookInfo.Mode().Perm()&0o700 != 0o700 {
 		t.Fatalf("post-checkout permissions = %o, want owner read/write/execute", hookInfo.Mode().Perm())
 	}
 }
