@@ -1,0 +1,199 @@
+package ui
+
+import designapp "app-mobile-downloader/internal/design/application"
+
+templ Page(themes []designapp.ResolvedTheme, active designapp.ResolvedTheme) {
+	<div class="space-y-8">
+		<section class="hero rounded-[2rem] border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card)] backdrop-blur">
+			<div class="hero-content w-full max-w-none flex-col gap-8 px-6 py-8 lg:px-10 lg:py-10">
+				<div class="flex w-full flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+					<div class="max-w-2xl space-y-4">
+						<div class="badge badge-ghost badge-lg uppercase tracking-[0.24em]">Design system</div>
+						<div class="space-y-3">
+							<h1 class="text-4xl font-bold tracking-tight lg:text-5xl">{ active.Name }</h1>
+							<p class="max-w-xl text-sm leading-7 opacity-70 lg:text-base">
+								Explora el tema activo derivado desde <code>DESIGN.md</code>, con tipografía, superficies, color y previews reales del sistema.
+							</p>
+						</div>
+						<div class="flex flex-wrap gap-2">
+							<span class="badge badge-primary badge-outline px-3 py-3">{ active.ColorScheme }</span>
+							if active.Description != "" {
+								<span class="badge badge-ghost px-3 py-3">{ active.Description }</span>
+							}
+						</div>
+					</div>
+					<div class="w-full max-w-sm rounded-[1.5rem] border border-base-300/70 bg-base-100/90 p-5 shadow-[var(--pi-shadow-card-soft)]">
+						<form hx-post="/design/select" hx-swap="none" class="space-y-3">
+							<div class="space-y-1">
+								<div class="text-xs font-semibold uppercase tracking-[0.24em] opacity-60">Select theme</div>
+								<div class="text-sm opacity-70">Cambiar el design activo aplica el tema completo del sitio.</div>
+							</div>
+							<select name="theme_id" class="select select-bordered w-full" onchange="this.form.requestSubmit()">
+								for _, theme := range themes {
+									<option value={ theme.ID } if theme.ID == active.ID { selected }>{ theme.Name }</option>
+								}
+							</select>
+							<div class="grid grid-cols-3 gap-2 pt-1">
+								<div class="h-10 rounded-xl border border-base-300/60" style={ "background-color: " + colorValue(active, "primary") }></div>
+								<div class="h-10 rounded-xl border border-base-300/60" style={ "background-color: " + colorValue(active, "secondary") }></div>
+								<div class="h-10 rounded-xl border border-base-300/60" style={ "background-color: " + colorValue(active, "accent") }></div>
+							</div>
+						</form>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<div class="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+			<div class="space-y-6">
+				<section class="rounded-[1.75rem] border border-base-300/70 bg-base-100/80 p-6 shadow-[var(--pi-shadow-card-soft)] backdrop-blur">
+					<div class="mb-4 flex items-center justify-between gap-3">
+						<div>
+							<h2 class="text-lg font-semibold">Core palette</h2>
+							<p class="text-sm opacity-65">Swatches principales usados por el runtime del tema.</p>
+						</div>
+					</div>
+					<div class="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
+						@ColorSwatch("Primary", colorValue(active, "primary"))
+						@ColorSwatch("Secondary", colorValue(active, "secondary"))
+						@ColorSwatch("Accent", colorValue(active, "accent"))
+						@ColorSwatch("Base 100", colorValue(active, "base-100"))
+						@ColorSwatch("Base 200", colorValue(active, "base-200"))
+						@ColorSwatch("Base Content", colorValue(active, "base-content"))
+					</div>
+				</section>
+
+				<section class="rounded-[1.75rem] border border-base-300/70 bg-base-100/80 p-6 shadow-[var(--pi-shadow-card-soft)] backdrop-blur">
+					<div class="mb-5 space-y-1">
+						<h2 class="text-lg font-semibold">Premium component preview</h2>
+						<p class="text-sm opacity-65">Una vista más limpia del look & feel real del tema activo.</p>
+					</div>
+					<div class="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+						<div class="rounded-[1.5rem] border border-base-300/70 bg-[var(--pi-surface-elevated)] p-5 shadow-[var(--pi-shadow-card)]">
+							<div class="space-y-4">
+								<div class="space-y-2">
+									<div class="text-xs uppercase tracking-[0.22em] opacity-55">Hero card</div>
+									<h3 class="text-2xl font-semibold leading-tight">A polished surface for your selected design.</h3>
+									<p class="text-sm leading-7 opacity-70">Los estilos de superficie, contraste y profundidad ahora responden al tema activo en runtime.</p>
+								</div>
+								<div class="flex flex-wrap gap-2">
+									<button type="button" class="btn btn-primary">Primary action</button>
+									<button type="button" class="btn btn-secondary btn-outline">Secondary</button>
+									<span class="badge badge-accent badge-lg">Live theme</span>
+								</div>
+							</div>
+						</div>
+						<div class="space-y-4">
+							<div class="rounded-[1.5rem] border border-base-300/70 bg-base-100 p-5 shadow-[var(--pi-shadow-card-soft)]">
+								<div class="space-y-3">
+									<input type="text" class="input input-bordered w-full" placeholder="Premium input preview"/>
+									<select class="select select-bordered w-full">
+										<option>Option A</option>
+										<option>Option B</option>
+									</select>
+									<div class="alert alert-info py-3">
+										<span class="text-sm">Alert preview con contraste y tono del tema activo.</span>
+									</div>
+								</div>
+							</div>
+							<div class="rounded-[1.5rem] border border-base-300/70 bg-base-100 p-5 shadow-[var(--pi-shadow-card-soft)]">
+								<div class="flex items-center justify-between gap-3">
+									<div>
+										<div class="text-xs uppercase tracking-[0.22em] opacity-55">Status</div>
+										<div class="text-lg font-semibold">Theme applied</div>
+									</div>
+									<div class="radial-progress text-primary" style="--value:76; --size:3.5rem; --thickness:0.32rem;" aria-label="76">76%</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</section>
+			</div>
+
+			<div class="space-y-6">
+				<section class="rounded-[1.75rem] border border-base-300/70 bg-base-100/80 p-6 shadow-[var(--pi-shadow-card-soft)] backdrop-blur">
+					<div class="mb-4 space-y-1">
+						<h2 class="text-lg font-semibold">Typography</h2>
+						<p class="text-sm opacity-65">Los niveles principales ahora viven como variables runtime del tema.</p>
+					</div>
+					<div class="space-y-5">
+						<div class="rounded-[1.25rem] border border-base-300/60 bg-base-100 p-4">
+							<div class="text-xs uppercase tracking-[0.22em] opacity-55">Body</div>
+							<p class="mt-2" style={ "font-family: " + typographyValue(active, "body-md").FontFamily + "; font-size: " + typographyValue(active, "body-md").FontSize + "; line-height: " + typographyValue(active, "body-md").LineHeight }>
+								The quick brown fox jumps over the lazy dog. Typography now reflects the active design more faithfully.
+							</p>
+						</div>
+						<div class="rounded-[1.25rem] border border-base-300/60 bg-base-100 p-4">
+							<div class="text-xs uppercase tracking-[0.22em] opacity-55">Label</div>
+							<p class="mt-2" style={ "font-family: " + typographyValue(active, "label-md").FontFamily + "; font-size: " + typographyValue(active, "label-md").FontSize + "; font-weight: " + typographyValue(active, "label-md").FontWeight }>
+								LABEL / metadata / UI language
+							</p>
+						</div>
+						<div class="rounded-[1.25rem] border border-base-300/60 bg-base-100 p-4">
+							<div class="text-xs uppercase tracking-[0.22em] opacity-55">Code</div>
+							<code class="mt-2 block" style={ "font-family: " + typographyValue(active, "code-md").FontFamily + "; font-size: " + typographyValue(active, "code-md").FontSize }>
+								SELECT * FROM themes WHERE active = true;
+							</code>
+						</div>
+					</div>
+				</section>
+
+				<section class="rounded-[1.75rem] border border-base-300/70 bg-base-100/80 p-6 shadow-[var(--pi-shadow-card-soft)] backdrop-blur">
+					<div class="mb-4 space-y-1">
+						<h2 class="text-lg font-semibold">Token summary</h2>
+						<p class="text-sm opacity-65">Resumen rápido de forma, spacing y profundidad.</p>
+					</div>
+					<div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+						@TokenStat("rounded.sm", roundedValue(active, "sm"))
+						@TokenStat("rounded.md", roundedValue(active, "md"))
+						@TokenStat("spacing.sm", active.Spacing["sm"])
+						@TokenStat("spacing.md", active.Spacing["md"])
+						@TokenStat("shadow.card", active.DaisyUI["shadow-card"])
+						@TokenStat("surface.elevated", active.DaisyUI["surface-elevated"])
+					</div>
+				</section>
+
+				<section class="rounded-[1.75rem] border border-base-300/70 bg-base-100/80 p-6 shadow-[var(--pi-shadow-card-soft)] backdrop-blur">
+					<div class="mb-4 space-y-1">
+						<h2 class="text-lg font-semibold">Spacing rhythm</h2>
+						<p class="text-sm opacity-65">Una lectura visual más clara del pulso espacial del tema.</p>
+					</div>
+					<div class="space-y-4">
+						@SpacingRow("xs", active.Spacing["xs"])
+						@SpacingRow("sm", active.Spacing["sm"])
+						@SpacingRow("md", active.Spacing["md"])
+					</div>
+				</section>
+			</div>
+		</div>
+	</div>
+}
+
+templ ColorSwatch(label string, value string) {
+	<div class="overflow-hidden rounded-[1.25rem] border border-base-300/70 bg-base-100 shadow-[var(--pi-shadow-card-soft)]">
+		<div class="h-20" style={ "background-color: " + value }></div>
+		<div class="space-y-1 p-4">
+			<div class="text-sm font-medium">{ label }</div>
+			<div class="text-xs font-mono opacity-60">{ value }</div>
+		</div>
+	</div>
+}
+
+templ TokenStat(label string, value string) {
+	<div class="rounded-[1.1rem] border border-base-300/60 bg-base-100 px-4 py-3 shadow-[var(--pi-shadow-card-soft)]">
+		<div class="text-[11px] uppercase tracking-[0.2em] opacity-55">{ label }</div>
+		<div class="mt-1 break-all text-sm font-medium">{ value }</div>
+	</div>
+}
+
+templ SpacingRow(label string, value string) {
+	<div class="space-y-2">
+		<div class="flex items-center justify-between gap-3">
+			<div class="text-[11px] uppercase tracking-[0.2em] opacity-55">{ label }</div>
+			<div class="text-sm font-medium">{ value }</div>
+		</div>
+		<div class="rounded-full bg-base-200 p-2">
+			<div class="h-3 rounded-full bg-primary shadow-[var(--pi-shadow-card-soft)]" style={ "width: clamp(2rem, calc(" + value + " * 6), 14rem);" }></div>
+		</div>
+	</div>
+}

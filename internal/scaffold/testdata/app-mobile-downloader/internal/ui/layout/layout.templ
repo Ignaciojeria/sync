@@ -1,0 +1,59 @@
+package layout
+
+templ Layout(title string, themeID string, themeCSSHref string) {
+	<!DOCTYPE html>
+	<html lang="es" data-theme={ themeID }>
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ title }</title>
+			<script src="https://unpkg.com/htmx.org@2.0.4" crossorigin="anonymous"></script>
+			<link rel="preconnect" href="https://fonts.googleapis.com"/>
+			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
+			<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+			<link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css"/>
+			<link href={ themeCSSHref } rel="stylesheet" type="text/css"/>
+			<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+			<style>
+				html, body {
+					font-family: var(--pi-font-body-family, Inter, system-ui, sans-serif);
+					font-size: var(--pi-font-body-size, 16px);
+					font-weight: var(--pi-font-body-weight, 400);
+					line-height: var(--pi-font-body-line-height, 1.5);
+				}
+				body {
+					background:
+						radial-gradient(circle at top left, color-mix(in srgb, var(--color-primary) 10%, transparent), transparent 28%),
+						linear-gradient(180deg, var(--color-base-100), var(--pi-surface-muted, var(--color-base-200)) 130%);
+				}
+				h1, h2, h3, h4, h5, h6, .card-title, .navbar .text-lg, .menu-title {
+					font-family: var(--pi-font-label-family, var(--pi-font-body-family, Inter, system-ui, sans-serif));
+				}
+				.menu-title, .label-text, .btn, .badge, nav, aside {
+					font-family: var(--pi-font-label-family, var(--pi-font-body-family, Inter, system-ui, sans-serif));
+					font-size: var(--pi-font-label-size, 0.875rem);
+					font-weight: var(--pi-font-label-weight, 600);
+				}
+				code, pre, kbd {
+					font-family: var(--pi-font-code-family, "JetBrains Mono", monospace);
+					font-size: var(--pi-font-code-size, 0.875rem);
+				}
+				.card, .mockup-window, .stats, .alert, .table, .input, .select, .textarea {
+					border-color: var(--pi-border-subtle, color-mix(in srgb, var(--color-base-content) 10%, transparent));
+				}
+				.card, .stats, .mockup-window {
+					box-shadow: var(--pi-shadow-card-soft, 0 10px 28px -18px color-mix(in srgb, var(--color-base-content) 18%, transparent));
+				}
+				main.container {
+					padding-top: clamp(1rem, 1.25rem + 1vw, 2rem);
+					padding-bottom: clamp(1rem, 1.5rem + 1vw, 2.5rem);
+				}
+			</style>
+		</head>
+		<body class="min-h-screen bg-base-100 text-base-content antialiased">
+			<main class="container mx-auto p-4">
+				{ children... }
+			</main>
+		</body>
+	</html>
+}

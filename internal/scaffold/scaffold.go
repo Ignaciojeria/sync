@@ -14,7 +14,7 @@ const (
 	baseModuleName      = "app-mobile-downloader"
 )
 
-//go:embed all:templates/app-mobile-downloader
+//go:embed all:testdata/app-mobile-downloader
 var templatesFS embed.FS
 
 func MaterializeAppMobileDownloader(destination, moduleName, bootstrapEmail string) error {
@@ -28,7 +28,7 @@ func MaterializeAppMobileDownloader(destination, moduleName, bootstrapEmail stri
 	}
 	bootstrapEmail = strings.ToLower(strings.TrimSpace(bootstrapEmail))
 
-	root := filepath.ToSlash(filepath.Join("templates", defaultTemplateName))
+	root := filepath.ToSlash(filepath.Join("testdata", defaultTemplateName))
 	return fs.WalkDir(templatesFS, root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
