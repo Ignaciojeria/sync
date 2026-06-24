@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	"app-mobile-downloader/internal/shared"
 	"app-mobile-downloader/internal/shared/configuration"
 )
 
@@ -25,7 +26,7 @@ func BuildLoginURL(conf configuration.Conf, state string, preferGoogle bool) (st
 	q.Set("client_id", strings.TrimSpace(conf.OIDCClientID))
 	q.Set("redirect_uri", strings.TrimSpace(conf.OIDCRedirectURI))
 	q.Set("response_type", "code")
-	q.Set("scope", FirstNonEmptyScope(strings.TrimSpace(conf.OIDCScopes), "openid profile email"))
+	q.Set("scope", shared.FirstNonEmpty(strings.TrimSpace(conf.OIDCScopes), "openid profile email"))
 	q.Set("state", state)
 	u.RawQuery = q.Encode()
 	return u.String(), nil
@@ -45,7 +46,7 @@ func BuildDirectGoogleLoginURL(conf configuration.Conf, state string) (string, e
 		return "", err
 	}
 
-	scope := FirstNonEmptyScope(strings.TrimSpace(conf.OIDCScopes), "openid profile email")
+	scope := shared.FirstNonEmpty(strings.TrimSpace(conf.OIDCScopes), "openid profile email")
 	packedQ := url.Values{}
 	packedQ.Set("client_id", strings.TrimSpace(conf.OIDCClientID))
 	packedQ.Set("redirect_uri", strings.TrimSpace(conf.OIDCRedirectURI))
@@ -88,13 +89,4 @@ func IsHTTPS(raw string) bool {
 		return false
 	}
 	return strings.EqualFold(u.Scheme, "https")
-}
-
-func FirstNonEmptyScope(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
 }

@@ -5,11 +5,8 @@ import (
 
 	"app-mobile-downloader/internal/shared/configuration"
 
-	"github.com/Ignaciojeria/ioc"
 	"github.com/MicahParks/keyfunc/v3"
 )
-
-var _ = ioc.Register(New)
 
 func New(conf configuration.Conf) (keyfunc.Keyfunc, error) {
 	urlsValue := strings.TrimSpace(conf.JWKSURLS)

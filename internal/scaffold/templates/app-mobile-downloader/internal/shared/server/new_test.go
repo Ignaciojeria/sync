@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
 	"time"
 
@@ -30,14 +31,6 @@ func (f *fakeShutdownServer) Shutdown(ctx context.Context) error {
 	f.called = true
 	_, f.deadlineSet = ctx.Deadline()
 	return f.shutdownErr
-}
-
-type fakeShutdowner struct {
-	hooks []func() error
-}
-
-func (f *fakeShutdowner) RegisterShutdown(hook func() error) {
-	f.hooks = append(f.hooks, hook)
 }
 
 func TestNew(t *testing.T) {
@@ -72,6 +65,18 @@ func TestRunServer(t *testing.T) {
 		}()
 		runServer(fakeRunner{runErr: errors.New("boom")})
 	})
+
+	t.Run("does not panic on http.ErrServerClosed", func(t *testing.T) {
+		// Reproduce el caso del runner de fuego: tras un Shutdown,
+		// http.Server.Serve retorna http.ErrServerClosed. runServer debe tratarlo
+		// como salida esperada, no como error.
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("runServer panicked on graceful shutdown: %v", r)
+			}
+		}()
+		runServer(fakeRunner{runErr: http.ErrServerClosed})
+	})
 }
 
 func TestShutdownHook(t *testing.T) {
@@ -97,17 +102,13 @@ func TestShutdownHook(t *testing.T) {
 }
 
 func TestStartServerRegistersShutdownHook(t *testing.T) {
-	shutdowner := &fakeShutdowner{}
+	hooks := &shared.Hooks{}
 	server := &Server{Server: fuego.NewServer(fuego.WithAddr(":0"))}
 
-	if err := startServer(server, shutdowner); err != nil {
-		t.Fatalf("startServer() error = %v", err)
+	if err := Start(server, hooks); err != nil {
+		t.Fatalf("Start() error = %v", err)
 	}
-	if len(shutdowner.hooks) != 1 {
-		t.Fatalf("expected 1 shutdown hook, got %d", len(shutdowner.hooks))
-	}
-	if err := shutdowner.hooks[0](); err != nil {
-		t.Fatalf("shutdown hook returned error: %v", err)
+	if err := hooks.Shutdown(context.Background()); err != nil {
+		t.Fatalf("Shutdown returned error: %v", err)
 	}
 }
-

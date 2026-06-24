@@ -10,11 +10,10 @@ import (
 
 	"app-mobile-downloader/internal/shared/server"
 
-	"github.com/Ignaciojeria/ioc"
 	"github.com/go-fuego/fuego"
 )
 
-var _ = ioc.Register(editorHandler)
+
 
 func editorHandler(s *server.Server) {
 	upstream := editorUpstreamURL()

@@ -4,11 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
-
-	"github.com/Ignaciojeria/ioc"
 )
-
-var _ = ioc.Register(NewJobRunner)
 
 type JobRunner struct {
 	repo   Repository

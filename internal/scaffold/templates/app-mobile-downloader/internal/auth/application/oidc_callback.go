@@ -8,8 +8,6 @@ import (
 	"strings"
 
 	"app-mobile-downloader/internal/shared/configuration"
-
-	"github.com/MicahParks/keyfunc/v3"
 )
 
 const PostLoginRedirectPath = "/"
@@ -47,8 +45,4 @@ func ExchangeAuthorizationCode(conf configuration.Conf, code string) (CallbackRe
 		return CallbackResponse{}, err
 	}
 	return out, nil
-}
-
-func ExtractIdentityFromTokens(conf configuration.Conf, jwks keyfunc.Keyfunc, resp CallbackResponse) (Identity, error) {
-	return IdentityFromTokens(conf, jwks, resp)
 }

@@ -6,16 +6,13 @@ import (
 
 	authapp "app-mobile-downloader/internal/auth/application"
 	authpostgresql "app-mobile-downloader/internal/auth/infrastructure/postgresql"
-	"app-mobile-downloader/internal/shared/access"
+	"app-mobile-downloader/internal/shared"
 	"app-mobile-downloader/internal/shared/configuration"
 	"app-mobile-downloader/internal/shared/server"
 
-	"github.com/Ignaciojeria/ioc"
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/go-fuego/fuego"
 )
-
-var _ = ioc.Register(registerAuthCallback)
 
 func registerAuthCallback(s *server.Server, conf configuration.Conf, store *authpostgresql.SessionRepository, jwks keyfunc.Keyfunc) {
 	fuego.Get(s.Server, "/auth/callback", func(c fuego.ContextNoBody) (any, error) {
@@ -34,11 +31,11 @@ func registerAuthCallback(s *server.Server, conf configuration.Conf, store *auth
 		if err != nil {
 			return nil, fuego.HTTPError{Status: http.StatusBadGateway, Detail: err.Error()}
 		}
-		identity, err := authapp.ExtractIdentityFromTokens(conf, jwks, resp)
+		identity, err := authapp.IdentityFromTokens(conf, jwks, resp)
 		if err != nil {
 			return nil, fuego.HTTPError{Status: http.StatusBadGateway, Detail: err.Error()}
 		}
-		if !access.IsAllowedAnyEmail(identity.Email) {
+		if !shared.IsAllowedAnyEmail(identity.Email) {
 			return nil, fuego.HTTPError{Status: http.StatusForbidden, Detail: "email sin acceso autorizado al sistema"}
 		}
 		sessionID, err := store.CreateUserSession(identity, resp)

@@ -5,11 +5,8 @@ import (
 	"app-mobile-downloader/internal/shared/server"
 	"app-mobile-downloader/internal/ui/layout"
 
-	"github.com/Ignaciojeria/ioc"
 	"github.com/go-fuego/fuego"
 )
-
-var _ = ioc.Register(homeHandler)
 
 func homeHandler(s *server.Server) {
 	fuego.All(s.Server, "/", func(c fuego.ContextNoBody) (any, error) {

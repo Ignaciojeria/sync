@@ -9,15 +9,12 @@ import (
 
 	"app-mobile-downloader/internal/shared/configuration"
 
-	"github.com/Ignaciojeria/ioc"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 )
-
-var _ = ioc.Register(NewConnection)
 
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
@@ -81,8 +78,4 @@ func (c *Connection) RunMigrations() error {
 	}
 	slog.Info("Database migrations validated/applied successfully")
 	return nil
-}
-
-func runMigrations(db *sqlx.DB, dbName string) error {
-	return (&Connection{DB: db, name: dbName}).RunMigrations()
 }

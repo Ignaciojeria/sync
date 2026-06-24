@@ -11,11 +11,7 @@ import (
 )
 
 func startGoogleLogin(c fuego.ContextNoBody, conf configuration.Conf, preferGoogle bool) (any, error) {
-	return startGoogleLoginWithStateGenerator(c, conf, preferGoogle, authapp.NewRandomState)
-}
-
-func startGoogleLoginWithStateGenerator(c fuego.ContextNoBody, conf configuration.Conf, preferGoogle bool, generateState func() (string, error)) (any, error) {
-	state, err := generateState()
+	state, err := authapp.NewRandomState()
 	if err != nil {
 		return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: "cannot generate oauth state"}
 	}

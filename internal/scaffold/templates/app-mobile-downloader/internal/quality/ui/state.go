@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"regexp"
-	"strconv"
 	"time"
 )
 
@@ -34,16 +32,6 @@ func statusBadgeClass(success bool) string {
 		return "badge badge-success"
 	}
 	return "badge badge-error"
-}
-
-func parseCoveragePercent(output string) float64 {
-	re := regexp.MustCompile(`coverage:\s*([0-9]+\.[0-9]+)%`)
-	matches := re.FindStringSubmatch(output)
-	if len(matches) >= 2 {
-		p, _ := strconv.ParseFloat(matches[1], 64)
-		return p
-	}
-	return 0
 }
 
 func coverColorClass(percent float64) string {

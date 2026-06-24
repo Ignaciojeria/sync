@@ -5,7 +5,6 @@ import (
 
 	authmiddleware "app-mobile-downloader/internal/auth/middleware"
 	"app-mobile-downloader/internal/shared"
-	"app-mobile-downloader/internal/shared/access"
 )
 
 // NavigationContext contiene todo el contexto necesario para renderizar navegacion.
@@ -29,6 +28,6 @@ func FromRequest(r *http.Request) NavigationContext {
 	email := shared.FirstStringClaim(claims, "email")
 	return NavigationContext{
 		CurrentPath: r.URL.Path,
-		IsEditor:    access.IsAllowedEditorEmail(email),
+		IsEditor:    shared.IsAllowedEditorEmail(email),
 	}
 }

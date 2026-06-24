@@ -178,11 +178,11 @@ func TestFirstNonEmptyHelpers(t *testing.T) {
 	if got := shared.FirstNonEmpty(" ", "\t"); got != "" {
 		t.Fatalf("shared.FirstNonEmpty() = %q, want empty string", got)
 	}
-	if got := firstNonEmptyMachineID(" ", "machine-1"); got != "machine-1" {
-		t.Fatalf("firstNonEmptyMachineID() = %q", got)
+	if got := shared.FirstNonEmpty(" ", "machine-1"); got != "machine-1" {
+		t.Fatalf("FirstNonEmpty() = %q", got)
 	}
-	if got := firstNonEmptyMachineID(" ", "\t"); got != "" {
-		t.Fatalf("firstNonEmptyMachineID() = %q, want empty string", got)
+	if got := shared.FirstNonEmpty(" ", "\t"); got != "" {
+		t.Fatalf("FirstNonEmpty() = %q, want empty string", got)
 	}
 }
 
@@ -231,9 +231,6 @@ func TestPathHelpers(t *testing.T) {
 	}
 	if isEditorPath("/home") {
 		t.Fatal("did not expect /home to be an editor path")
-	}
-	if !isReportPath("/report/tests") || isReportPath("/editor") {
-		t.Fatal("unexpected report path result")
 	}
 	if !isPublicPath("/auth/login") || !isPublicPath("/manifest.json") || !isPublicPath("/logo.svg") || isPublicPath("/") || isPublicPath("/private") {
 		t.Fatal("unexpected public path result")
@@ -645,6 +642,86 @@ func TestJWTMiddleware(t *testing.T) {
 
 		if !called || rr.Code != http.StatusNoContent {
 			t.Fatalf("expected next handler to run, called=%v status=%d", called, rr.Code)
+		}
+	})
+}
+
+func TestRequireEditor(t *testing.T) {
+	t.Run("rejects when no claims present", func(t *testing.T) {
+		called := false
+		handler := RequireEditor()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			called = true
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		req := httptest.NewRequest(http.MethodGet, "/editor", nil)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401", rr.Code)
+		}
+		if called {
+			t.Fatal("next handler should not run")
+		}
+		assertJSONError(t, rr, "unauthorized")
+	})
+
+	t.Run("rejects non-editor emails", func(t *testing.T) {
+		claims := jwt.MapClaims{"email": "blocked@example.com"}
+		ctx := context.WithValue(context.Background(), claimsContextKey, claims)
+
+		called := false
+		handler := RequireEditor()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			called = true
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		req := httptest.NewRequest(http.MethodGet, "/editor", nil).WithContext(ctx)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403", rr.Code)
+		}
+		if called {
+			t.Fatal("next handler should not run")
+		}
+		assertJSONError(t, rr, "forbidden")
+	})
+
+	t.Run("allows editor email", func(t *testing.T) {
+		// El paquete shared ya expone dev@example.com como editor permitido (ver internal/shared/access.go).
+		claims := jwt.MapClaims{"email": "dev@example.com"}
+		ctx := context.WithValue(context.Background(), claimsContextKey, claims)
+
+		called := false
+		handler := RequireEditor()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			called = true
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		req := httptest.NewRequest(http.MethodGet, "/editor", nil).WithContext(ctx)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if !called {
+			t.Fatal("next handler should run")
+		}
+		if rr.Code != http.StatusNoContent {
+			t.Fatalf("status = %d, want 204", rr.Code)
+		}
+	})
+
+	t.Run("ignores empty email claim", func(t *testing.T) {
+		claims := jwt.MapClaims{"email": "   "}
+		ctx := context.WithValue(context.Background(), claimsContextKey, claims)
+		handler := RequireEditor()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Fatal("next handler should not run")
+		}))
+		req := httptest.NewRequest(http.MethodGet, "/editor", nil).WithContext(ctx)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403 for empty email", rr.Code)
 		}
 	})
 }

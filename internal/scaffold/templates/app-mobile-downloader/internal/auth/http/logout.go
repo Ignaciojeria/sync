@@ -8,11 +8,8 @@ import (
 	"app-mobile-downloader/internal/shared/configuration"
 	"app-mobile-downloader/internal/shared/server"
 
-	"github.com/Ignaciojeria/ioc"
 	"github.com/go-fuego/fuego"
 )
-
-var _ = ioc.Register(registerAuthLogout)
 
 func registerAuthLogout(s *server.Server, conf configuration.Conf, store *authpostgresql.SessionRepository) {
 	fuego.Get(s.Server, "/auth/logout", func(c fuego.ContextNoBody) (any, error) {

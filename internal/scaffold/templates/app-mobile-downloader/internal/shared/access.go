@@ -1,4 +1,4 @@
-package access
+package shared
 
 import "strings"
 
@@ -29,9 +29,11 @@ func normalizeEmail(email string) string {
 }
 
 var allowedAppEmails = map[string]struct{}{
+	"ignaajeriag@falabella.cl": {},
 	"dev@example.com": {},
 }
 
 var allowedEditorEmails = map[string]struct{}{
+	"ignaajeriag@falabella.cl": {},
 	"dev@example.com": {},
 }

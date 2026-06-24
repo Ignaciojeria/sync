@@ -24,13 +24,6 @@ func TestStatusHelpers(t *testing.T) {
 }
 
 func TestCoverageHelpers(t *testing.T) {
-	if got := parseCoveragePercent("total: (statements) 88.1%"); got != 0 {
-		t.Fatalf("template parseCoveragePercent() = %v, want 0 because it only parses go test format", got)
-	}
-	if got := parseCoveragePercent("coverage: 88.1% of statements"); got != 88.1 {
-		t.Fatalf("template parseCoveragePercent() = %v", got)
-	}
-
 	if coverColorClass(85) != "text-success" || coverColorClass(60) != "text-warning" || coverColorClass(10) != "text-error" {
 		t.Fatal("unexpected coverColorClass results")
 	}

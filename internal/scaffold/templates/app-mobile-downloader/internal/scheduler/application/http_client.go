@@ -5,11 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/Ignaciojeria/ioc"
 )
-
-var _ = ioc.Register(NewInternalHTTPClient)
 
 type InternalHTTPClient struct {
 	baseURL string

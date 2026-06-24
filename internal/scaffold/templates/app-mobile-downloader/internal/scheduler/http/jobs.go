@@ -8,80 +8,56 @@ import (
 	schedulerpostgresql "app-mobile-downloader/internal/scheduler/infrastructure/postgresql"
 	schedulerui "app-mobile-downloader/internal/scheduler/ui"
 	authmiddleware "app-mobile-downloader/internal/auth/middleware"
-	"app-mobile-downloader/internal/shared"
-	"app-mobile-downloader/internal/shared/access"
 	sharedpostgresql "app-mobile-downloader/internal/shared/infrastructure/postgresql"
 	"app-mobile-downloader/internal/shared/server"
 	"app-mobile-downloader/internal/ui/layout"
 
-	"github.com/Ignaciojeria/ioc"
 	"github.com/go-fuego/fuego"
 )
 
-var _ = ioc.Register(jobConfigPageHandler)
-
 func jobConfigPageHandler(s *server.Server, db *sharedpostgresql.Connection) {
 	repo := schedulerpostgresql.NewJobRepository(db)
+	requireEditor := fuego.OptionMiddleware(authmiddleware.RequireEditor())
 
-	fuego.Get(s.Server, "/scheduler/jobs", func(c fuego.ContextNoBody) (any, error) {
-		claims, ok := authmiddleware.JWTClaimsFromContext(c.Context())
-		if !ok {
-			return nil, fuego.HTTPError{Status: http.StatusUnauthorized, Detail: "unauthorized"}
-		}
-		email := shared.FirstStringClaim(claims, "email")
-		if !access.IsAllowedEditorEmail(email) {
-			return nil, fuego.HTTPError{Status: http.StatusForbidden, Detail: "forbidden"}
-		}
+	fuego.Get(s.Server, "/scheduler/jobs", listJobsPage(repo), requireEditor)
+	fuego.Get(s.Server, "/scheduler/jobs/new", newJobForm(), requireEditor)
+	fuego.Get(s.Server, "/scheduler/jobs/cancel", cancelJobForm(), requireEditor)
+	fuego.Post(s.Server, "/scheduler/jobs", createJob(repo), requireEditor)
+	fuego.Delete(s.Server, "/scheduler/jobs/{id}", deleteJob(repo), requireEditor)
+	fuego.Post(s.Server, "/scheduler/jobs/{id}/toggle", toggleJob(repo), requireEditor)
+}
 
+func listJobsPage(repo *schedulerpostgresql.JobRepository) func(fuego.ContextNoBody) (any, error) {
+	return func(c fuego.ContextNoBody) (any, error) {
 		configs, err := repo.FindAll()
 		if err != nil {
 			return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
 		}
-
 		c.SetHeader("Content-Type", "text/html; charset=utf-8")
 		page, err := layout.RenderPage(c, "Configuración de Jobs", schedulerui.JobsPage(configs))
 		if err != nil {
 			return nil, err
 		}
 		return nil, page.Render(c.Context(), c.Response())
-	})
+	}
+}
 
-	fuego.Get(s.Server, "/scheduler/jobs/new", func(c fuego.ContextNoBody) (any, error) {
-		claims, ok := authmiddleware.JWTClaimsFromContext(c.Context())
-		if !ok {
-			return nil, fuego.HTTPError{Status: http.StatusUnauthorized, Detail: "unauthorized"}
-		}
-		email := shared.FirstStringClaim(claims, "email")
-		if !access.IsAllowedEditorEmail(email) {
-			return nil, fuego.HTTPError{Status: http.StatusForbidden, Detail: "forbidden"}
-		}
+func newJobForm() func(fuego.ContextNoBody) (any, error) {
+	return func(c fuego.ContextNoBody) (any, error) {
 		c.SetHeader("Content-Type", "text/html; charset=utf-8")
 		return schedulerui.JobForm(), nil
-	})
+	}
+}
 
-	fuego.Get(s.Server, "/scheduler/jobs/cancel", func(c fuego.ContextNoBody) (any, error) {
-		claims, ok := authmiddleware.JWTClaimsFromContext(c.Context())
-		if !ok {
-			return nil, fuego.HTTPError{Status: http.StatusUnauthorized, Detail: "unauthorized"}
-		}
-		email := shared.FirstStringClaim(claims, "email")
-		if !access.IsAllowedEditorEmail(email) {
-			return nil, fuego.HTTPError{Status: http.StatusForbidden, Detail: "forbidden"}
-		}
+func cancelJobForm() func(fuego.ContextNoBody) (any, error) {
+	return func(c fuego.ContextNoBody) (any, error) {
 		c.SetHeader("Content-Type", "text/html; charset=utf-8")
 		return schedulerui.EmptyForm(), nil
-	})
+	}
+}
 
-	fuego.Post(s.Server, "/scheduler/jobs", func(c fuego.ContextNoBody) (any, error) {
-		claims, ok := authmiddleware.JWTClaimsFromContext(c.Context())
-		if !ok {
-			return nil, fuego.HTTPError{Status: http.StatusUnauthorized, Detail: "unauthorized"}
-		}
-		email := shared.FirstStringClaim(claims, "email")
-		if !access.IsAllowedEditorEmail(email) {
-			return nil, fuego.HTTPError{Status: http.StatusForbidden, Detail: "forbidden"}
-		}
-
+func createJob(repo *schedulerpostgresql.JobRepository) func(fuego.ContextNoBody) (any, error) {
+	return func(c fuego.ContextNoBody) (any, error) {
 		if err := c.Request().ParseForm(); err != nil {
 			return nil, fuego.HTTPError{Status: http.StatusBadRequest, Detail: err.Error()}
 		}
@@ -109,18 +85,11 @@ func jobConfigPageHandler(s *server.Server, db *sharedpostgresql.Connection) {
 
 		c.SetHeader("Content-Type", "text/html; charset=utf-8")
 		return schedulerui.JobRow(created), nil
-	})
+	}
+}
 
-	fuego.Delete(s.Server, "/scheduler/jobs/{id}", func(c fuego.ContextNoBody) (any, error) {
-		claims, ok := authmiddleware.JWTClaimsFromContext(c.Context())
-		if !ok {
-			return nil, fuego.HTTPError{Status: http.StatusUnauthorized, Detail: "unauthorized"}
-		}
-		email := shared.FirstStringClaim(claims, "email")
-		if !access.IsAllowedEditorEmail(email) {
-			return nil, fuego.HTTPError{Status: http.StatusForbidden, Detail: "forbidden"}
-		}
-
+func deleteJob(repo *schedulerpostgresql.JobRepository) func(fuego.ContextNoBody) (any, error) {
+	return func(c fuego.ContextNoBody) (any, error) {
 		id := c.PathParam("id")
 		if id == "" {
 			return nil, fuego.HTTPError{Status: http.StatusBadRequest, Detail: "missing job id"}
@@ -129,20 +98,12 @@ func jobConfigPageHandler(s *server.Server, db *sharedpostgresql.Connection) {
 		if err := repo.Delete(id); err != nil {
 			return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
 		}
-
 		return nil, nil
-	})
+	}
+}
 
-	fuego.Post(s.Server, "/scheduler/jobs/{id}/toggle", func(c fuego.ContextNoBody) (any, error) {
-		claims, ok := authmiddleware.JWTClaimsFromContext(c.Context())
-		if !ok {
-			return nil, fuego.HTTPError{Status: http.StatusUnauthorized, Detail: "unauthorized"}
-		}
-		email := shared.FirstStringClaim(claims, "email")
-		if !access.IsAllowedEditorEmail(email) {
-			return nil, fuego.HTTPError{Status: http.StatusForbidden, Detail: "forbidden"}
-		}
-
+func toggleJob(repo *schedulerpostgresql.JobRepository) func(fuego.ContextNoBody) (any, error) {
+	return func(c fuego.ContextNoBody) (any, error) {
 		id := c.PathParam("id")
 		if id == "" {
 			return nil, fuego.HTTPError{Status: http.StatusBadRequest, Detail: "missing job id"}
@@ -164,10 +125,8 @@ func jobConfigPageHandler(s *server.Server, db *sharedpostgresql.Connection) {
 
 		c.SetHeader("Content-Type", "text/html; charset=utf-8")
 		return schedulerui.JobRow(updated), nil
-	})
+	}
 }
-
-var _ = ioc.Register(jobConfigAPIHandler)
 
 func jobConfigAPIHandler(s *server.Server, db *sharedpostgresql.Connection) {
 	repo := schedulerpostgresql.NewJobRepository(db)

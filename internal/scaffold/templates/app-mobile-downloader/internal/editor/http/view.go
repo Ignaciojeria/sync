@@ -5,11 +5,8 @@ import (
 	"app-mobile-downloader/internal/shared/server"
 	"app-mobile-downloader/internal/ui/layout"
 
-	"github.com/Ignaciojeria/ioc"
 	"github.com/go-fuego/fuego"
 )
-
-var _ = ioc.Register(editorViewHandler)
 
 func editorViewHandler(s *server.Server) {
 	fuego.Get(s.Server, "/editor-view", func(c fuego.ContextNoBody) (any, error) {

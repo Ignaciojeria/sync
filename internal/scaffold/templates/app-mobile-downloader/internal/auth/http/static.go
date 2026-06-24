@@ -3,11 +3,8 @@ package auth
 import (
 	"app-mobile-downloader/internal/shared/server"
 
-	"github.com/Ignaciojeria/ioc"
 	"github.com/go-fuego/fuego"
 )
-
-var _ = ioc.Register(registerStaticAssets)
 
 func registerStaticAssets(s *server.Server) {
 	fuego.Get(s.Server, "/logo.jpeg", serveStaticFile("logo.jpeg"))

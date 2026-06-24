@@ -6,17 +6,15 @@ import (
 
 	schedulerapp "app-mobile-downloader/internal/scheduler/application"
 	schedulerpostgresql "app-mobile-downloader/internal/scheduler/infrastructure/postgresql"
+	"app-mobile-downloader/internal/shared"
 	sharedpostgresql "app-mobile-downloader/internal/shared/infrastructure/postgresql"
 
-	"github.com/Ignaciojeria/ioc"
 	"github.com/robfig/cron/v3"
 )
 
-var _ = ioc.Register(startScheduler)
-
 func startScheduler(
 	db *sharedpostgresql.Connection,
-	shutdowner ioc.Shutdowner,
+	hooks *shared.Hooks,
 ) error {
 	if db == nil || db.DB == nil {
 		slog.Warn("primary db not available, scheduler not started")
@@ -53,7 +51,7 @@ func startScheduler(
 
 	c.Start()
 
-	shutdowner.RegisterShutdown(func() error {
+	hooks.RegisterShutdown(func() error {
 		ctx := c.Stop()
 		select {
 		case <-ctx.Done():

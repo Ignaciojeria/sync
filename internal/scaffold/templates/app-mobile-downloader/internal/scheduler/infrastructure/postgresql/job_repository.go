@@ -7,11 +7,7 @@ import (
 
 	schedulerapp "app-mobile-downloader/internal/scheduler/application"
 	sharedpostgresql "app-mobile-downloader/internal/shared/infrastructure/postgresql"
-
-	"github.com/Ignaciojeria/ioc"
 )
-
-var _ = ioc.Register(NewJobRepository)
 
 type JobRepository struct {
 	db *sharedpostgresql.Connection
@@ -133,8 +129,6 @@ func (r *JobRepository) FindLogs(jobConfigID string, limit int) ([]schedulerapp.
 	}
 	return logs, rows.Err()
 }
-
-var _ = ioc.Register(NewDistributedLock)
 
 type DistributedLock struct {
 	db *sharedpostgresql.Connection

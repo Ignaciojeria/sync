@@ -27,12 +27,12 @@ func TestMaterializeAppMobileDownloader(t *testing.T) {
 		t.Fatalf("imports were not rendered with module name: %q", mainGo)
 	}
 
-	allowlist := readGeneratedFile(t, dir, "internal/shared/access/allowlist.go")
-	if count := strings.Count(allowlist, "owner@example.com"); count != 2 {
-		t.Fatalf("bootstrap email count = %d, want 2 in allowlists: %q", count, allowlist)
+	accessFile := readGeneratedFile(t, dir, "internal/shared/access.go")
+	if count := strings.Count(accessFile, "owner@example.com"); count != 2 {
+		t.Fatalf("bootstrap email count = %d, want 2 in allowlists: %q", count, accessFile)
 	}
 
-	for _, path := range []string{".air.toml", ".gitignore", "logo.svg", "login.jpeg", "internal/editor/application/.gitkeep", "scripts/_tree_generator.py", "scripts/structure.config.toml"} {
+	for _, path := range []string{".air.toml", ".gitignore", "logo.svg", "login.jpeg", "internal/editor/http/register.go", "scripts/_tree_generator.py", "scripts/structure.config.toml"} {
 		if _, err := os.Stat(filepath.Join(dir, path)); err != nil {
 			t.Fatalf("expected %s to be materialized: %v", path, err)
 		}

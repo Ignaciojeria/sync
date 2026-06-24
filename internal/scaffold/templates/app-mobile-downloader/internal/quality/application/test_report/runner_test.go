@@ -20,41 +20,6 @@ func baseDeps() RunnerDeps {
 	}
 }
 
-func TestNewRunnerInitializesDeps(t *testing.T) {
-	r := NewRunner()
-	if r == nil {
-		t.Fatal("expected runner instance")
-	}
-	if r.deps.FindProjectRoot == nil {
-		t.Fatal("expected FindProjectRoot dep")
-	}
-	if r.deps.EnsureCoverageDir == nil {
-		t.Fatal("expected EnsureCoverageDir dep")
-	}
-	if r.deps.RunTests == nil {
-		t.Fatal("expected RunTests dep")
-	}
-	if r.deps.FilterCoverageFile == nil {
-		t.Fatal("expected FilterCoverageFile dep")
-	}
-	if r.deps.CoveragePercentFromProfile == nil {
-		t.Fatal("expected CoveragePercentFromProfile dep")
-	}
-	if r.deps.GenerateHTMLReport == nil {
-		t.Fatal("expected GenerateHTMLReport dep")
-	}
-	if r.deps.SaveLastRunState == nil {
-		t.Fatal("expected SaveLastRunState dep")
-	}
-	if r.deps.IsAllowedEditorEmail == nil {
-		t.Fatal("expected IsAllowedEditorEmail dep")
-	}
-
-	// Execute constructor closures so NewRunner is fully covered.
-	_ = r.deps.EnsureCoverageDir()
-	_, _ = r.deps.CoveragePercentFromProfile("", "")
-}
-
 func TestRunnerUnauthorized(t *testing.T) {
 	deps := baseDeps()
 	deps.IsAllowedEditorEmail = func(email string) bool { return false }
@@ -179,19 +144,5 @@ func TestRunnerGoTestFailureStillReturnsState(t *testing.T) {
 	}
 	if state.CoverPercent != 0 {
 		t.Fatal("expected zero coverage")
-	}
-}
-
-func TestRunnerRenderErrorNotApplicable(t *testing.T) {
-	// El runner no renderiza; eso lo hace el adapter web.
-	// Este test solo confirma que el runner devuelve estado incluso si render fallaría.
-	deps := baseDeps()
-	deps.RunTests = func(root, coverProfile string) ([]byte, error) { return []byte("ok"), nil }
-	state, err := NewRunnerWithDeps(deps).Run("ok@example.com")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !state.Success {
-		t.Fatal("expected success state")
 	}
 }

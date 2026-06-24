@@ -8,11 +8,7 @@ import (
 
 	authapp "app-mobile-downloader/internal/auth/application"
 	sharedpostgresql "app-mobile-downloader/internal/shared/infrastructure/postgresql"
-
-	"github.com/Ignaciojeria/ioc"
 )
-
-var _ = ioc.Register(NewSessionRepository)
 
 type SessionRepository struct {
 	db *sharedpostgresql.Connection

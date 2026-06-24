@@ -61,7 +61,7 @@ func MaterializeAppMobileDownloader(destination, moduleName, bootstrapEmail stri
 			return err
 		}
 		data = renderModuleName(data, moduleName)
-		if filepath.ToSlash(rel) == "internal/shared/access/allowlist.go" {
+		if filepath.ToSlash(rel) == "internal/shared/access.go" {
 			data = renderBootstrapEmail(data, bootstrapEmail)
 		}
 		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {

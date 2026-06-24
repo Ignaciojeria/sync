@@ -23,7 +23,7 @@ func TestFilterCoverageFile(t *testing.T) {
 		"templates/layout_templ.go:1.1,2.2 1 1",
 		"cmd/api/main.go:1.1,2.2 1 1",
 		"internal/shared/infrastructure/postgresql/connection.go:1.1,2.2 1 1",
-		"internal/shared/access/allowlist.go:1.1,2.2 1 1",
+		"internal/shared/access.go:1.1,2.2 1 1",
 	}, "\n")
 	if err := os.WriteFile(input, []byte(content), 0644); err != nil {
 		t.Fatalf("write input: %v", err)
@@ -51,7 +51,7 @@ func TestFilterCoverageFile(t *testing.T) {
 	if strings.Contains(got, "internal/shared/infrastructure/postgresql/connection.go") {
 		t.Fatalf("expected connection.go to be removed: %q", got)
 	}
-	if !strings.Contains(got, "allowlist.go") {
+	if !strings.Contains(got, "internal/shared/access.go") {
 		t.Fatalf("expected non-templ lines to remain: %q", got)
 	}
 }
@@ -66,7 +66,7 @@ func TestShouldExcludeCoverageLine(t *testing.T) {
 	if !ShouldExcludeCoverageLine([]byte("internal/shared/infrastructure/postgresql/connection.go:1.1,2.2 1 1")) {
 		t.Fatal("expected connection.go to be excluded")
 	}
-	if ShouldExcludeCoverageLine([]byte("internal/shared/access/allowlist.go:1.1,2.2 1 1")) {
+	if ShouldExcludeCoverageLine([]byte("internal/shared/access.go:1.1,2.2 1 1")) {
 		t.Fatal("did not expect regular source file to be excluded")
 	}
 }

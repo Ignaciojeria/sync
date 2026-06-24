@@ -12,7 +12,6 @@ import (
 
 	authapp "app-mobile-downloader/internal/auth/application"
 	"app-mobile-downloader/internal/shared"
-	"app-mobile-downloader/internal/shared/access"
 	"app-mobile-downloader/internal/shared/configuration"
 
 	"github.com/MicahParks/keyfunc/v3"
@@ -125,7 +124,7 @@ func PrincipalFromClaims(claims jwt.MapClaims) Principal {
 		machineClientID = firstAudienceClaim(claims)
 	}
 	if strings.TrimSpace(machineClientID) == "" {
-		machineClientID = firstNonEmptyMachineID(subject, shared.FirstStringClaim(claims, "name", "id"))
+		machineClientID = shared.FirstNonEmpty(subject, shared.FirstStringClaim(claims, "name", "id"))
 	}
 	if subject == "" && strings.TrimSpace(machineClientID) != "" {
 		isMachine = true
@@ -261,15 +260,6 @@ func normalizeGrantType(value string) string {
 	return v
 }
 
-func firstNonEmptyMachineID(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
-}
-
 func firstAudienceClaim(claims jwt.MapClaims) string {
 	raw, ok := claims["aud"]
 	if !ok || raw == nil {
@@ -300,9 +290,9 @@ func isAuthorizedPathClaims(path string, claims jwt.MapClaims) bool {
 		return true
 	}
 	if isEditorPath(path) {
-		return access.IsAllowedEditorEmail(email)
+		return shared.IsAllowedEditorEmail(email)
 	}
-	return access.IsAllowedAppEmail(email)
+	return shared.IsAllowedAppEmail(email)
 }
 
 func shouldRedirectToLogin(r *http.Request) bool {
@@ -330,11 +320,6 @@ func isEditorPath(path string) bool {
 	}
 }
 
-func isReportPath(path string) bool {
-	path = strings.TrimSpace(path)
-	return strings.HasPrefix(path, "/report/")
-}
-
 func isPublicPath(path string) bool {
 	switch strings.TrimSpace(path) {
 	case "/auth/login", "/auth/login/google", "/auth/callback", "/auth/logout", "/manifest.json", "/favicon.ico", "/icon.svg", "/icon-180.png", "/logo.jpeg", "/login.jpeg", "/login-bg.svg":
@@ -360,4 +345,24 @@ func writeForbidden(w http.ResponseWriter) {
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"error": "forbidden",
 	})
+}
+
+// RequireEditor rejects requests whose authenticated email is not in the
+// editor allowlist. Apply as per-route middleware on editor-only endpoints.
+func RequireEditor() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims, ok := JWTClaimsFromContext(r.Context())
+			if !ok {
+				writeUnauthorized(w)
+				return
+			}
+			email := shared.FirstStringClaim(claims, "email")
+			if !shared.IsAllowedEditorEmail(email) {
+				writeForbidden(w)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }

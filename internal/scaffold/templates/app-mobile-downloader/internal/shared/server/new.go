@@ -2,20 +2,19 @@ package server
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"strings"
 	"time"
 
 	authmiddleware "app-mobile-downloader/internal/auth/middleware"
 	authpostgresql "app-mobile-downloader/internal/auth/infrastructure/postgresql"
+	"app-mobile-downloader/internal/shared"
 	"app-mobile-downloader/internal/shared/configuration"
 
-	"github.com/Ignaciojeria/ioc"
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/go-fuego/fuego"
 )
-
-var _ = ioc.Register(New)
-var _ = ioc.Register(startServer)
 
 type Server struct {
 	*fuego.Server
@@ -31,17 +30,19 @@ func New(conf configuration.Conf, jwks keyfunc.Keyfunc, store *authpostgresql.Se
 	return &Server{Server: server}
 }
 
-func startServer(
-	server *Server,
-	shutdowner ioc.Shutdowner,
-) error {
+func Start(server *Server, hooks *shared.Hooks) error {
 	go runServer(server)
-	shutdowner.RegisterShutdown(shutdownHook(server))
+	hooks.RegisterShutdown(shutdownHook(server))
 	return nil
 }
 
 func runServer(server interface{ Run() error }) {
-	if err := server.Run(); err != nil {
+	// http.ErrServerClosed es la salida esperada de http.Server.Serve cuando
+	// Shutdown cierra los listeners — no es un fallo. Panicar en ese caso
+	// colgaba el shutdown (el test TestStartServerRegistersShutdownHook fallaba
+	// por goroutine race con el test runner). Errores reales (bind del puerto,
+	// fallo de TLS, etc.) sí panican.
+	if err := server.Run(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		panic(err)
 	}
 }
@@ -57,5 +58,3 @@ func shutdownHook(server interface{ Shutdown(context.Context) error }) func() er
 		return server.Shutdown(ctx)
 	}
 }
-
-

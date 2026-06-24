@@ -7,14 +7,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"app-mobile-downloader/internal/shared/access"
+	"app-mobile-downloader/internal/shared"
 	infratest "app-mobile-downloader/internal/shared/infrastructure/test"
 	"app-mobile-downloader/internal/quality/ui"
-
-	"github.com/Ignaciojeria/ioc"
 )
-
-var _ = ioc.Register(NewRunner)
 
 type RunnerDeps struct {
 	FindProjectRoot          func() (string, error)
@@ -43,7 +39,7 @@ func NewRunner() *Runner {
 			},
 			GenerateHTMLReport:       infratest.GenerateHTMLReport,
 			SaveLastRunState:         infratest.SaveLastRunState,
-			IsAllowedEditorEmail:     access.IsAllowedEditorEmail,
+			IsAllowedEditorEmail:     shared.IsAllowedEditorEmail,
 		},
 	}
 }

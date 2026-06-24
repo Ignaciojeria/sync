@@ -24,7 +24,7 @@ func TestParseDatabaseName(t *testing.T) {
 }
 
 func TestRunMigrationsReturnsErrorWithNilDB(t *testing.T) {
-	if err := runMigrations(nil, "db"); err == nil {
+	if err := (&Connection{name: "db"}).RunMigrations(); err == nil {
 		t.Fatal("expected error when db connection is nil")
 	}
 	if err := (*Connection)(nil).RunMigrations(); err == nil {

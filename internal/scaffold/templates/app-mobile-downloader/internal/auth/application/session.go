@@ -20,5 +20,3 @@ type SessionRepository interface {
 	CreateUserSession(identity Identity, resp CallbackResponse) (string, error)
 	RevokeSession(sessionID string) error
 }
-
-type SessionStore = SessionRepository

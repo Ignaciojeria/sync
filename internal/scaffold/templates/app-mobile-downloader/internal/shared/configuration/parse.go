@@ -13,29 +13,14 @@ import (
 
 var once sync.Once
 
-var (
-	getwd      = os.Getwd
-	stat       = os.Stat
-	loadDotEnv = godotenv.Load
-	logEnvLoad = handleEnvLoad
-)
-
-func handleEnvLoad(err error) {
-	if err != nil {
-		slog.Warn(".env not found, loading environment variables from system.")
-	} else {
-		slog.Info("Environment variables loaded from .env file.")
-	}
-}
-
 func findProjectRoot() string {
-	wd, err := getwd()
+	wd, err := os.Getwd()
 	if err != nil {
 		return ""
 	}
 	dir := wd
 	for dir != filepath.Dir(dir) {
-		if _, err := stat(filepath.Join(dir, "go.mod")); err == nil {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
 			return dir
 		}
 		dir = filepath.Dir(dir)
@@ -47,7 +32,11 @@ func loadEnvOnce() {
 	once.Do(func() {
 		root := findProjectRoot()
 		envPath := filepath.Join(root, ".env")
-		logEnvLoad(loadDotEnv(envPath))
+		if err := godotenv.Load(envPath); err != nil {
+			slog.Warn(".env not found, loading environment variables from system.")
+		} else {
+			slog.Info("Environment variables loaded from .env file.")
+		}
 	})
 }
 
