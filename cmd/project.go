@@ -239,6 +239,22 @@ var initCmd = &cobra.Command{
 				fmt.Printf("⚠️  Machine auth secret no vino inline; secretRef=%s\n", cfg.MachineAuthClientSecretRef)
 			}
 		}
+		normalizedCasdoorAdmin := normalizeProjectCasdoorAdmin(resp)
+		if normalizedCasdoorAdmin != nil {
+			cfg.CasdoorAdminAPIBaseURL = strings.TrimSpace(normalizedCasdoorAdmin.APIBaseURL)
+			cfg.CasdoorAdminGatewayURL = strings.TrimSpace(normalizedCasdoorAdmin.GatewayURL)
+			cfg.CasdoorOrg = firstNonEmptyTrimmed(strings.TrimSpace(cfg.CasdoorOrg), strings.TrimSpace(normalizedCasdoorAdmin.Organization))
+			cfg.CasdoorApplication = firstNonEmptyTrimmed(strings.TrimSpace(cfg.CasdoorApplication), strings.TrimSpace(normalizedCasdoorAdmin.Application))
+			cfg.CasdoorAdminClientID = strings.TrimSpace(normalizedCasdoorAdmin.ClientID)
+			cfg.CasdoorAdminClientSecret = strings.TrimSpace(normalizedCasdoorAdmin.ClientSecret)
+			cfg.CasdoorAdminClientSecretRef = strings.TrimSpace(normalizedCasdoorAdmin.ClientSecretRef)
+			cfg.CasdoorAdminTokenEndpoint = strings.TrimSpace(normalizedCasdoorAdmin.TokenEndpoint)
+			cfg.CasdoorAdminScopes = strings.Join(normalizedCasdoorAdmin.Scopes, " ")
+			cfg.CasdoorAdminTenantScopedOnly = normalizedCasdoorAdmin.TenantScopedOnly
+			if cfg.CasdoorAdminClientSecret == "" && cfg.CasdoorAdminClientSecretRef != "" {
+				fmt.Printf("⚠️  Casdoor admin secret no vino inline; secretRef=%s\n", cfg.CasdoorAdminClientSecretRef)
+			}
+		}
 		if sshPrivateKey != "" {
 			fmt.Println("✅ Clave SSH de VM recibida inline desde backend")
 			if err := writeSSHPrivateKey(slug, cfg.MutagenDestination, sshPrivateKey); err != nil {
@@ -247,7 +263,7 @@ var initCmd = &cobra.Command{
 		} else {
 			fmt.Println("ℹ️  Backend no devolvió sshPrivateKey inline; se usará flujo SSH legacy (puede requerir onboarding exe.dev)")
 		}
-		if err := writeProjectSecretsBundle(slug, sshPrivateKey, projectAPIToken, dbPassword, cfg.MachineAuthClientID, cfg.MachineAuthClientSecret); err != nil {
+		if err := writeProjectSecretsBundle(slug, sshPrivateKey, projectAPIToken, dbPassword, cfg.MachineAuthClientID, cfg.MachineAuthClientSecret, cfg.CasdoorAdminClientSecret); err != nil {
 			return fmt.Errorf("no se pudieron guardar secretos locales del proyecto: %w", err)
 		}
 		if strings.TrimSpace(cfg.MutagenDestination) == "" {
@@ -306,6 +322,11 @@ var initCmd = &cobra.Command{
 				m.ClientSecret = ""
 				safeResp.MachineAuth = &m
 			}
+			if safeResp.IdentityExtensions != nil && safeResp.IdentityExtensions.CasdoorAdmin != nil {
+				ca := *safeResp.IdentityExtensions.CasdoorAdmin
+				ca.ClientSecret = ""
+				safeResp.IdentityExtensions = &api.ProjectIdentityExtensions{CasdoorAdmin: &ca}
+			}
 			if safeResp.Secrets != nil {
 				s := *safeResp.Secrets
 				s.SSHPrivateKey = ""
@@ -313,6 +334,7 @@ var initCmd = &cobra.Command{
 				s.DBPassword = ""
 				s.OIDCClientSecret = ""
 				s.MachineClientSecret = ""
+				s.CasdoorAdminClientSecret = ""
 				safeResp.Secrets = &s
 			}
 			enc := json.NewEncoder(os.Stdout)
@@ -2681,7 +2703,7 @@ func writeSSHPrivateKey(projectSlug, destination, key string) error {
 	return nil
 }
 
-func writeProjectSecretsBundle(slug, sshPrivateKey, projectAPIToken, dbPassword, machineClientID, machineClientSecret string) error {
+func writeProjectSecretsBundle(slug, sshPrivateKey, projectAPIToken, dbPassword, machineClientID, machineClientSecret, casdoorAdminClientSecret string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
@@ -2710,6 +2732,9 @@ func writeProjectSecretsBundle(slug, sshPrivateKey, projectAPIToken, dbPassword,
 		return err
 	}
 	if err := writeIf("machine-client-secret", machineClientSecret); err != nil {
+		return err
+	}
+	if err := writeIf("casdoor-admin-client-secret", casdoorAdminClientSecret); err != nil {
 		return err
 	}
 	return nil
@@ -2820,6 +2845,37 @@ func normalizeProjectAuth(resp *api.CreateProjectResponse) *api.ProjectAuth {
 	return normalized
 }
 
+func normalizeProjectCasdoorAdmin(resp *api.CreateProjectResponse) *api.ProjectCasdoorAdmin {
+	if resp == nil || resp.IdentityExtensions == nil || resp.IdentityExtensions.CasdoorAdmin == nil {
+		return nil
+	}
+	admin := resp.IdentityExtensions.CasdoorAdmin
+	clientSecret := strings.TrimSpace(admin.ClientSecret)
+	if clientSecret == "" && resp.Secrets != nil {
+		clientSecret = strings.TrimSpace(resp.Secrets.CasdoorAdminClientSecret)
+	}
+	clientSecretRef := strings.TrimSpace(admin.ClientSecretRef)
+	if clientSecretRef == "" && resp.Secrets != nil {
+		clientSecretRef = strings.TrimSpace(resp.Secrets.CasdoorAdminClientSecretRef)
+	}
+	if strings.TrimSpace(admin.TokenEndpoint) == "" || strings.TrimSpace(admin.ClientID) == "" {
+		return nil
+	}
+	return &api.ProjectCasdoorAdmin{
+		Provider:         firstNonEmptyTrimmed(strings.TrimSpace(admin.Provider), "casdoor"),
+		APIBaseURL:       strings.TrimSpace(admin.APIBaseURL),
+		GatewayURL:       strings.TrimSpace(admin.GatewayURL),
+		Organization:     strings.TrimSpace(admin.Organization),
+		Application:      strings.TrimSpace(admin.Application),
+		ClientID:         strings.TrimSpace(admin.ClientID),
+		ClientSecret:     clientSecret,
+		ClientSecretRef:  clientSecretRef,
+		TokenEndpoint:    strings.TrimSpace(admin.TokenEndpoint),
+		Scopes:           admin.Scopes,
+		TenantScopedOnly: admin.TenantScopedOnly,
+	}
+}
+
 func normalizeProjectMachineAuth(resp *api.CreateProjectResponse) *api.ProjectMachineAuth {
 	if resp == nil || resp.MachineAuth == nil {
 		return nil
@@ -2899,52 +2955,49 @@ func materializeProjectEnv(cfg config.Config) error {
 		}
 	}
 	entries := map[string]string{
-		"PROJECT_NAME":                   strings.TrimSpace(firstNonEmpty(cfg.LastProjectSlug, cfg.LastProjectID)),
-		"DATABASE_URL":                   databaseURLForRuntime,
-		"OIDC_TYPE":                      strings.TrimSpace(cfg.OIDCType),
-		"OIDC_PROVIDER":                  strings.TrimSpace(cfg.OIDCProvider),
-		"OIDC_ISSUER":                    strings.TrimSpace(cfg.OIDCIssuer),
-		"OIDC_DISCOVERY_URL":             strings.TrimSpace(cfg.OIDCDiscoveryURL),
-		"OIDC_JWKS_URI":                  strings.TrimSpace(cfg.OIDCJWKSURI),
-		"OIDC_AUTHORIZATION_ENDPOINT":    strings.TrimSpace(cfg.OIDCAuthorizationEndpoint),
-		"OIDC_TOKEN_ENDPOINT":            strings.TrimSpace(cfg.OIDCTokenEndpoint),
-		"OIDC_USERINFO_ENDPOINT":         strings.TrimSpace(cfg.OIDCUserinfoEndpoint),
-		"OIDC_CLIENT_ID":                 strings.TrimSpace(cfg.OIDCClientID),
-		"OIDC_CLIENT_SECRET":             strings.TrimSpace(cfg.OIDCClientSecret),
-		"OIDC_CLIENT_SECRET_REF":         strings.TrimSpace(cfg.OIDCClientSecretRef),
-		"OIDC_REDIRECT_URI":              strings.TrimSpace(cfg.OIDCRedirectURI),
-		"OIDC_LOGOUT_URI":                strings.TrimSpace(cfg.OIDCLogoutURI),
-		"OIDC_POST_LOGOUT_REDIRECT_URI":  strings.TrimSpace(cfg.OIDCPostLogoutRedirectURI),
-		"OIDC_SCOPES":                    strings.TrimSpace(cfg.OIDCScopes),
-		"OIDC_LOGIN_URL":                 strings.TrimSpace(cfg.OIDCLoginURL),
-		"OIDC_GOOGLE_LOGIN_URL":          strings.TrimSpace(cfg.OIDCGoogleLoginURL),
-		"OIDC_UPSTREAM_GOOGLE_CLIENT_ID": strings.TrimSpace(cfg.OIDCUpstreamGoogleClientID),
-		"MACHINE_AUTH_GRANT_TYPE":        strings.TrimSpace(cfg.MachineAuthGrantType),
-		"MACHINE_AUTH_TOKEN_ENDPOINT":    strings.TrimSpace(cfg.MachineAuthTokenEndpoint),
-		"MACHINE_AUTH_CLIENT_ID":         strings.TrimSpace(cfg.MachineAuthClientID),
-		"MACHINE_AUTH_CLIENT_SECRET":     strings.TrimSpace(cfg.MachineAuthClientSecret),
-		"MACHINE_AUTH_CLIENT_SECRET_REF": strings.TrimSpace(cfg.MachineAuthClientSecretRef),
-		"MACHINE_AUTH_AUDIENCE":          strings.TrimSpace(cfg.MachineAuthAudience),
-		"MACHINE_AUTH_SCOPES":            strings.TrimSpace(cfg.MachineAuthScopes),
+		"PROJECT_NAME":                     strings.TrimSpace(firstNonEmpty(cfg.LastProjectSlug, cfg.LastProjectID)),
+		"DATABASE_URL":                     databaseURLForRuntime,
+		"OIDC_TYPE":                        strings.TrimSpace(cfg.OIDCType),
+		"OIDC_PROVIDER":                    strings.TrimSpace(cfg.OIDCProvider),
+		"OIDC_ISSUER":                      strings.TrimSpace(cfg.OIDCIssuer),
+		"OIDC_DISCOVERY_URL":               strings.TrimSpace(cfg.OIDCDiscoveryURL),
+		"OIDC_JWKS_URI":                    strings.TrimSpace(cfg.OIDCJWKSURI),
+		"OIDC_AUTHORIZATION_ENDPOINT":      strings.TrimSpace(cfg.OIDCAuthorizationEndpoint),
+		"OIDC_TOKEN_ENDPOINT":              strings.TrimSpace(cfg.OIDCTokenEndpoint),
+		"OIDC_USERINFO_ENDPOINT":           strings.TrimSpace(cfg.OIDCUserinfoEndpoint),
+		"OIDC_CLIENT_ID":                   strings.TrimSpace(cfg.OIDCClientID),
+		"OIDC_CLIENT_SECRET":               strings.TrimSpace(cfg.OIDCClientSecret),
+		"OIDC_CLIENT_SECRET_REF":           strings.TrimSpace(cfg.OIDCClientSecretRef),
+		"OIDC_REDIRECT_URI":                strings.TrimSpace(cfg.OIDCRedirectURI),
+		"OIDC_LOGOUT_URI":                  strings.TrimSpace(cfg.OIDCLogoutURI),
+		"OIDC_POST_LOGOUT_REDIRECT_URI":    strings.TrimSpace(cfg.OIDCPostLogoutRedirectURI),
+		"OIDC_SCOPES":                      strings.TrimSpace(cfg.OIDCScopes),
+		"OIDC_LOGIN_URL":                   strings.TrimSpace(cfg.OIDCLoginURL),
+		"OIDC_GOOGLE_LOGIN_URL":            strings.TrimSpace(cfg.OIDCGoogleLoginURL),
+		"OIDC_UPSTREAM_GOOGLE_CLIENT_ID":   strings.TrimSpace(cfg.OIDCUpstreamGoogleClientID),
+		"CASDOOR_ADMIN_API_BASE_URL":       strings.TrimSpace(cfg.CasdoorAdminAPIBaseURL),
+		"CASDOOR_ADMIN_GATEWAY_URL":        strings.TrimSpace(cfg.CasdoorAdminGatewayURL),
+		"CASDOOR_ADMIN_ORGANIZATION":       strings.TrimSpace(cfg.CasdoorOrg),
+		"CASDOOR_ADMIN_APPLICATION":        strings.TrimSpace(cfg.CasdoorApplication),
+		"CASDOOR_ADMIN_CLIENT_ID":          strings.TrimSpace(cfg.CasdoorAdminClientID),
+		"CASDOOR_ADMIN_CLIENT_SECRET":      strings.TrimSpace(cfg.CasdoorAdminClientSecret),
+		"CASDOOR_ADMIN_CLIENT_SECRET_REF":  strings.TrimSpace(cfg.CasdoorAdminClientSecretRef),
+		"CASDOOR_ADMIN_TOKEN_ENDPOINT":     strings.TrimSpace(cfg.CasdoorAdminTokenEndpoint),
+		"CASDOOR_ADMIN_SCOPES":             strings.TrimSpace(cfg.CasdoorAdminScopes),
+		"CASDOOR_ADMIN_TENANT_SCOPED_ONLY": fmt.Sprintf("%t", cfg.CasdoorAdminTenantScopedOnly),
+		"MACHINE_AUTH_GRANT_TYPE":          strings.TrimSpace(cfg.MachineAuthGrantType),
+		"MACHINE_AUTH_TOKEN_ENDPOINT":      strings.TrimSpace(cfg.MachineAuthTokenEndpoint),
+		"MACHINE_AUTH_CLIENT_ID":           strings.TrimSpace(cfg.MachineAuthClientID),
+		"MACHINE_AUTH_CLIENT_SECRET":       strings.TrimSpace(cfg.MachineAuthClientSecret),
+		"MACHINE_AUTH_CLIENT_SECRET_REF":   strings.TrimSpace(cfg.MachineAuthClientSecretRef),
+		"MACHINE_AUTH_AUDIENCE":            strings.TrimSpace(cfg.MachineAuthAudience),
+		"MACHINE_AUTH_SCOPES":              strings.TrimSpace(cfg.MachineAuthScopes),
 	}
 
 	if entries["OIDC_UPSTREAM_GOOGLE_CLIENT_ID"] == "" && strings.Contains(strings.ToLower(entries["OIDC_GOOGLE_LOGIN_URL"]), "accounts.google.com/signin/oauth") {
 		if u, err := url.Parse(strings.TrimSpace(entries["OIDC_GOOGLE_LOGIN_URL"])); err == nil {
 			entries["OIDC_UPSTREAM_GOOGLE_CLIENT_ID"] = strings.TrimSpace(u.Query().Get("client_id"))
 		}
-	}
-
-	if entries["MACHINE_AUTH_TOKEN_ENDPOINT"] != "" && entries["MACHINE_AUTH_TOKEN_ENDPOINT"] == entries["OIDC_TOKEN_ENDPOINT"] {
-		entries["MACHINE_AUTH_TOKEN_ENDPOINT"] = ""
-	}
-	if entries["MACHINE_AUTH_CLIENT_ID"] != "" && entries["MACHINE_AUTH_CLIENT_ID"] == entries["OIDC_CLIENT_ID"] {
-		entries["MACHINE_AUTH_CLIENT_ID"] = ""
-	}
-	if entries["MACHINE_AUTH_CLIENT_SECRET"] != "" && entries["MACHINE_AUTH_CLIENT_SECRET"] == entries["OIDC_CLIENT_SECRET"] {
-		entries["MACHINE_AUTH_CLIENT_SECRET"] = ""
-	}
-	if entries["MACHINE_AUTH_CLIENT_SECRET_REF"] != "" && entries["MACHINE_AUTH_CLIENT_SECRET_REF"] == entries["OIDC_CLIENT_SECRET_REF"] {
-		entries["MACHINE_AUTH_CLIENT_SECRET_REF"] = ""
 	}
 
 	hasAny := false
@@ -2988,7 +3041,7 @@ func materializeProjectEnv(cfg config.Config) error {
 		return err
 	}
 
-	for _, key := range []string{"PROJECT_NAME", "DATABASE_URL", "OIDC_TYPE", "OIDC_PROVIDER", "OIDC_ISSUER", "OIDC_DISCOVERY_URL", "OIDC_JWKS_URI", "OIDC_AUTHORIZATION_ENDPOINT", "OIDC_TOKEN_ENDPOINT", "OIDC_USERINFO_ENDPOINT", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_CLIENT_SECRET_REF", "OIDC_REDIRECT_URI", "OIDC_LOGOUT_URI", "OIDC_POST_LOGOUT_REDIRECT_URI", "OIDC_SCOPES", "OIDC_LOGIN_URL", "OIDC_GOOGLE_LOGIN_URL", "OIDC_UPSTREAM_GOOGLE_CLIENT_ID", "MACHINE_AUTH_GRANT_TYPE", "MACHINE_AUTH_TOKEN_ENDPOINT", "MACHINE_AUTH_CLIENT_ID", "MACHINE_AUTH_CLIENT_SECRET", "MACHINE_AUTH_CLIENT_SECRET_REF", "MACHINE_AUTH_AUDIENCE", "MACHINE_AUTH_SCOPES"} {
+	for _, key := range []string{"PROJECT_NAME", "DATABASE_URL", "OIDC_TYPE", "OIDC_PROVIDER", "OIDC_ISSUER", "OIDC_DISCOVERY_URL", "OIDC_JWKS_URI", "OIDC_AUTHORIZATION_ENDPOINT", "OIDC_TOKEN_ENDPOINT", "OIDC_USERINFO_ENDPOINT", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_CLIENT_SECRET_REF", "OIDC_REDIRECT_URI", "OIDC_LOGOUT_URI", "OIDC_POST_LOGOUT_REDIRECT_URI", "OIDC_SCOPES", "OIDC_LOGIN_URL", "OIDC_GOOGLE_LOGIN_URL", "OIDC_UPSTREAM_GOOGLE_CLIENT_ID", "CASDOOR_ADMIN_API_BASE_URL", "CASDOOR_ADMIN_GATEWAY_URL", "CASDOOR_ADMIN_ORGANIZATION", "CASDOOR_ADMIN_APPLICATION", "CASDOOR_ADMIN_CLIENT_ID", "CASDOOR_ADMIN_CLIENT_SECRET", "CASDOOR_ADMIN_CLIENT_SECRET_REF", "CASDOOR_ADMIN_TOKEN_ENDPOINT", "CASDOOR_ADMIN_SCOPES", "CASDOOR_ADMIN_TENANT_SCOPED_ONLY", "MACHINE_AUTH_GRANT_TYPE", "MACHINE_AUTH_TOKEN_ENDPOINT", "MACHINE_AUTH_CLIENT_ID", "MACHINE_AUTH_CLIENT_SECRET", "MACHINE_AUTH_CLIENT_SECRET_REF", "MACHINE_AUTH_AUDIENCE", "MACHINE_AUTH_SCOPES"} {
 		if value := strings.TrimSpace(entries[key]); value != "" {
 			lines = append(lines, key+"="+value)
 		}
@@ -3001,7 +3054,7 @@ func materializeProjectEnv(cfg config.Config) error {
 	if err := os.WriteFile(".env", []byte(content), 0o600); err != nil {
 		return err
 	}
-	fmt.Println("✅ .env materializado con configuración OIDC/machine auth")
+	fmt.Println("✅ .env materializado con configuración OIDC/Casdoor admin/machine auth")
 	return nil
 }
 

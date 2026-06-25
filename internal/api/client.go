@@ -52,26 +52,18 @@ type createProjectRequest struct {
 }
 
 type CreateProjectResponse struct {
-	ProjectID       string `json:"projectId"`
-	Name            string `json:"name"`
-	Slug            string `json:"slug"`
-	Path            string `json:"path"`
-	Subdomain       string `json:"subdomain"`
-	Status          string `json:"status"`
-	VMSshPrivateKey string `json:"vmSshPrivateKey,omitempty"` // compat legado
-	ProjectAPIToken string `json:"projectApiToken,omitempty"` // compat legado
-	DBPassword      string `json:"dbPassword,omitempty"`      // compat legado
-	Secrets         *struct {
-		SSHPrivateKey          string `json:"sshPrivateKey,omitempty"`
-		ProjectAPIToken        string `json:"projectApiToken,omitempty"`
-		DBPassword             string `json:"dbPassword,omitempty"`
-		OIDCClientSecret       string `json:"oidcClientSecret,omitempty"`
-		OIDCClientSecretRef    string `json:"oidcClientSecretRef,omitempty"`
-		MachineClientSecret    string `json:"machineClientSecret,omitempty"`
-		MachineClientSecretRef string `json:"machineClientSecretRef,omitempty"`
-	} `json:"secrets,omitempty"`
-
-	Workspace struct {
+	Version         int             `json:"version,omitempty"`
+	ProjectID       string          `json:"projectId"`
+	Name            string          `json:"name,omitempty"`
+	Slug            string          `json:"slug"`
+	Path            string          `json:"path,omitempty"`
+	Subdomain       string          `json:"subdomain,omitempty"`
+	Status          string          `json:"status,omitempty"`
+	VMSshPrivateKey string          `json:"vmSshPrivateKey,omitempty"` // compat legado
+	ProjectAPIToken string          `json:"projectApiToken,omitempty"` // compat legado
+	DBPassword      string          `json:"dbPassword,omitempty"`      // compat legado
+	Secrets         *ProjectSecrets `json:"secrets,omitempty"`
+	Workspace       struct {
 		Branch string `json:"branch"`
 		Mode   string `json:"mode"`
 	} `json:"workspace"`
@@ -95,9 +87,50 @@ type CreateProjectResponse struct {
 		Port              int    `json:"port"`
 		PasswordSecretRef string `json:"passwordSecretRef"`
 	} `json:"database"`
-	Auth        *ProjectAuth        `json:"auth,omitempty"`
-	Identity    *ProjectAuth        `json:"identity,omitempty"`
-	MachineAuth *ProjectMachineAuth `json:"machineAuth,omitempty"`
+	Auth               *ProjectAuth               `json:"auth,omitempty"`
+	Identity           *ProjectAuth               `json:"identity,omitempty"`
+	IdentityExtensions *ProjectIdentityExtensions `json:"identityExtensions,omitempty"`
+	MachineAuth        *ProjectMachineAuth        `json:"machineAuth,omitempty"`
+	Metadata           *ProjectMetadata           `json:"metadata,omitempty"`
+}
+
+type ProjectSecrets struct {
+	SSHPrivateKey               string `json:"sshPrivateKey,omitempty"`
+	SSHPrivateKeySecretRef      string `json:"sshPrivateKeySecretRef,omitempty"`
+	ProjectAPIToken             string `json:"projectApiToken,omitempty"`
+	ProjectAPITokenSecretRef    string `json:"projectApiTokenSecretRef,omitempty"`
+	DBPassword                  string `json:"dbPassword,omitempty"`
+	DBPasswordSecretRef         string `json:"dbPasswordSecretRef,omitempty"`
+	OIDCClientSecret            string `json:"oidcClientSecret,omitempty"`
+	OIDCClientSecretRef         string `json:"oidcClientSecretRef,omitempty"`
+	MachineClientSecret         string `json:"machineClientSecret,omitempty"`
+	MachineClientSecretRef      string `json:"machineClientSecretRef,omitempty"`
+	CasdoorAdminClientSecret    string `json:"casdoorAdminClientSecret,omitempty"`
+	CasdoorAdminClientSecretRef string `json:"casdoorAdminClientSecretRef,omitempty"`
+}
+
+type ProjectIdentityExtensions struct {
+	CasdoorAdmin *ProjectCasdoorAdmin `json:"casdoorAdmin,omitempty"`
+}
+
+type ProjectCasdoorAdmin struct {
+	Provider         string   `json:"provider,omitempty"`
+	APIBaseURL       string   `json:"apiBaseUrl,omitempty"`
+	GatewayURL       string   `json:"gatewayUrl,omitempty"`
+	Organization     string   `json:"organization,omitempty"`
+	Application      string   `json:"application,omitempty"`
+	ClientID         string   `json:"clientId,omitempty"`
+	ClientSecret     string   `json:"clientSecret,omitempty"`
+	ClientSecretRef  string   `json:"clientSecretRef,omitempty"`
+	TokenEndpoint    string   `json:"tokenEndpoint,omitempty"`
+	Scopes           []string `json:"scopes,omitempty"`
+	TenantScopedOnly bool     `json:"tenantScopedOnly,omitempty"`
+}
+
+type ProjectMetadata struct {
+	OwnerUserID string `json:"ownerUserId,omitempty"`
+	CreatedAt   string `json:"createdAt,omitempty"`
+	UpdatedAt   string `json:"updatedAt,omitempty"`
 }
 
 type ProjectMachineAuth struct {
@@ -111,26 +144,26 @@ type ProjectMachineAuth struct {
 }
 
 type ProjectAuth struct {
-	Type                  string   `json:"type,omitempty"`
-	Provider              string   `json:"provider,omitempty"`
-	Issuer                string   `json:"issuer,omitempty"`
-	DiscoveryURL          string   `json:"discoveryUrl,omitempty"`
-	JWKSURI               string   `json:"jwksUri,omitempty"`
-	AuthorizationEndpoint string   `json:"authorizationEndpoint,omitempty"`
-	TokenEndpoint         string   `json:"tokenEndpoint,omitempty"`
-	UserinfoEndpoint      string   `json:"userinfoEndpoint,omitempty"`
-	ClientID              string   `json:"clientId,omitempty"`
-	ClientSecret          string   `json:"clientSecret,omitempty"`
-	ClientSecretRef       string   `json:"clientSecretRef,omitempty"`
-	RedirectURI           string   `json:"redirectUri,omitempty"`
-	LogoutURI             string   `json:"logoutUri,omitempty"`
-	PostLogoutRedirectURI string   `json:"postLogoutRedirectUri,omitempty"`
-	Scopes                []string `json:"scopes,omitempty"`
-	LoginURL              string   `json:"loginUrl,omitempty"`
-	GoogleLoginURL        string   `json:"googleLoginUrl,omitempty"`
-	UpstreamGoogleClientID string  `json:"upstreamGoogleClientId,omitempty"`
-	Organization          string   `json:"organization,omitempty"`
-	Application           string   `json:"application,omitempty"`
+	Type                   string   `json:"type,omitempty"`
+	Provider               string   `json:"provider,omitempty"`
+	Issuer                 string   `json:"issuer,omitempty"`
+	DiscoveryURL           string   `json:"discoveryUrl,omitempty"`
+	JWKSURI                string   `json:"jwksUri,omitempty"`
+	AuthorizationEndpoint  string   `json:"authorizationEndpoint,omitempty"`
+	TokenEndpoint          string   `json:"tokenEndpoint,omitempty"`
+	UserinfoEndpoint       string   `json:"userinfoEndpoint,omitempty"`
+	ClientID               string   `json:"clientId,omitempty"`
+	ClientSecret           string   `json:"clientSecret,omitempty"`
+	ClientSecretRef        string   `json:"clientSecretRef,omitempty"`
+	RedirectURI            string   `json:"redirectUri,omitempty"`
+	LogoutURI              string   `json:"logoutUri,omitempty"`
+	PostLogoutRedirectURI  string   `json:"postLogoutRedirectUri,omitempty"`
+	Scopes                 []string `json:"scopes,omitempty"`
+	LoginURL               string   `json:"loginUrl,omitempty"`
+	GoogleLoginURL         string   `json:"googleLoginUrl,omitempty"`
+	UpstreamGoogleClientID string   `json:"upstreamGoogleClientId,omitempty"`
+	Organization           string   `json:"organization,omitempty"`
+	Application            string   `json:"application,omitempty"`
 }
 
 type CreatePostgresProjectResponse struct {
