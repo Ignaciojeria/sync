@@ -49,71 +49,74 @@ templ HomePage(snapshot topologyapp.Snapshot) {
 						<div class="text-xs uppercase tracking-[0.22em] opacity-55">{ generatedLabel(snapshot.GeneratedAt) }</div>
 					</div>
 
-					<div class="space-y-5">
-						<div class="space-y-3">
-							<div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] opacity-55">
-								<span>Sync sessions</span>
-								<div class="divider my-0 flex-1"></div>
-							</div>
-							if len(snapshot.SyncSessions) == 0 {
-								<div class="alert alert-soft">
-									<span>No se reportaron sesiones de sync activas desde clientes.</span>
+					<div class="relative" id="topology-graph-root">
+						<div class="space-y-5">
+							<div class="space-y-3" id="topology-sync-group">
+								<div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] opacity-55">
+									<span>Sync sessions</span>
+									<div class="divider my-0 flex-1"></div>
 								</div>
-							} else {
-								<div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-									for _, session := range snapshot.SyncSessions {
-										<div class="card border border-base-300/70 bg-base-100 shadow-sm">
-											<div class="card-body gap-3 p-4">
-												<div class="flex items-start justify-between gap-3">
-													<div>
-														<span class={ statusBadgeClass(session.Status) }>{ formatStatus(session.Status) }</span>
-														<div class="mt-2 text-xs uppercase tracking-[0.22em] opacity-45">Sync session</div>
-														<div class="text-sm font-semibold">{ sessionPrimaryLabel(session.ClientName) }</div>
-														if sessionSecondaryLabel(session.ClientName) != "" {
-															<div class="text-xs font-mono opacity-55">{ sessionSecondaryLabel(session.ClientName) }</div>
-														}
-														<div class="text-xs opacity-60">Project: { session.ProjectName }</div>
+								<div id="topology-sync-target">
+									if len(snapshot.SyncSessions) == 0 {
+										<div class="alert alert-soft">
+											<span>No se reportaron sesiones de sync activas desde clientes.</span>
+										</div>
+									} else {
+										<div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+											for _, session := range snapshot.SyncSessions {
+												<div class="card topology-sync-card border border-base-300/70 bg-base-100 shadow-sm">
+													<div class="card-body gap-3 p-4">
+														<div class="flex items-start justify-between gap-3">
+															<div>
+																<span class={ statusBadgeClass(session.Status) }>{ formatStatus(session.Status) }</span>
+																<div class="mt-2 text-xs uppercase tracking-[0.22em] opacity-45">Sync session</div>
+																<div class="text-sm font-semibold">{ sessionPrimaryLabel(session.ClientName) }</div>
+																if sessionSecondaryLabel(session.ClientName) != "" {
+																	<div class="text-xs font-mono opacity-55">{ sessionSecondaryLabel(session.ClientName) }</div>
+																}
+																<div class="text-xs opacity-60">Project: { session.ProjectName }</div>
+															</div>
+														</div>
 													</div>
 												</div>
-											</div>
+											}
 										</div>
 									}
 								</div>
-							}
-						</div>
+							</div>
 
-						<div class="flex justify-center py-1">
-							<div class="card w-full max-w-lg border border-primary/20 bg-[var(--pi-surface-elevated)] shadow-[var(--pi-shadow-card)]">
-								<div class="card-body items-center gap-3 p-6 text-center">
-									<div class="self-start">
-										<span class={ statusBadgeClass(snapshot.Workspace.Status) }>{ formatStatus(snapshot.Workspace.Status) }</span>
+							<div class="flex justify-center py-1">
+								<div class="card w-full max-w-sm border border-primary/20 bg-[var(--pi-surface-elevated)] shadow-[var(--pi-shadow-card)]" id="topology-workspace-card">
+									<div class="card-body items-center gap-2 p-5 text-center">
+										<div class="badge badge-primary badge-outline uppercase tracking-[0.24em]">Workspace</div>
+										<h3 class="text-2xl font-semibold">{ snapshot.Workspace.Name }</h3>
+										<p class="max-w-md text-sm opacity-70">{ snapshot.Workspace.Summary }</p>
 									</div>
-									<div class="badge badge-primary badge-outline uppercase tracking-[0.24em]">Workspace</div>
-									<h3 class="text-2xl font-semibold">{ snapshot.Workspace.Name }</h3>
-									<p class="max-w-md text-sm opacity-70">{ snapshot.Workspace.Summary }</p>
 								</div>
 							</div>
-						</div>
 
-						<div class="space-y-3">
-							<div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] opacity-55">
-								<span>Services</span>
-								<div class="divider my-0 flex-1"></div>
-							</div>
-							<div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-								for _, service := range snapshot.Services {
-									<div class="card border border-base-300/70 bg-base-100 shadow-sm">
-										<div class="card-body gap-3 p-4">
-											<div>
-												<span class={ statusBadgeClass(service.Status) }>{ formatStatus(service.Status) }</span>
-												<div class="mt-2 text-xs uppercase tracking-[0.22em] opacity-45">Infrastructure</div>
-												<div class="text-sm font-semibold">{ service.Name }</div>
-												<div class="text-xs uppercase tracking-[0.22em] opacity-55">{ service.Kind }</div>
+							<div class="space-y-3" id="topology-services-group">
+								<div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] opacity-55">
+									<span>Services</span>
+									<div class="divider my-0 flex-1"></div>
+								</div>
+								<div id="topology-services-target">
+									<div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+										for _, service := range snapshot.Services {
+											<div class="card topology-service-card border border-base-300/70 bg-base-100 shadow-sm">
+												<div class="card-body gap-3 p-4">
+													<div>
+														<span class={ statusBadgeClass(service.Status) }>{ formatStatus(service.Status) }</span>
+														<div class="mt-2 text-xs uppercase tracking-[0.22em] opacity-45">Infrastructure</div>
+														<div class="text-sm font-semibold">{ service.Name }</div>
+														<div class="text-xs uppercase tracking-[0.22em] opacity-55">{ service.Kind }</div>
+													</div>
+													<p class="text-sm opacity-70">{ service.Summary }</p>
+												</div>
 											</div>
-											<p class="text-sm opacity-70">{ service.Summary }</p>
-										</div>
+										}
 									</div>
-								}
+								</div>
 							</div>
 						</div>
 					</div>
@@ -164,5 +167,70 @@ templ HomePage(snapshot topologyapp.Snapshot) {
 				</div>
 			</aside>
 		</section>
+		<script src="https://cdn.jsdelivr.net/npm/leader-line-new@1.1.9/leader-line.min.js"></script>
+		<script>
+			(() => {
+				let lines = [];
+				let frame = 0;
+
+				function clearLines() {
+					for (const line of lines) {
+						try {
+							line.remove();
+						} catch (_) {
+						}
+					}
+					lines = [];
+				}
+
+				function connectTopology() {
+					clearLines();
+					if (window.innerWidth < 1024 || typeof LeaderLine === "undefined") {
+						return;
+					}
+					const workspace = document.getElementById("topology-workspace-card");
+					const syncCards = Array.from(document.querySelectorAll(".topology-sync-card"));
+					const serviceCards = Array.from(document.querySelectorAll(".topology-service-card"));
+					if (!workspace || (syncCards.length === 0 && serviceCards.length === 0)) {
+						return;
+					}
+					const options = {
+						color: "rgba(120, 120, 140, 0.45)",
+						size: 3,
+						startPlug: "disc",
+						endPlug: "arrow3",
+						path: "fluid",
+						dash: {len: 10, gap: 8},
+						hide: true,
+					};
+					for (const card of syncCards) {
+						lines.push(new LeaderLine(workspace, card, {
+							...options,
+							startSocket: "top",
+							endSocket: "bottom",
+						}));
+					}
+					for (const card of serviceCards) {
+						lines.push(new LeaderLine(workspace, card, {
+							...options,
+							startSocket: "bottom",
+							endSocket: "top",
+						}));
+					}
+					for (const line of lines) {
+						line.show("draw", {duration: 300});
+					}
+				}
+
+				function scheduleConnect() {
+					cancelAnimationFrame(frame);
+					frame = requestAnimationFrame(connectTopology);
+				}
+
+				window.addEventListener("load", scheduleConnect);
+				window.addEventListener("resize", scheduleConnect);
+				document.addEventListener("htmx:afterSettle", scheduleConnect);
+			})();
+		</script>
 	</div>
 }
