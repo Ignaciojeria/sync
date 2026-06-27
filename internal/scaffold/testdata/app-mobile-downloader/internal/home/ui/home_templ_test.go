@@ -5,23 +5,31 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	topologyapp "app-mobile-downloader/internal/topology/application"
 )
 
 func TestHomePageRendersContent(t *testing.T) {
+	snapshot := topologyapp.Snapshot{
+		Workspace:    topologyapp.Workspace{Name: "workspace-gateway", Status: topologyapp.StatusRunning, Summary: "Runtime persistente del workspace"},
+		Services:     []topologyapp.ServiceNode{{Name: "PostgreSQL", Kind: "database", Status: topologyapp.StatusRunning, Summary: "Database connection healthy"}},
+		SyncSessions: []topologyapp.SyncSession{{SessionID: "abc", ProjectName: "workspace-gateway", ClientName: "ignaciovl.j@gmail.com", Status: topologyapp.StatusSyncing, Source: "mutagen"}},
+	}
 	var buf bytes.Buffer
-	if err := HomePage().Render(context.Background(), &buf); err != nil {
+	if err := HomePage(snapshot).Render(context.Background(), &buf); err != nil {
 		t.Fatalf("HomePage().Render() error = %v", err)
 	}
 	body := buf.String()
 	checks := []string{
-		"Sync 4 Run",
-		"Tu workspace persistente para operar agentes.",
+		"workspace-gateway",
+		"Workspace runtime",
+		"Topology",
+		"PostgreSQL",
+		"mutagen",
+		"ignaciovl.j@gmail.com",
 		"Abrir consola",
-		"Ver design system",
-		"Consola",
 		"Calidad",
 		"Jobs",
-		"Tema",
 	}
 	for _, want := range checks {
 		if !strings.Contains(body, want) {

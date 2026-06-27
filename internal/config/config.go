@@ -13,6 +13,7 @@ type Config struct {
 	APIURL                       string `json:"apiUrl,omitempty"`
 	Token                        string `json:"token,omitempty"`
 	RefreshToken                 string `json:"refreshToken,omitempty"`
+	UserEmail                    string `json:"userEmail,omitempty"`
 	LastProjectID                string `json:"lastProjectId,omitempty"`
 	LastProjectSlug              string `json:"lastProjectSlug,omitempty"`
 	MutagenDestination           string `json:"mutagenDestination,omitempty"`
@@ -233,6 +234,7 @@ func Resolve(apiURLFlag, tokenFlag string) (Config, error) {
 	cfg.APIURL = strings.TrimSpace(globalCfg.APIURL)
 	cfg.Token = strings.TrimSpace(globalCfg.Token)
 	cfg.RefreshToken = strings.TrimSpace(globalCfg.RefreshToken)
+	cfg.UserEmail = strings.TrimSpace(globalCfg.UserEmail)
 
 	// Estado de workspace/proyecto desde config local del repo
 	cfg.LastProjectID = strings.TrimSpace(projectCfg.LastProjectID)
@@ -770,6 +772,7 @@ func SaveGlobal(cfg Config) error {
 		APIURL:       strings.TrimSpace(cfg.APIURL),
 		Token:        strings.TrimSpace(cfg.Token),
 		RefreshToken: strings.TrimSpace(cfg.RefreshToken),
+		UserEmail:    strings.TrimSpace(cfg.UserEmail),
 	}
 	var buf strings.Builder
 	enc := json.NewEncoder(&buf)

@@ -1,6 +1,7 @@
 package home
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -8,14 +9,26 @@ import (
 	"testing"
 
 	"app-mobile-downloader/internal/shared/server"
+	topologyapp "app-mobile-downloader/internal/topology/application"
 
 	"github.com/go-fuego/fuego"
 )
 
+type snapshotReaderStub struct {
+	snapshot topologyapp.Snapshot
+}
+
+func (s snapshotReaderStub) GetSnapshot(context.Context) (topologyapp.Snapshot, error) {
+	return s.snapshot, nil
+}
+
 func TestHomeHandler(t *testing.T) {
 	fs := fuego.NewServer()
 	s := &server.Server{Server: fs}
-	homeHandler(s)
+	homeHandler(s, snapshotReaderStub{snapshot: topologyapp.Snapshot{
+		Workspace: topologyapp.Workspace{Name: "workspace-gateway", Status: topologyapp.StatusRunning, Summary: "Runtime persistente del workspace"},
+		Services:  []topologyapp.ServiceNode{{Name: "PostgreSQL", Kind: "database", Status: topologyapp.StatusRunning, Summary: "Database connection healthy"}},
+	}})
 	ts := httptest.NewServer(fs.Mux)
 	defer ts.Close()
 
@@ -38,9 +51,10 @@ func TestHomeHandler(t *testing.T) {
 	}
 	bodyText := string(body)
 	checks := []string{
-		"Tu workspace persistente para operar agentes.",
+		"workspace-gateway",
+		"Topology",
+		"PostgreSQL",
 		"Abrir consola",
-		"Ver design system",
 	}
 	for _, want := range checks {
 		if !strings.Contains(bodyText, want) {
@@ -52,7 +66,10 @@ func TestHomeHandler(t *testing.T) {
 func TestHomeRegister(t *testing.T) {
 	fs := fuego.NewServer()
 	s := &server.Server{Server: fs}
-	Register(s)
+	Register(s, snapshotReaderStub{snapshot: topologyapp.Snapshot{
+		Workspace: topologyapp.Workspace{Name: "workspace-gateway", Status: topologyapp.StatusRunning, Summary: "Runtime persistente del workspace"},
+		Services:  []topologyapp.ServiceNode{{Name: "PostgreSQL", Kind: "database", Status: topologyapp.StatusRunning, Summary: "Database connection healthy"}},
+	}})
 	ts := httptest.NewServer(fs.Mux)
 	defer ts.Close()
 

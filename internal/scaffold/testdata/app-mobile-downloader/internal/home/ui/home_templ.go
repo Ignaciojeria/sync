@@ -8,7 +8,9 @@ package ui
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-func HomePage() templ.Component {
+import topologyapp "workspace-gateway/internal/topology/application"
+
+func HomePage(snapshot topologyapp.Snapshot) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -29,7 +31,426 @@ func HomePage() templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"space-y-6\"><section class=\"hero rounded-[2rem] border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card)] backdrop-blur overflow-hidden\"><div class=\"hero-content w-full max-w-none flex-col gap-8 px-6 py-7 lg:px-9 lg:py-9\"><div class=\"grid w-full gap-6 lg:grid-cols-[1.15fr_0.85fr] lg:items-end\"><div class=\"max-w-2xl space-y-4\"><div class=\"inline-flex items-baseline gap-1.5 text-[1.1rem] font-semibold leading-none tracking-[0.015em] text-base-content/82\" style=\"font-family: var(--pi-font-label-family, var(--pi-font-body-family, Inter, system-ui, sans-serif));\"><span class=\"sr-only\">Sync 4 Run</span> <span>sync</span> <span><span class=\"text-primary text-[1.08em] font-medium tracking-[-0.08em]\">4</span><span class=\"text-primary\">.</span></span> <span>run</span></div><div class=\"space-y-3\"><h1 class=\"text-3xl font-bold tracking-tight lg:text-5xl\">Tu workspace persistente para operar agentes.</h1><p class=\"max-w-xl text-sm leading-7 opacity-72 lg:text-base\">Desde aquí puedes entrar a la consola, revisar calidad, explorar jobs y ajustar el sistema visual activo.</p></div><div class=\"flex flex-wrap gap-3\"><a class=\"btn btn-primary\" href=\"/editor-view\">Abrir consola</a> <a class=\"btn btn-ghost border border-base-300/70 bg-base-100/60\" href=\"/design\">Ver design system</a></div></div><div class=\"grid gap-3 sm:grid-cols-2\"><div class=\"rounded-[1.35rem] border border-base-300/70 bg-[var(--pi-surface-elevated)] p-4 shadow-[var(--pi-shadow-card-soft)]\"><div class=\"text-[11px] uppercase tracking-[0.22em] opacity-55\">Workspace</div><div class=\"mt-2 text-lg font-semibold\">App unificada</div><p class=\"mt-1 text-sm leading-6 opacity-70\">Console, quality y scheduler en un solo lugar.</p></div><div class=\"rounded-[1.35rem] border border-base-300/70 bg-base-100 p-4 shadow-[var(--pi-shadow-card-soft)]\"><div class=\"text-[11px] uppercase tracking-[0.22em] opacity-55\">Tema activo</div><div class=\"mt-2 text-lg font-semibold\">Runtime visual</div><p class=\"mt-1 text-sm leading-6 opacity-70\">Color, tipografía y superficies viven en <code>DESIGN.md</code>.</p></div></div></div></div></section><section class=\"grid gap-4 xl:grid-cols-4\"><a class=\"group rounded-[1.4rem] border border-base-300/70 bg-base-100/80 p-5 shadow-[var(--pi-shadow-card-soft)] backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-base-100\" href=\"/editor-view\"><div class=\"text-[11px] uppercase tracking-[0.22em] opacity-55\">Console</div><h2 class=\"mt-2 text-lg font-semibold group-hover:text-primary\">Consola</h2><p class=\"mt-2 text-sm leading-6 opacity-70\">Continúa tu flujo de trabajo principal.</p></a> <a class=\"group rounded-[1.4rem] border border-base-300/70 bg-base-100/80 p-5 shadow-[var(--pi-shadow-card-soft)] backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-base-100\" href=\"/report/tests\"><div class=\"text-[11px] uppercase tracking-[0.22em] opacity-55\">Quality</div><h2 class=\"mt-2 text-lg font-semibold group-hover:text-primary\">Calidad</h2><p class=\"mt-2 text-sm leading-6 opacity-70\">Revisa tests y cobertura del proyecto.</p></a> <a class=\"group rounded-[1.4rem] border border-base-300/70 bg-base-100/80 p-5 shadow-[var(--pi-shadow-card-soft)] backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-base-100\" href=\"/scheduler/jobs\"><div class=\"text-[11px] uppercase tracking-[0.22em] opacity-55\">Scheduler</div><h2 class=\"mt-2 text-lg font-semibold group-hover:text-primary\">Jobs</h2><p class=\"mt-2 text-sm leading-6 opacity-70\">Explora la configuración disponible.</p></a> <a class=\"group rounded-[1.4rem] border border-base-300/70 bg-base-100/80 p-5 shadow-[var(--pi-shadow-card-soft)] backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-base-100\" href=\"/design\"><div class=\"text-[11px] uppercase tracking-[0.22em] opacity-55\">Design system</div><h2 class=\"mt-2 text-lg font-semibold group-hover:text-primary\">Tema</h2><p class=\"mt-2 text-sm leading-6 opacity-70\">Inspecciona el sistema visual activo.</p></a></section></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"space-y-6\"><section class=\"hero rounded-box border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card)] backdrop-blur overflow-hidden\"><div class=\"hero-content w-full max-w-none flex-col gap-6 px-6 py-7 lg:px-9 lg:py-9\"><div class=\"flex w-full flex-col gap-6 lg:flex-row lg:items-end lg:justify-between\"><div class=\"max-w-3xl space-y-4\"><div class=\"flex flex-wrap items-center gap-2\"><span class=\"badge badge-ghost badge-lg uppercase tracking-[0.24em]\">Workspace runtime</span> ")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var2 = []any{statusBadgeClass(snapshot.Workspace.Status)}
+		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var2...)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<span class=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var3 string
+		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.CSSClasses(templ_7745c5c3_Var2).String())
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 1, Col: 0}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var3)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var4 string
+		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(formatStatus(snapshot.Workspace.Status))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 13, Col: 108}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</span></div><div class=\"space-y-3\"><h1 class=\"text-3xl font-bold tracking-tight lg:text-5xl\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var5 string
+		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(snapshot.Workspace.Name)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 16, Col: 90}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</h1><p class=\"max-w-2xl text-sm leading-7 opacity-72 lg:text-base\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var6 string
+		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(snapshot.Workspace.Summary)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 17, Col: 98}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</p></div><div class=\"flex flex-wrap gap-3\"><a class=\"btn btn-primary\" href=\"/editor-view\">Abrir consola</a> <a class=\"btn btn-ghost\" href=\"/report/tests\">Ver calidad</a> <a class=\"btn btn-ghost\" href=\"/design\">Ver design system</a></div></div><div class=\"stats stats-vertical w-full max-w-md border border-base-300/70 bg-base-100 shadow-sm lg:stats-horizontal lg:w-auto\"><div class=\"stat\"><div class=\"stat-title\">Sync sessions</div><div class=\"stat-value text-primary\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var7 string
+		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(len(snapshot.SyncSessions))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 28, Col: 72}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</div><div class=\"stat-desc\">Reportadas por clientes conectados</div></div><div class=\"stat\"><div class=\"stat-title\">Services</div><div class=\"stat-value text-secondary\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var8 string
+		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(len(snapshot.Services))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 33, Col: 70}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div><div class=\"stat-desc\">Infra visible del workspace</div></div></div></div></div></section><section class=\"grid gap-6 xl:grid-cols-[1fr_22rem]\"><div class=\"space-y-6\"><section class=\"rounded-box border border-base-300/70 bg-base-100/80 p-5 shadow-[var(--pi-shadow-card-soft)] backdrop-blur lg:p-6\"><div class=\"mb-5 flex items-center justify-between gap-3\"><div><h2 class=\"text-lg font-semibold\">Topology</h2><p class=\"text-sm opacity-65\">Arriba ves sesiones de sync activas; abajo, la infraestructura observada.</p></div><div class=\"text-xs uppercase tracking-[0.22em] opacity-55\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var9 string
+		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(generatedLabel(snapshot.GeneratedAt))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 49, Col: 104}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</div></div><div class=\"space-y-5\"><div class=\"space-y-3\"><div class=\"flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] opacity-55\"><span>Sync sessions</span><div class=\"divider my-0 flex-1\"></div></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if len(snapshot.SyncSessions) == 0 {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<div class=\"alert alert-soft\"><span>No se reportaron sesiones de sync activas desde clientes.</span></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		} else {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<div class=\"grid gap-3 md:grid-cols-2 xl:grid-cols-3\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			for _, session := range snapshot.SyncSessions {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<div class=\"card border border-base-300/70 bg-base-100 shadow-sm\"><div class=\"card-body gap-3 p-4\"><div class=\"flex items-start justify-between gap-3\"><div><div class=\"text-sm font-semibold\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var10 string
+				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(session.ClientName)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 69, Col: 69}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</div><div class=\"text-xs opacity-60\">Project: ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var11 string
+				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(session.ProjectName)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 70, Col: 76}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</div>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				if session.SessionID != "" {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<div class=\"text-xs font-mono opacity-55\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var12 string
+					templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(session.SessionID)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 72, Col: 76}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</div>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</div>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var13 = []any{statusBadgeClass(session.Status)}
+				templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var13...)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<span class=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var14 string
+				templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.CSSClasses(templ_7745c5c3_Var13).String())
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 1, Col: 0}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var14)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var15 string
+				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(formatStatus(session.Status))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 75, Col: 92}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</span></div><div class=\"text-xs opacity-65\">Source: ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var16 string
+				templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(session.Source)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 77, Col: 68}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</div></div></div>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</div><div class=\"flex justify-center py-1\"><div class=\"card w-full max-w-lg border border-primary/20 bg-[var(--pi-surface-elevated)] shadow-[var(--pi-shadow-card)]\"><div class=\"card-body items-center gap-3 p-6 text-center\"><div class=\"badge badge-primary badge-outline uppercase tracking-[0.24em]\">Workspace</div><h3 class=\"text-2xl font-semibold\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var17 string
+		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(snapshot.Workspace.Name)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 89, Col: 69}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</h3><p class=\"max-w-md text-sm opacity-70\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var18 string
+		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(snapshot.Workspace.Summary)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 90, Col: 76}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</p>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var19 = []any{statusBadgeClass(snapshot.Workspace.Status)}
+		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var19...)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<span class=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var20 string
+		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.CSSClasses(templ_7745c5c3_Var19).String())
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 1, Col: 0}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var21 string
+		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(formatStatus(snapshot.Workspace.Status))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 91, Col: 110}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</span></div></div></div><div class=\"space-y-3\"><div class=\"flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] opacity-55\"><span>Services</span><div class=\"divider my-0 flex-1\"></div></div><div class=\"grid gap-3 md:grid-cols-2 xl:grid-cols-3\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		for _, service := range snapshot.Services {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<div class=\"card border border-base-300/70 bg-base-100 shadow-sm\"><div class=\"card-body gap-3 p-4\"><div class=\"flex items-start justify-between gap-3\"><div><div class=\"text-sm font-semibold\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var22 string
+			templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(service.Name)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 107, Col: 62}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "</div><div class=\"text-xs uppercase tracking-[0.22em] opacity-55\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var23 string
+			templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(service.Kind)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 108, Col: 87}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "</div></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var24 = []any{statusBadgeClass(service.Status)}
+			templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var24...)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<span class=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var25 string
+			templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.CSSClasses(templ_7745c5c3_Var24).String())
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 1, Col: 0}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var25)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var26 string
+			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(formatStatus(service.Status))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 110, Col: 91}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "</span></div><p class=\"text-sm opacity-70\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var27 string
+			templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(service.Summary)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 112, Col: 58}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "</p></div></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "</div></div></div></section><section class=\"grid gap-4 xl:grid-cols-3\"><a class=\"card border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card-soft)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-base-100\" href=\"/editor-view\"><div class=\"card-body p-5\"><div class=\"text-[11px] uppercase tracking-[0.22em] opacity-55\">Console</div><h2 class=\"card-title text-lg\">Consola</h2><p class=\"text-sm leading-6 opacity-70\">Continúa el flujo principal del workspace.</p></div></a> <a class=\"card border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card-soft)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-base-100\" href=\"/report/tests\"><div class=\"card-body p-5\"><div class=\"text-[11px] uppercase tracking-[0.22em] opacity-55\">Quality</div><h2 class=\"card-title text-lg\">Calidad</h2><p class=\"text-sm leading-6 opacity-70\">Revisa tests y cobertura del proyecto.</p></div></a> <a class=\"card border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card-soft)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-base-100\" href=\"/scheduler/jobs\"><div class=\"card-body p-5\"><div class=\"text-[11px] uppercase tracking-[0.22em] opacity-55\">Scheduler</div><h2 class=\"card-title text-lg\">Jobs</h2><p class=\"text-sm leading-6 opacity-70\">Explora la configuración disponible.</p></div></a></section></div><aside class=\"space-y-4\"><div class=\"card border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card-soft)]\"><div class=\"card-body p-5\"><h2 class=\"card-title text-base\">Resumen operativo</h2><ul class=\"menu menu-sm w-full gap-1 rounded-box bg-base-100/40 p-0\"><li><span>Workspace: ")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var28 string
+		templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(snapshot.Workspace.Name)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 151, Col: 53}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "</span></li><li><span>Estado: ")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var29 string
+		templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(formatStatus(snapshot.Workspace.Status))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 152, Col: 66}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "</span></li><li><span>Sync sessions: ")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var30 string
+		templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(len(snapshot.SyncSessions))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 153, Col: 60}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "</span></li><li><span>Services: ")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var31 string
+		templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(len(snapshot.Services))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/home/ui/home.templ`, Line: 154, Col: 51}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "</span></li></ul></div></div><div class=\"card border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card-soft)]\"><div class=\"card-body p-5\"><h2 class=\"card-title text-base\">Lectura inicial</h2><p class=\"text-sm leading-6 opacity-70\">Esta vista prioriza sesiones de sync activas y servicios reales del runtime. La identidad exacta del usuario puede agregarse después si aporta valor.</p></div></div></aside></section></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

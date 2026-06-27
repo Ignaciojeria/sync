@@ -602,9 +602,18 @@ func extractEmailFromJWT(rawToken string) string {
 	if err := json.Unmarshal(payload, &claims); err != nil {
 		return ""
 	}
-	for _, key := range []string{"email", "upn", "preferred_username"} {
+	for _, key := range []string{"email", "upn", "preferred_username", "unique_name", "name"} {
 		if value, ok := claims[key].(string); ok && strings.Contains(strings.TrimSpace(value), "@") {
 			return strings.ToLower(strings.TrimSpace(value))
+		}
+	}
+	for _, key := range []string{"emails", "email_addresses"} {
+		if values, ok := claims[key].([]any); ok {
+			for _, value := range values {
+				if text, ok := value.(string); ok && strings.Contains(strings.TrimSpace(text), "@") {
+					return strings.ToLower(strings.TrimSpace(text))
+				}
+			}
 		}
 	}
 	return ""
@@ -3151,6 +3160,12 @@ func setupAndStartMutagen(cfg *config.Config) error {
 	fmt.Println("✅ Mutagen sync iniciado (mutagen project start)")
 	if err := ensureInitialSyncHealthy(mutagenBin, sessionName, destination); err != nil {
 		fmt.Printf("⚠️  Sync aún no está saludable (continuando): %v\n", err)
+	}
+	if err := triggerTopologyHeartbeatOnce(cfg); err != nil {
+		fmt.Printf("⚠️  No se pudo refrescar topología inmediatamente: %v\n", err)
+	}
+	if err := startTopologyHeartbeatProcess(cfg); err != nil {
+		fmt.Printf("⚠️  No se pudo iniciar heartbeat de topología: %v\n", err)
 	}
 	printMutagenPostInitChecklist(destination, sessionName, strings.TrimSpace(cfg.LastVMHTTPSURL))
 	return nil

@@ -165,8 +165,9 @@ if ! command -v go >/dev/null 2>&1; then
   echo "missing-go"
   exit 21
 fi
+go env -w GOPROXY=direct GOSUMDB=off
 mkdir -p "$HOME/%s"
-GOBIN="$HOME/%s" go install github.com/Ignaciojeria/sync@latest >/dev/null
+GOBIN="$HOME/%s" GOPROXY=direct GOSUMDB=off go install github.com/Ignaciojeria/sync@latest >/dev/null
 chmod +x "%s"
 printf '%%s\n' "%s"
 `, defaultRemoteCLIHomeBinDir, defaultRemoteCLIHomeBinDir, remoteBinaryPath, remoteBinaryPath)
@@ -194,15 +195,19 @@ printf '%%s\n' "%s"
 }
 
 func resolveRemoteCLIBinaryPath(target, remotePath string) (string, string, error) {
-	_ = remotePath
 	remoteHomeCLIPath := "$HOME/" + defaultRemoteCLIHomeBinDir + "/" + defaultRemoteCLIBinaryName
+	remoteWorkspaceCLIPath := strings.TrimRight(strings.TrimSpace(remotePath), "/") + "/" + defaultRemoteCLIBinaryName
 	script := fmt.Sprintf(`set -eu
 if [ -x "%s" ]; then
   printf '%%s|%%s' "%s" home-bin
   exit 0
 fi
+if [ -x %s ]; then
+  printf '%%s|%%s' %s workspace-bin
+  exit 0
+fi
 exit 1
-`, remoteHomeCLIPath, remoteHomeCLIPath)
+`, remoteHomeCLIPath, remoteHomeCLIPath, shellQuoteRemotePathPreserveTilde(remoteWorkspaceCLIPath), shellQuoteRemotePathPreserveTilde(remoteWorkspaceCLIPath))
 	out, err := runSSHScriptWithTimeout(target, script, 20*time.Second)
 	if err != nil {
 		return "", "", fmt.Errorf("no se encontró CLI remoto administrado por sync en la VM")
@@ -421,14 +426,22 @@ func runProjectMigrationsOnVM(cfg config.Config, migrationsDir, explicitDatabase
 		return err
 	}
 	remoteCmd := fmt.Sprintf("cd %s && %s db migrate --dir %s --database-url %s --no-ssh-forward", shellQuote(remoteRoot), shellQuote(remoteBinaryPath), shellQuote(migrationsDir), shellQuote(remoteDatabaseURL))
-	out, err := runSSHScriptWithTimeout(target, remoteCmd, 90*time.Second)
-	if strings.TrimSpace(out) != "" {
-		fmt.Println(strings.TrimSpace(out))
+	var lastErr error
+	for attempt := 1; attempt <= 5; attempt++ {
+		out, err := runSSHScriptWithTimeout(target, remoteCmd, 90*time.Second)
+		if strings.TrimSpace(out) != "" {
+			fmt.Println(strings.TrimSpace(out))
+		}
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		if attempt < 5 {
+			fmt.Printf("ℹ️  Migraciones intento %d/5 falló; esperando túnel DB remoto...\n", attempt)
+			time.Sleep(3 * time.Second)
+		}
 	}
-	if err != nil {
-		return fmt.Errorf("ejecución remota de migraciones falló: %w", err)
-	}
-	return nil
+	return fmt.Errorf("ejecución remota de migraciones falló: %w", lastErr)
 }
 
 func sshUserFromTarget(target string) string {

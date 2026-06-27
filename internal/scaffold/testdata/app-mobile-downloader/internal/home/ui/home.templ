@@ -1,65 +1,168 @@
 package ui
 
-templ HomePage() {
+import topologyapp "app-mobile-downloader/internal/topology/application"
+
+templ HomePage(snapshot topologyapp.Snapshot) {
 	<div class="space-y-6">
-		<section class="hero rounded-[2rem] border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card)] backdrop-blur overflow-hidden">
-			<div class="hero-content w-full max-w-none flex-col gap-8 px-6 py-7 lg:px-9 lg:py-9">
-				<div class="grid w-full gap-6 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
-					<div class="max-w-2xl space-y-4">
-						<div class="inline-flex items-baseline gap-1.5 text-[1.1rem] font-semibold leading-none tracking-[0.015em] text-base-content/82" style="font-family: var(--pi-font-label-family, var(--pi-font-body-family, Inter, system-ui, sans-serif));">
-							<span class="sr-only">Sync 4 Run</span>
-							<span>sync</span>
-							<span><span class="text-primary text-[1.08em] font-medium tracking-[-0.08em]">4</span><span class="text-primary">.</span></span>
-							<span>run</span>
+		<section class="hero rounded-box border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card)] backdrop-blur overflow-hidden">
+			<div class="hero-content w-full max-w-none flex-col gap-6 px-6 py-7 lg:px-9 lg:py-9">
+				<div class="flex w-full flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+					<div class="max-w-3xl space-y-4">
+						<div class="flex flex-wrap items-center gap-2">
+							<span class="badge badge-ghost badge-lg uppercase tracking-[0.24em]">Workspace runtime</span>
+							<span class={ statusBadgeClass(snapshot.Workspace.Status) }>{ formatStatus(snapshot.Workspace.Status) }</span>
 						</div>
 						<div class="space-y-3">
-							<h1 class="text-3xl font-bold tracking-tight lg:text-5xl">Tu workspace persistente para operar agentes.</h1>
-							<p class="max-w-xl text-sm leading-7 opacity-72 lg:text-base">
-								Desde aquí puedes entrar a la consola, revisar calidad, explorar jobs y ajustar el sistema visual activo.
-							</p>
+							<h1 class="text-3xl font-bold tracking-tight lg:text-5xl">{ snapshot.Workspace.Name }</h1>
+							<p class="max-w-2xl text-sm leading-7 opacity-72 lg:text-base">{ snapshot.Workspace.Summary }</p>
 						</div>
 						<div class="flex flex-wrap gap-3">
 							<a class="btn btn-primary" href="/editor-view">Abrir consola</a>
-							<a class="btn btn-ghost border border-base-300/70 bg-base-100/60" href="/design">Ver design system</a>
+							<a class="btn btn-ghost" href="/report/tests">Ver calidad</a>
+							<a class="btn btn-ghost" href="/design">Ver design system</a>
 						</div>
 					</div>
-					<div class="grid gap-3 sm:grid-cols-2">
-						<div class="rounded-[1.35rem] border border-base-300/70 bg-[var(--pi-surface-elevated)] p-4 shadow-[var(--pi-shadow-card-soft)]">
-							<div class="text-[11px] uppercase tracking-[0.22em] opacity-55">Workspace</div>
-							<div class="mt-2 text-lg font-semibold">App unificada</div>
-							<p class="mt-1 text-sm leading-6 opacity-70">Console, quality y scheduler en un solo lugar.</p>
+					<div class="stats stats-vertical w-full max-w-md border border-base-300/70 bg-base-100 shadow-sm lg:stats-horizontal lg:w-auto">
+						<div class="stat">
+							<div class="stat-title">Sync sessions</div>
+							<div class="stat-value text-primary">{ len(snapshot.SyncSessions) }</div>
+							<div class="stat-desc">Reportadas por clientes conectados</div>
 						</div>
-						<div class="rounded-[1.35rem] border border-base-300/70 bg-base-100 p-4 shadow-[var(--pi-shadow-card-soft)]">
-							<div class="text-[11px] uppercase tracking-[0.22em] opacity-55">Tema activo</div>
-							<div class="mt-2 text-lg font-semibold">Runtime visual</div>
-							<p class="mt-1 text-sm leading-6 opacity-70">Color, tipografía y superficies viven en <code>DESIGN.md</code>.</p>
+						<div class="stat">
+							<div class="stat-title">Services</div>
+							<div class="stat-value text-secondary">{ len(snapshot.Services) }</div>
+							<div class="stat-desc">Infra visible del workspace</div>
 						</div>
 					</div>
 				</div>
 			</div>
 		</section>
 
-		<section class="grid gap-4 xl:grid-cols-4">
-			<a class="group rounded-[1.4rem] border border-base-300/70 bg-base-100/80 p-5 shadow-[var(--pi-shadow-card-soft)] backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-base-100" href="/editor-view">
-				<div class="text-[11px] uppercase tracking-[0.22em] opacity-55">Console</div>
-				<h2 class="mt-2 text-lg font-semibold group-hover:text-primary">Consola</h2>
-				<p class="mt-2 text-sm leading-6 opacity-70">Continúa tu flujo de trabajo principal.</p>
-			</a>
-			<a class="group rounded-[1.4rem] border border-base-300/70 bg-base-100/80 p-5 shadow-[var(--pi-shadow-card-soft)] backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-base-100" href="/report/tests">
-				<div class="text-[11px] uppercase tracking-[0.22em] opacity-55">Quality</div>
-				<h2 class="mt-2 text-lg font-semibold group-hover:text-primary">Calidad</h2>
-				<p class="mt-2 text-sm leading-6 opacity-70">Revisa tests y cobertura del proyecto.</p>
-			</a>
-			<a class="group rounded-[1.4rem] border border-base-300/70 bg-base-100/80 p-5 shadow-[var(--pi-shadow-card-soft)] backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-base-100" href="/scheduler/jobs">
-				<div class="text-[11px] uppercase tracking-[0.22em] opacity-55">Scheduler</div>
-				<h2 class="mt-2 text-lg font-semibold group-hover:text-primary">Jobs</h2>
-				<p class="mt-2 text-sm leading-6 opacity-70">Explora la configuración disponible.</p>
-			</a>
-			<a class="group rounded-[1.4rem] border border-base-300/70 bg-base-100/80 p-5 shadow-[var(--pi-shadow-card-soft)] backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-base-100" href="/design">
-				<div class="text-[11px] uppercase tracking-[0.22em] opacity-55">Design system</div>
-				<h2 class="mt-2 text-lg font-semibold group-hover:text-primary">Tema</h2>
-				<p class="mt-2 text-sm leading-6 opacity-70">Inspecciona el sistema visual activo.</p>
-			</a>
+		<section class="grid gap-6 xl:grid-cols-[1fr_22rem]">
+			<div class="space-y-6">
+				<section class="rounded-box border border-base-300/70 bg-base-100/80 p-5 shadow-[var(--pi-shadow-card-soft)] backdrop-blur lg:p-6">
+					<div class="mb-5 flex items-center justify-between gap-3">
+						<div>
+							<h2 class="text-lg font-semibold">Topology</h2>
+							<p class="text-sm opacity-65">Arriba ves sesiones de sync activas; abajo, la infraestructura observada.</p>
+						</div>
+						<div class="text-xs uppercase tracking-[0.22em] opacity-55">{ generatedLabel(snapshot.GeneratedAt) }</div>
+					</div>
+
+					<div class="space-y-5">
+						<div class="space-y-3">
+							<div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] opacity-55">
+								<span>Sync sessions</span>
+								<div class="divider my-0 flex-1"></div>
+							</div>
+							if len(snapshot.SyncSessions) == 0 {
+								<div class="alert alert-soft">
+									<span>No se reportaron sesiones de sync activas desde clientes.</span>
+								</div>
+							} else {
+								<div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+									for _, session := range snapshot.SyncSessions {
+										<div class="card border border-base-300/70 bg-base-100 shadow-sm">
+											<div class="card-body gap-3 p-4">
+												<div class="flex items-start justify-between gap-3">
+													<div>
+														<span class={ statusBadgeClass(session.Status) }>{ formatStatus(session.Status) }</span>
+														<div class="mt-2 text-xs uppercase tracking-[0.22em] opacity-45">Sync session</div>
+														<div class="text-sm font-semibold">{ sessionPrimaryLabel(session.ClientName) }</div>
+														if sessionSecondaryLabel(session.ClientName) != "" {
+															<div class="text-xs font-mono opacity-55">{ sessionSecondaryLabel(session.ClientName) }</div>
+														}
+														<div class="text-xs opacity-60">Project: { session.ProjectName }</div>
+													</div>
+												</div>
+											</div>
+										</div>
+									}
+								</div>
+							}
+						</div>
+
+						<div class="flex justify-center py-1">
+							<div class="card w-full max-w-lg border border-primary/20 bg-[var(--pi-surface-elevated)] shadow-[var(--pi-shadow-card)]">
+								<div class="card-body items-center gap-3 p-6 text-center">
+									<div class="self-start">
+										<span class={ statusBadgeClass(snapshot.Workspace.Status) }>{ formatStatus(snapshot.Workspace.Status) }</span>
+									</div>
+									<div class="badge badge-primary badge-outline uppercase tracking-[0.24em]">Workspace</div>
+									<h3 class="text-2xl font-semibold">{ snapshot.Workspace.Name }</h3>
+									<p class="max-w-md text-sm opacity-70">{ snapshot.Workspace.Summary }</p>
+								</div>
+							</div>
+						</div>
+
+						<div class="space-y-3">
+							<div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] opacity-55">
+								<span>Services</span>
+								<div class="divider my-0 flex-1"></div>
+							</div>
+							<div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+								for _, service := range snapshot.Services {
+									<div class="card border border-base-300/70 bg-base-100 shadow-sm">
+										<div class="card-body gap-3 p-4">
+											<div>
+												<span class={ statusBadgeClass(service.Status) }>{ formatStatus(service.Status) }</span>
+												<div class="mt-2 text-xs uppercase tracking-[0.22em] opacity-45">Infrastructure</div>
+												<div class="text-sm font-semibold">{ service.Name }</div>
+												<div class="text-xs uppercase tracking-[0.22em] opacity-55">{ service.Kind }</div>
+											</div>
+											<p class="text-sm opacity-70">{ service.Summary }</p>
+										</div>
+									</div>
+								}
+							</div>
+						</div>
+					</div>
+				</section>
+
+				<section class="grid gap-4 xl:grid-cols-3">
+					<a class="card border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card-soft)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-base-100" href="/editor-view">
+						<div class="card-body p-5">
+							<div class="text-[11px] uppercase tracking-[0.22em] opacity-55">Console</div>
+							<h2 class="card-title text-lg">Consola</h2>
+							<p class="text-sm leading-6 opacity-70">Continúa el flujo principal del workspace.</p>
+						</div>
+					</a>
+					<a class="card border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card-soft)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-base-100" href="/report/tests">
+						<div class="card-body p-5">
+							<div class="text-[11px] uppercase tracking-[0.22em] opacity-55">Quality</div>
+							<h2 class="card-title text-lg">Calidad</h2>
+							<p class="text-sm leading-6 opacity-70">Revisa tests y cobertura del proyecto.</p>
+						</div>
+					</a>
+					<a class="card border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card-soft)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-base-100" href="/scheduler/jobs">
+						<div class="card-body p-5">
+							<div class="text-[11px] uppercase tracking-[0.22em] opacity-55">Scheduler</div>
+							<h2 class="card-title text-lg">Jobs</h2>
+							<p class="text-sm leading-6 opacity-70">Explora la configuración disponible.</p>
+						</div>
+					</a>
+				</section>
+			</div>
+
+			<aside class="space-y-4">
+				<div class="card border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card-soft)]">
+					<div class="card-body p-5">
+						<h2 class="card-title text-base">Resumen operativo</h2>
+						<ul class="menu menu-sm w-full gap-1 rounded-box bg-base-100/40 p-0">
+							<li><span>Workspace: { snapshot.Workspace.Name }</span></li>
+							<li><span>Estado: { formatStatus(snapshot.Workspace.Status) }</span></li>
+							<li><span>Sync sessions: { len(snapshot.SyncSessions) }</span></li>
+							<li><span>Services: { len(snapshot.Services) }</span></li>
+						</ul>
+					</div>
+				</div>
+				<div class="card border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card-soft)]">
+					<div class="card-body p-5">
+						<h2 class="card-title text-base">Lectura inicial</h2>
+						<p class="text-sm leading-6 opacity-70">Esta vista prioriza sesiones de sync activas y servicios reales del runtime. La identidad exacta del usuario puede agregarse después si aporta valor.</p>
+					</div>
+				</div>
+			</aside>
 		</section>
 	</div>
 }

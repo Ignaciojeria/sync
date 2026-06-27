@@ -218,6 +218,12 @@ func runWorkspaceMutagenSync(cfg *config.Config) error {
 	if err := ensureMutagenSessionHealthy(cfg); err != nil {
 		return err
 	}
+	if err := triggerTopologyHeartbeatOnce(cfg); err != nil {
+		fmt.Printf("⚠️  No se pudo refrescar topología inmediatamente: %v\n", err)
+	}
+	if err := startTopologyHeartbeatProcess(cfg); err != nil {
+		fmt.Printf("⚠️  No se pudo iniciar heartbeat de topología: %v\n", err)
+	}
 	return nil
 }
 

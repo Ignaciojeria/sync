@@ -63,6 +63,7 @@ var loginCmd = &cobra.Command{
 
 		cfg.Token = idToken
 		cfg.RefreshToken = refreshToken
+		cfg.UserEmail = firstNonEmpty(strings.TrimSpace(loginEmail), extractEmailFromJWT(idToken))
 		if err := config.SaveGlobal(cfg); err != nil {
 			return err
 		}
@@ -98,6 +99,7 @@ func saveManualToken(token string) error {
 	}
 	cfg.Token = token
 	cfg.RefreshToken = ""
+	cfg.UserEmail = extractEmailFromJWT(token)
 	if err := config.SaveGlobal(cfg); err != nil {
 		return err
 	}
@@ -151,6 +153,9 @@ func tryRefreshAndSave(cfg *config.Config) (bool, error) {
 		return false, nil // refresh falló: caller decide pedir re-login
 	}
 	cfg.Token = idToken
+	if email := extractEmailFromJWT(idToken); email != "" {
+		cfg.UserEmail = email
+	}
 	if refreshToken != "" {
 		cfg.RefreshToken = refreshToken
 	}
