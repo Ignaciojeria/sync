@@ -7,12 +7,29 @@
 .
 ├── .air.toml
 ├── AGENTS.md
+├── AGENT_IMPLEMENTATION_PLAN.md
 ├── STRUCTURE.md
 ├── go.mod
+├── bin/
 ├── cmd/
-│   └── api/
+│   ├── agent-worker/
+│   │   ├── main.go
+│   │   └── main_test.go
+│   ├── api/
+│   │   ├── main.go
+│   │   └── main_test.go
+│   └── bff/
 │       ├── main.go
 │       └── main_test.go
+├── design/
+│   ├── _schema.md
+│   ├── embed.go
+│   ├── forest/
+│   │   └── DESIGN.md
+│   ├── ocean/
+│   │   └── DESIGN.md
+│   └── sunset/
+│       └── DESIGN.md
 ├── internal/
 │   ├── auth/
 │   │   ├── application/
@@ -48,6 +65,30 @@
 │   │       ├── login.templ
 │   │       ├── login_templ.go
 │   │       └── login_templ_test.go
+│   ├── design/
+│   │   ├── application/
+│   │   │   ├── catalog.go
+│   │   │   ├── catalog_test.go
+│   │   │   ├── document.go
+│   │   │   ├── parser.go
+│   │   │   ├── parser_test.go
+│   │   │   ├── resolver.go
+│   │   │   ├── resolver_test.go
+│   │   │   ├── theme_css.go
+│   │   │   └── theme_css_test.go
+│   │   ├── http/
+│   │   │   ├── page.go
+│   │   │   ├── register.go
+│   │   │   ├── select.go
+│   │   │   └── theme_css.go
+│   │   └── ui/
+│   │       ├── page.templ
+│   │       ├── page_templ.go
+│   │       ├── page_templ_test.go
+│   │       ├── panel.go
+│   │       ├── panel.templ
+│   │       ├── panel_templ.go
+│   │       └── panel_templ_test.go
 │   ├── editor/
 │   │   ├── application/
 │   │   ├── http/
@@ -67,6 +108,7 @@
 │   │   │   ├── hello_test.go
 │   │   │   └── register.go
 │   │   └── ui/
+│   │       ├── helpers.go
 │   │       ├── home.templ
 │   │       ├── home_templ.go
 │   │       └── home_templ_test.go
@@ -152,6 +194,33 @@
 │   │   └── server/
 │   │       ├── new.go
 │   │       └── new_test.go
+│   ├── topology/
+│   │   ├── application/
+│   │   │   ├── model.go
+│   │   │   ├── service.go
+│   │   │   ├── service_test.go
+│   │   │   └── sync_sessions.go
+│   │   ├── http/
+│   │   │   ├── register.go
+│   │   │   ├── sync_sessions.go
+│   │   │   └── sync_sessions_test.go
+│   │   └── infrastructure/
+│   │       ├── memory/
+│   │       │   ├── sync_sessions.go
+│   │       │   └── sync_sessions_test.go
+│   │       ├── merged/
+│   │       │   ├── source.go
+│   │       │   ├── source_overlay_test.go
+│   │       │   └── source_test.go
+│   │       ├── mutagen/
+│   │       │   ├── source.go
+│   │       │   └── source_test.go
+│   │       ├── postgresql/
+│   │       │   ├── source.go
+│   │       │   └── source_test.go
+│   │       └── workspacefiles/
+│   │           ├── source.go
+│   │           └── source_test.go
 │   └── ui/
 │       └── layout/
 │           ├── extra_render_test.go
@@ -167,9 +236,47 @@
 │           ├── types.go
 │           ├── types_claims_test.go
 │           └── types_test.go
+├── pkg/
+│   └── agent/
+│       ├── application/
+│       │   ├── event.go
+│       │   ├── manager.go
+│       │   ├── manager_test.go
+│       │   ├── runner.go
+│       │   └── session.go
+│       ├── http/
+│       │   ├── abort.go
+│       │   ├── events.go
+│       │   ├── page.go
+│       │   ├── prompt.go
+│       │   ├── register.go
+│       │   ├── sessions.go
+│       │   └── support.go
+│       ├── infrastructure/
+│       │   ├── disk/
+│       │   │   └── session_store.go
+│       │   ├── memory/
+│       │   │   └── session_store.go
+│       │   └── pirpc/
+│       │       ├── process.go
+│       │       ├── reader.go
+│       │       ├── runner.go
+│       │       ├── runner_test.go
+│       │       ├── sandbox.go
+│       │       └── sandbox_test.go
+│       └── ui/
+│           ├── fragments.templ
+│           ├── fragments_templ.go
+│           ├── page.templ
+│           ├── page_templ.go
+│           ├── page_templ_test.go
+│           ├── standalone.templ
+│           ├── standalone_templ.go
+│           └── state.go
 └── scripts/
     ├── _tree_generator.py
     ├── generate-structure.sh
+    ├── run-all.sh
     └── structure.config.toml
 ```
 

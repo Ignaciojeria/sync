@@ -1,0 +1,749 @@
+package ui
+
+templ Page(state PageState) {
+	<div id="agent-app" class="h-screen overflow-hidden" data-active-session-id={ activeSessionID(state) } data-user-jwt={ state.UserJWT } data-chat-state="empty">
+		<div class="grid h-screen grid-cols-1 overflow-hidden text-base-content xl:grid-cols-[15.75rem_minmax(0,1fr)] 2xl:grid-cols-[16.25rem_minmax(0,1fr)]">
+			<aside class="flex min-h-0 flex-col border-r agent-shell-border">
+				@SessionsList(state)
+			</aside>
+
+			<section class="flex min-h-0 flex-col">
+				<header class="agent-glass-panel agent-shell-shadow relative z-10 flex items-center justify-between border-b agent-shell-border px-4 py-3 sm:px-5">
+					<div class="flex min-w-0 items-center gap-2.5">
+						<h1 id="session-title" class="truncate text-[1.15rem] font-semibold leading-none text-base-content" style="font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);">{ shellTitle(state) }</h1>
+						<span id="session-status" class="badge badge-ghost text-[0.68rem] hidden sm:inline-flex"></span>
+					</div>
+					<div class="flex items-center gap-1.5 text-base-content/78">
+						<button id="abort-button" class="btn btn-ghost btn-xs hidden" type="button">Abort</button>
+						<button id="header-new-chat" class="btn btn-circle btn-xs border-none bg-base-100 text-base-content shadow-none hover:bg-base-100/85" type="button" title="Nueva conversación">
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14m7-7H5"/></svg>
+						</button>
+					</div>
+				</header>
+
+				<div id="agent-feed" class="agent-thin-scroll min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-5">
+					<div id="empty-shell" class="flex min-h-full flex-col items-center justify-center px-4 pb-18 pt-2 text-center sm:pb-24">
+						<div class="w-full max-w-none">
+							<div class="flex w-full flex-col items-center gap-5 -translate-y-[7vh]">
+								<div class="flex flex-col items-center gap-3">
+									<div class="flex items-baseline justify-center gap-1.5 text-[2.55rem] font-semibold leading-none tracking-[0.015em] text-base-content/88 sm:text-[3.2rem]" style="font-family: var(--pi-font-label-family, var(--pi-font-body-family, Inter, system-ui, sans-serif));">
+										<span>sync</span>
+										<span><span class="text-primary text-[1.1em] font-medium tracking-[-0.08em]">4</span><span class="text-primary">.</span></span>
+										<span>run</span>
+									</div>
+									<div class="text-[0.75rem] uppercase tracking-[0.26em] text-base-content/44">coding agent workspace</div>
+								</div>
+								<div class="mx-auto w-full max-w-[49rem] rounded-[1.75rem] border agent-shell-border bg-transparent px-4 py-2 sm:px-4.5 sm:py-2.5">
+									<form id="prompt-form-empty" class="space-y-1">
+										<textarea id="prompt-input-empty" class="textarea h-13 w-full resize-none border-0 bg-transparent p-0 text-[0.9rem] leading-6 text-base-content placeholder:text-base-content/72 focus:outline-none" name="message" placeholder='Type a message or use &quot;/&quot; for commands' if activeSessionID(state) == "" { disabled }></textarea>
+										<div class="flex items-center justify-between gap-3 pt-1">
+											<div class="flex items-center gap-2">
+												<button class="btn btn-ghost btn-sm btn-circle" type="button" title="Adjuntar">
+													<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9"><path stroke-linecap="round" stroke-linejoin="round" d="m18.375 12.739-7.693 7.693a3.375 3.375 0 1 1-4.773-4.773l8.489-8.49a2.25 2.25 0 1 1 3.182 3.182l-8.49 8.49a1.125 1.125 0 1 1-1.59-1.591l7.694-7.693"/></svg>
+												</button>
+												<div class="agent-glass-panel-soft agent-raised inline-flex items-center gap-2 rounded-full border agent-shell-border px-3 py-1.5 text-sm text-base-content/84">
+													<span>Agent</span>
+												</div>
+											</div>
+											<div class="flex items-center gap-3 text-sm text-base-content/82" style="font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);">
+												<span>{ shellModel(state) }</span>
+												<button class="agent-glass-panel btn btn-circle border agent-shell-border bg-transparent text-base-content hover:bg-base-100/10 disabled:opacity-40" type="submit" if activeSessionID(state) == "" { disabled } title="Enviar">
+													<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-7-7 7 7-7 7"/></svg>
+												</button>
+											</div>
+										</div>
+									</form>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<div id="conversation-shell" class="hidden min-h-full flex-col">
+						<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 py-3">
+							<div class="flex items-center justify-between">
+								<div class="text-sm text-base-content/72" style="font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);">{ shellTitle(state) }</div>
+								<div class="text-xs text-base-content/54">live session</div>
+							</div>
+							<div id="conversation-messages" class="space-y-5"></div>
+						</div>
+					</div>
+				</div>
+
+				<div id="conversation-toolbar" class="hidden">
+					<div class="agent-glass-panel agent-shell-shadow relative z-10 border-t agent-shell-border px-4 py-2.5 sm:px-5">
+						<div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+							<div class="flex items-center gap-3 text-sm text-base-content/84" style="font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);">
+								<span>Model:</span>
+								<div class="agent-glass-panel-soft agent-raised inline-flex min-w-[14rem] items-center gap-3 rounded-box border agent-shell-border px-4 py-2 text-base-content">
+									<span id="session-model" class="truncate">{ shellModel(state) }</span>
+									<svg xmlns="http://www.w3.org/2000/svg" class="ml-auto h-4 w-4 text-base-content/56" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>
+								</div>
+							</div>
+							<div class="flex items-center gap-3 text-sm text-base-content/84" style="font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);">
+								<span>Dir:</span>
+								<div class="agent-glass-panel-soft agent-raised input w-full max-w-[32rem] border agent-shell-border bg-transparent text-base-content">
+									<input id="session-dir" type="text" class="grow" value={ shellDir(state) } readonly/>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<div class="agent-glass-panel-soft agent-shell-shadow relative z-10 border-t agent-shell-border px-4 py-4 sm:px-5">
+						<form id="prompt-form" class="mx-auto flex w-full max-w-5xl items-end gap-3">
+							<div class="flex-1 rounded-[1.4rem] border agent-shell-border bg-transparent px-4 py-3">
+								<textarea id="prompt-input" class="textarea h-24 w-full resize-none border-0 bg-transparent p-0 text-[0.95rem] leading-6 text-base-content placeholder:text-base-content/72 focus:outline-none" name="message" placeholder="Ask away. Pics work too." if activeSessionID(state) == "" { disabled }></textarea>
+							</div>
+							<div class="flex items-center gap-3 pb-2 text-base-content/72">
+								<button class="btn btn-ghost btn-sm btn-square rounded-full" type="button" title="Adjuntar">
+									<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9"><path stroke-linecap="round" stroke-linejoin="round" d="m18.375 12.739-7.693 7.693a3.375 3.375 0 1 1-4.773-4.773l8.489-8.49a2.25 2.25 0 1 1 3.182 3.182l-8.49 8.49a1.125 1.125 0 1 1-1.59-1.591l7.694-7.693"/></svg>
+								</button>
+								<button class="agent-glass-panel agent-raised btn btn-circle border agent-shell-border bg-transparent text-base-content hover:bg-base-100/10 disabled:opacity-40" type="submit" if activeSessionID(state) == "" { disabled } title="Enviar">
+									<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-7-7 7 7-7 7"/></svg>
+								</button>
+							</div>
+						</form>
+					</div>
+				</div>
+			</section>
+		</div>
+	</div>
+
+	<script>
+	(() => {
+		const root = document.getElementById("agent-app");
+		if (!root) return;
+
+		let activeSessionId = root.dataset.activeSessionId || "";
+		const fallbackJwt = (root.dataset.userJwt || "").trim();
+		// Cache del JWT (IDToken de Casdoor). La fuente primaria es
+		// GET /agent/auth en el web-server, que acepta cookie y refresca
+		// automáticamente contra el IdP si el token está vencido. Si ese
+		// endpoint falla (red caída, sesión expirada del lado del IdP,
+		// etc.) caemos al fallback data-user-jwt embebido en la página
+		// — útil sólo para el primer pintado, hasta que el usuario
+		// vuelva a loguearse.
+		const authCache = { token: fallbackJwt, exp: 0 };
+		async function getAuthToken(forceRefresh) {
+			const nowSec = Date.now() / 1000;
+			if (!forceRefresh && authCache.token && authCache.exp && authCache.exp > nowSec + 30) {
+				return authCache.token;
+			}
+			try {
+				const r = await fetch("/agent/auth", {
+					method: "GET",
+					headers: { "Accept": "application/json" },
+					credentials: "same-origin",
+				});
+				if (!r.ok) return authCache.token || fallbackJwt || "";
+				const body = await r.json();
+				const tok = (body && body.token) || "";
+				const exp = Number(body && body.expiresAtUnix) || 0;
+				if (tok) authCache.token = tok;
+				if (exp) authCache.exp = exp;
+				return authCache.token || "";
+			} catch (err) {
+				console.warn("agent: /agent/auth failed", err);
+				return authCache.token || fallbackJwt || "";
+			}
+		}
+		async function authHeaders(extra) {
+			const token = await getAuthToken(false);
+			const base = { "Content-Type": "application/json" };
+			if (token) base["Authorization"] = "Bearer " + token;
+			return Object.assign(base, extra || {});
+		}
+		const feed = document.getElementById("agent-feed");
+		const emptyShell = document.getElementById("empty-shell");
+		const conversationShell = document.getElementById("conversation-shell");
+		const conversationMessages = document.getElementById("conversation-messages");
+		const conversationToolbar = document.getElementById("conversation-toolbar");
+		const promptForm = document.getElementById("prompt-form");
+		const promptInput = document.getElementById("prompt-input");
+		const emptyPromptForm = document.getElementById("prompt-form-empty");
+		const emptyPromptInput = document.getElementById("prompt-input-empty");
+		const createForm = document.getElementById("new-session-form");
+		const abortButton = document.getElementById("abort-button");
+		const headerNewChat = document.getElementById("header-new-chat");
+		const sessionsList = document.getElementById("sessions-list");
+		const sessionsEmpty = document.getElementById("sessions-empty");
+		const sessionTitle = document.getElementById("session-title");
+		const sessionStatus = document.getElementById("session-status");
+		const sessionModel = document.getElementById("session-model");
+		const sessionDir = document.getElementById("session-dir");
+		let streamAbort = null;
+		let currentAssistantBubble = null;
+		// lastEventId es el último id que vimos en el SSE. Si la conexión
+		// se cae (network blip, tab suspendida, etc.) y reopenamos, lo
+		// mandamos como Last-Event-ID para que el worker reenvíe los
+		// eventos que nos perdimos mientras estábamos offline. cache es
+		// por session, no global — si el user cambia de sesión arranca
+		// de cero.
+		const lastEventIds = {};
+		let currentThinkingBubble = null;
+
+		function statusBadgeClass(status) {
+			switch ((status || "").trim()) {
+				case "running":
+					return "badge badge-warning badge-soft text-[0.68rem]";
+				case "error":
+					return "badge badge-error badge-soft text-[0.68rem]";
+				default:
+					return "badge badge-ghost text-[0.68rem]";
+			}
+		}
+
+		function renderSessions(sessions) {
+			if (!sessionsList || !sessionsEmpty) return;
+			sessionsList.innerHTML = "";
+			const items = Array.isArray(sessions) ? sessions : [];
+			sessionsEmpty.classList.toggle("hidden", items.length > 0);
+			for (const session of items) {
+				const li = document.createElement("li");
+				const a = document.createElement("a");
+				a.href = `/agent?session=${encodeURIComponent(session.id)}`;
+				a.className = "group block rounded-box border border-transparent px-2.5 py-2.5 transition-all duration-200 hover:-translate-y-px hover:border-base-300/60 hover:bg-base-100/60 agent-raised";
+				if (session.id === activeSessionId) {
+					a.className += " border-base-300/70 bg-base-100/72";
+				}
+				a.innerHTML = `<div class=\"flex items-start justify-between gap-3\"><div class=\"min-w-0 flex-1\"><div class=\"truncate text-[0.82rem] font-semibold text-base-content\" style=\"font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);\">${escapeHTML(session.title || "Nueva sesión")}</div><div class=\"mt-1 flex items-center gap-1 text-[0.68rem] text-base-content/62\"><span>${escapeHTML(formatSessionDate(session.updatedAt))}</span><span class=\"truncate\">${escapeHTML(session.cwd || "cwd pendiente")}</span></div><div class=\"mt-1 truncate text-[0.7rem] text-base-content/72\" style=\"font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);\">${escapeHTML(session.model || "default")}</div></div><span class=\"${statusBadgeClass(session.status)} badge-sm shrink-0\">${escapeHTML(session.status || "idle")}</span></div>`;
+				li.appendChild(a);
+				sessionsList.appendChild(li);
+			}
+		}
+
+		function formatSessionDate(value) {
+			if (!value) return "sin fecha";
+			const d = new Date(value);
+			if (Number.isNaN(d.getTime())) return "sin fecha";
+			return d.toLocaleDateString("es-CL");
+		}
+
+		function escapeHTML(value) {
+			return String(value || "")
+				.replaceAll("&", "&amp;")
+				.replaceAll("<", "&lt;")
+				.replaceAll(">", "&gt;")
+				.replaceAll('"', "&quot;")
+				.replaceAll("'", "&#39;");
+		}
+
+		function applyActiveSession(session) {
+			if (!session) return;
+			activeSessionId = session.id || activeSessionId;
+			root.dataset.activeSessionId = activeSessionId;
+			if (sessionTitle) sessionTitle.textContent = session.title || "Shelley";
+			if (sessionStatus) {
+				sessionStatus.textContent = (session.status || "idle").trim() || "idle";
+				sessionStatus.className = statusBadgeClass(session.status) + " hidden sm:inline-flex";
+			}
+			if (sessionModel) sessionModel.textContent = session.model || "default";
+			if (sessionDir) sessionDir.value = session.cwd || ".";
+			if (abortButton) abortButton.classList.remove("hidden");
+			setBusy(false);
+		}
+
+		async function workerFetch(path, init) {
+			const options = Object.assign({}, init || {});
+			options.headers = await authHeaders(options.headers || {});
+			return fetch(path, options);
+		}
+
+		async function fetchSessions() {
+			const response = await workerFetch("/agent/sessions", { method: "GET" });
+			if (!response.ok) throw new Error(`sessions ${response.status}`);
+			const data = await response.json();
+			return Array.isArray(data && data.sessions) ? data.sessions : [];
+		}
+
+		async function fetchSession(id) {
+			if (!id) return null;
+			const response = await workerFetch(`/agent/sessions/${id}`, { method: "GET" });
+			if (!response.ok) return null;
+			const data = await response.json();
+			return data && data.session ? data.session : null;
+		}
+
+		async function bootstrapSession() {
+			let sessions = [];
+			try {
+				sessions = await fetchSessions();
+			} catch (err) {
+				console.warn("agent: no pude listar sesiones", err);
+			}
+			if (!activeSessionId && sessions.length > 0) {
+				window.location.replace(`/agent?session=${encodeURIComponent(sessions[0].id)}`);
+				return false;
+			}
+			renderSessions(sessions);
+			if (!activeSessionId) {
+				if (createForm) createForm.requestSubmit();
+				return false;
+			}
+			const active = await fetchSession(activeSessionId);
+			if (!active) {
+				if (sessions.length > 0) {
+					window.location.replace(`/agent?session=${encodeURIComponent(sessions[0].id)}`);
+					return false;
+				}
+				if (createForm) createForm.requestSubmit();
+				return false;
+			}
+			applyActiveSession(active);
+			renderSessions(sessions);
+			return true;
+		}
+
+		function setChatState(nextState) {
+			root.dataset.chatState = nextState;
+			const isConversation = nextState === "conversation";
+			if (emptyShell) emptyShell.classList.toggle("hidden", isConversation);
+			if (conversationShell) {
+				conversationShell.classList.toggle("hidden", !isConversation);
+				conversationShell.classList.toggle("flex", isConversation);
+			}
+			if (conversationToolbar) conversationToolbar.classList.toggle("hidden", !isConversation);
+		}
+
+		function scrollFeed() {
+			if (!feed) return;
+			feed.scrollTop = feed.scrollHeight;
+		}
+
+		function appendNode(node) {
+			if (!conversationMessages) return;
+			setChatState("conversation");
+			conversationMessages.appendChild(node);
+			scrollFeed();
+		}
+
+		function makeChat(role, text) {
+			const wrapper = document.createElement("div");
+			wrapper.className = `chat ${role === "user" ? "chat-end" : "chat-start"}`;
+			const bubble = document.createElement("div");
+			bubble.className = `chat-bubble agent-glass-panel agent-raised max-w-[78ch] whitespace-pre-wrap border agent-shell-border text-base-content ${role === "user" ? "chat-bubble-primary border-primary/25 text-primary-content" : ""}`.trim();
+			if (role === "user") {
+				bubble.style.background = "color-mix(in oklab, var(--color-primary) 78%, transparent)";
+			}
+			bubble.style.fontFamily = "var(--pi-font-code-family, 'JetBrains Mono', monospace)";
+			bubble.style.lineHeight = "1.7";
+			bubble.textContent = text || "";
+			wrapper.appendChild(bubble);
+			return { wrapper, bubble };
+		}
+
+		function appendTool(payload) {
+			const card = document.createElement("div");
+			card.className = "agent-glass-panel agent-raised card card-border shadow-none";
+			const body = document.createElement("div");
+			body.className = "card-body gap-3 p-4";
+			body.innerHTML = `<div class=\"flex items-center justify-between gap-3\"><h3 class=\"card-title text-sm\" style=\"font-family:var(--pi-font-code-family,'JetBrains Mono',monospace)\">${payload.toolName || payload.type || "tool"}</h3><span class=\"badge badge-ghost badge-sm\">tool</span></div>`;
+			if (payload.args) {
+				const pre = document.createElement("pre");
+				pre.className = "agent-glass-panel-soft overflow-x-auto rounded-box border agent-shell-border p-3 text-xs text-base-content/82";
+				pre.style.fontFamily = "var(--pi-font-code-family, 'JetBrains Mono', monospace)";
+				pre.textContent = JSON.stringify(payload.args, null, 2);
+				body.appendChild(pre);
+			}
+			card.appendChild(body);
+			appendNode(card);
+		}
+
+		function appendError(message) {
+			const wrapper = document.createElement("div");
+			wrapper.className = "chat chat-start";
+			const bubble = document.createElement("div");
+			bubble.className = "chat-bubble agent-glass-panel agent-raised border border-error/40 bg-error/15 text-base-content whitespace-pre-wrap max-w-[78ch]";
+			bubble.style.fontFamily = "var(--pi-font-code-family, 'JetBrains Mono', monospace)";
+			bubble.textContent = message || "Error";
+			wrapper.appendChild(bubble);
+			appendNode(wrapper);
+		}
+
+		// Burbuja de "generando respuesta": tres puntos animados en
+		// cascada, agregada como un `chat chat-start` dentro del flujo
+		// de mensajes. Aparece apenas se envía el prompt y se mantiene
+		// hasta que llega `message_end` (turno cerrado) o un error /
+		// cancel.
+		function makeThinking() {
+			const wrapper = document.createElement("div");
+			wrapper.className = "chat chat-start";
+			wrapper.dataset.thinking = "true";
+			const bubble = document.createElement("div");
+			bubble.className = "chat-bubble agent-glass-panel agent-raised border agent-shell-border text-base-content/72 inline-flex items-center gap-1.5 px-3.5 py-2.5";
+			bubble.style.fontFamily = "var(--pi-font-code-family, 'JetBrains Mono', monospace)";
+			const sr = document.createElement("span");
+			sr.className = "sr-only";
+			sr.textContent = "Generando respuesta";
+			bubble.appendChild(sr);
+			for (let i = 0; i < 3; i++) {
+				const dot = document.createElement("span");
+				dot.className = "thinking-dot";
+				bubble.appendChild(dot);
+			}
+			wrapper.appendChild(bubble);
+			return wrapper;
+		}
+
+		function showThinking() {
+			if (currentThinkingBubble) return;
+			currentThinkingBubble = makeThinking();
+			appendNode(currentThinkingBubble);
+			console.log("[agent] showThinking");
+		}
+
+		function hideThinking(reason) {
+			if (!currentThinkingBubble) return;
+			console.log("[agent] hideThinking (" + (reason || "no reason") + ")");
+			if (currentThinkingBubble.parentNode) {
+				currentThinkingBubble.parentNode.removeChild(currentThinkingBubble);
+			}
+			currentThinkingBubble = null;
+		}
+
+		function setConnectionState(state) {
+			if (!root) return;
+			root.dataset.connectionState = state;
+			let indicator = document.getElementById("connection-indicator");
+			if (!indicator) {
+				const header = document.querySelector("header");
+				if (!header) return;
+				indicator = document.createElement("span");
+				indicator.id = "connection-indicator";
+				indicator.className = "text-[0.68rem] uppercase tracking-[0.18em] text-base-content/56 ml-2 transition-opacity";
+				const title = header.querySelector("h1");
+				if (title && title.parentNode) {
+					title.parentNode.insertBefore(indicator, title.nextSibling);
+				}
+			}
+			indicator.textContent = state === "connected" ? "live" : (state === "reconnecting" ? "reconectando…" : "desconectado");
+			indicator.classList.toggle("text-error/70", state !== "connected");
+		}
+
+		async function connectStream(sessionId) {
+			if (!sessionId || !feed) return;
+			if (streamAbort) {
+				streamAbort.abort();
+				streamAbort = null;
+			}
+			setConnectionState("connecting");
+			const controller = new AbortController();
+			streamAbort = controller;
+			// Primer intento: token cacheado. Si da 401, refetchamos JWT
+			// fresco vía /agent/auth y reintentamos una vez antes de
+			// quedar en estado "reconnecting".
+			await getAuthToken(false);
+			// Si tenemos un lastEventId de una conexión anterior, lo
+			// mandamos como Last-Event-ID para que el worker reenvíe
+			// los eventos que nos perdimos mientras estábamos offline.
+			const lastId = lastEventIds[sessionId] || "";
+			for (let attempt = 0; attempt < 2; attempt++) {
+				let response;
+				try {
+					const headers = await authHeaders({ "Accept": "text/event-stream" });
+					if (lastId) headers["Last-Event-ID"] = String(lastId);
+					// ?resume=N es un fallback para proxies que filtran
+					// el header Last-Event-ID (BFF no debería, pero por
+					// las dudas).
+					let url = `/agent/sessions/${sessionId}/events`;
+					if (lastId) url += `?resume=${encodeURIComponent(String(lastId))}`;
+					response = await fetch(url, {
+						headers,
+						signal: controller.signal,
+					});
+				} catch (err) {
+					if (err && err.name === "AbortError") return false;
+					return false;
+				}
+				if (response.status !== 401) {
+					if (!response.ok || !response.body) {
+						return false;
+					}
+					setConnectionState("connected");
+					await readStream(response, controller, sessionId);
+					return true;
+				}
+				// 401: forzar refresh del token y reintentar.
+				await getAuthToken(true);
+			}
+			return false;
+		}
+
+		// keepStreamAlive envuelve connectStream con backoff: si el SSE
+		// termina (worker caído, network blip, etc.) esperamos antes de
+		// reintentar para no martillar el servidor. Sin backoff, una caída
+		// de 30 s del worker = 30 requests al IdP (/agent/auth) + sus
+		// respectivos /events. Con backoff: 1, 2, 4, 8, 16, 30 s.
+		async function keepStreamAlive(sessionId) {
+			if (!sessionId) return;
+			let attempts = 0;
+			while (true) {
+				const ok = await connectStream(sessionId);
+				if (!ok) {
+					attempts++;
+				} else {
+					attempts = 0;
+				}
+				setConnectionState("reconnecting");
+				const delay = backoffDelay(attempts);
+				await sleep(delay);
+			}
+		}
+
+		function backoffDelay(attempt) {
+			// 1 s base, duplicar hasta 30 s, con jitter ±20 % para
+			// desalinar a clientes que se cayeron a la vez.
+			const base = Math.min(30000, 1000 * Math.pow(2, Math.max(0, attempt - 1)));
+			const jitter = base * 0.2 * (Math.random() * 2 - 1);
+			return Math.max(500, Math.round(base + jitter));
+		}
+
+		function sleep(ms) {
+			return new Promise((resolve) => setTimeout(resolve, ms));
+		}
+
+		async function readStream(response, controller, sessionId) {
+			const reader = response.body.getReader();
+			const decoder = new TextDecoder();
+			let buffer = "";
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					buffer += decoder.decode(value, { stream: true });
+					const lines = buffer.split("\n");
+					buffer = lines.pop();
+					let currentEvent = "message";
+					let currentId = "";
+					for (const line of lines) {
+						if (!line) continue;
+						if (line.startsWith(":")) continue; // SSE comments
+						if (line.startsWith("event:")) {
+							currentEvent = line.slice(6).trim();
+							continue;
+						}
+						if (line.startsWith("id:")) {
+							// SSE Last-Event-ID. Nos quedamos con el último
+							// válido para sobrevivir a la próxima desconexión.
+							const v = line.slice(3).trim();
+							if (v !== "" && !Number.isNaN(Number(v))) {
+								currentId = v;
+								lastEventIds[sessionId] = v;
+							}
+							continue;
+						}
+						if (line.startsWith("data:")) {
+							const data = line.slice(5).trim();
+							handleStreamPayload(currentEvent, data);
+						}
+					}
+				}
+			} catch (err) {
+				if (err && err.name === "AbortError") return;
+				console.warn("agent: stream error", err);
+				setConnectionState("reconnecting");
+			}
+		}
+
+		function handleStreamPayload(eventName, rawData) {
+			if (eventName !== "pi") return;
+			let envelope;
+			try {
+				envelope = JSON.parse(rawData);
+			} catch (err) {
+				console.warn("agent: payload no es JSON", err, rawData);
+				return;
+			}
+			const payload = envelope.payload || {};
+			console.log("[agent] SSE event:", envelope.type, eventName === "pi" ? "" : "(evento " + eventName + ")");
+			switch (envelope.type) {
+				case "message_start":
+					// El modelo está por arrancar (otro) sub-message del
+					// turno. NO creamos la burbuja del asistente acá: la
+					// burbuja nace con el primer `text_delta`. Si los dots
+					// estaban ocultos por un `message_end` previo dentro
+					// del mismo turno (multi-segment: ej. "thinking" +
+					// respuesta final), los re-mostramos.
+					if (!currentThinkingBubble) {
+						console.log("[agent] message_start → re-show dots");
+						showThinking();
+					} else {
+						console.log("[agent] message_start (dots siguen)");
+					}
+					break;
+				case "message_update":
+					if (payload.assistantMessageEvent && payload.assistantMessageEvent.type === "text_delta") {
+						if (!currentAssistantBubble) {
+							currentAssistantBubble = makeChat("assistant", "");
+							appendNode(currentAssistantBubble.wrapper);
+						}
+						// El texto empieza a llegar, pero no ocultamos los
+						// dots: persisten mientras la respuesta completa
+						// se está renderizando. Se sacan en `message_end`.
+						currentAssistantBubble.bubble.textContent += payload.assistantMessageEvent.delta || "";
+						scrollFeed();
+					}
+					break;
+				case "message_end":
+					// Turno cerrado → la respuesta ya está renderizada.
+					// Recién acá ocultamos los dots.
+					hideThinking("message_end (respuesta renderizada)");
+					currentAssistantBubble = null;
+					break;
+				case "tool_execution_start":
+					// El asistente arrancó a ejecutar una herramienta,
+					// todavía no respondió. Mantenemos los dots.
+					console.log("[agent] tool_execution_start (dots siguen)");
+					appendTool(payload);
+					break;
+				case "runtime_error":
+				case "stderr": {
+					hideThinking(envelope.type);
+					const msg = makeChat("assistant", (payload && payload.message) || "runtime error");
+					msg.bubble.classList.add("chat-bubble-error", "border-error/30");
+					appendNode(msg.wrapper);
+					break;
+				}
+				case "runtime_exit":
+					// El proceso pi murió (timeout, crash). Lo decimos al
+					// usuario para que sepa que el próximo prompt
+					// intentará respawnear.
+					hideThinking("runtime_exit");
+					appendError(`Sesión del agente finalizada: ${(payload && payload.reason) || payload && payload.message || ""}`);
+					currentAssistantBubble = null;
+					break;
+			}
+		}
+
+		function setBusy(busy) {
+			if (promptInput) promptInput.disabled = busy;
+			if (emptyPromptInput) emptyPromptInput.disabled = busy;
+		}
+
+		async function sendPrompt(message) {
+			if (!activeSessionId || !message) return;
+			const userChat = makeChat("user", message);
+			appendNode(userChat.wrapper);
+			setBusy(true);
+			showThinking();
+			try {
+				let response = await postPrompt(message, false);
+				// Si el worker nos rechazó con 401, asumimos que el JWT
+				// embebido venció. Forzamos refresh y reintentamos una vez.
+				if (response.status === 401) {
+					response = await postPrompt(message, true);
+				}
+				if (!response.ok) {
+					let detail = `${response.status} ${response.statusText}`;
+					try {
+						const errBody = await response.json();
+						if (errBody && errBody.detail) detail += `: ${errBody.detail}`;
+					} catch (_) { /* ignore */ }
+					hideThinking("POST no OK (" + response.status + ")");
+					appendError(`No pude enviar el mensaje (${detail}). Reintentá o revisá la conexión.`);
+					// Si el server mató la runtime, forzamos reconexión SSE
+					// para que el siguiente prompt dispare un respawn limpio.
+					if (response.status >= 500) {
+						connectStream(activeSessionId);
+					}
+				}
+			} catch (err) {
+				hideThinking("error de red en POST");
+				appendError(`Error de red al enviar el mensaje: ${err && err.message ? err.message : err}`);
+				connectStream(activeSessionId);
+			} finally {
+				setBusy(false);
+			}
+		}
+
+		async function postPrompt(message, forceRefresh) {
+			await getAuthToken(forceRefresh);
+			const headers = await authHeaders();
+			return fetch(`/agent/sessions/${activeSessionId}/prompt`, {
+				method: "POST",
+				headers,
+				body: JSON.stringify({ message }),
+			});
+		}
+
+		if (createForm) {
+			createForm.addEventListener("submit", async (e) => {
+				e.preventDefault();
+				const body = Object.fromEntries(new FormData(createForm).entries());
+				const response = await workerFetch("/agent/sessions", {
+					method: "POST",
+					body: JSON.stringify(body),
+				});
+				if (!response.ok) return;
+				const data = await response.json();
+				if (data.session && data.session.id) {
+					window.location.href = `/agent?session=${data.session.id}`;
+				}
+			});
+		}
+
+		if (headerNewChat) {
+			headerNewChat.addEventListener("click", () => {
+				if (createForm) createForm.requestSubmit();
+			});
+		}
+
+		// Enter envía; Shift+Enter inserta newline (UX estándar de
+		// chat). Trabaja sobre `form.requestSubmit()` para que las
+		// constraint validation y el submit handler existentes sigan
+		// siendo la única vía real de envío: si no hay sesión activa,
+		// el botón está disabled y `requestSubmit()` no dispara nada.
+		// `e.isComposing` protege a IMEs (CJK, etc.) para que Enter de
+		// confirmación de composición no se interprete como "enviar".
+		function wireEnterToSend(textarea, form) {
+			if (!textarea || !form) return;
+			textarea.addEventListener("keydown", (e) => {
+				if (e.key !== "Enter") return;
+				if (e.shiftKey) return;
+				if (e.isComposing || e.keyCode === 229) return;
+				if (textarea.disabled || textarea.readOnly) return;
+				e.preventDefault();
+				form.requestSubmit();
+			});
+		}
+
+		if (emptyPromptForm && emptyPromptInput && activeSessionId) {
+			emptyPromptForm.addEventListener("submit", async (e) => {
+				e.preventDefault();
+				const message = emptyPromptInput.value.trim();
+				if (!message) return;
+				emptyPromptInput.value = "";
+				await sendPrompt(message);
+			});
+			wireEnterToSend(emptyPromptInput, emptyPromptForm);
+		}
+
+		if (promptForm && promptInput && activeSessionId) {
+			promptForm.addEventListener("submit", async (e) => {
+				e.preventDefault();
+				const message = promptInput.value.trim();
+				if (!message) return;
+				promptInput.value = "";
+				await sendPrompt(message);
+			});
+			wireEnterToSend(promptInput, promptForm);
+		}
+
+		if (abortButton) {
+			abortButton.addEventListener("click", async () => {
+				if (!activeSessionId) return;
+				await workerFetch(`/agent/sessions/${activeSessionId}/abort`, {
+					method: "POST",
+					body: JSON.stringify({})
+				});
+			});
+		}
+
+		bootstrapSession().then((ready) => {
+			if (ready && activeSessionId) keepStreamAlive(activeSessionId);
+		}).catch((err) => {
+			console.warn("agent: bootstrap failed", err);
+			appendError(`No pude inicializar la sesión del agente: ${err && err.message ? err.message : err}`);
+		});
+	})();
+	</script>
+}

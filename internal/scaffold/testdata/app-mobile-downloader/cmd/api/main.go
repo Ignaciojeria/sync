@@ -29,6 +29,7 @@ import (
 	topologymutagen "app-mobile-downloader/internal/topology/infrastructure/mutagen"
 	topologypostgresql "app-mobile-downloader/internal/topology/infrastructure/postgresql"
 	topologyworkspacefiles "app-mobile-downloader/internal/topology/infrastructure/workspacefiles"
+	agenthttp "app-mobile-downloader/pkg/agent/http"
 )
 
 func main() {
@@ -78,6 +79,14 @@ func main() {
 	editorhttp.Register(s)
 	authhttp.Register(s, conf, sessionRepo, k)
 	qualityhttp.Register(s, testRunner)
+
+	// Agente: en el web-server sólo vive la UI (/agent) y /agent/auth.
+	// El runtime real corre en cmd/agent-worker.
+	registerAgent(s, sessionRepo, agenthttp.OIDCRefreshConfig{
+		TokenEndpoint: conf.OIDCTokenEndpoint,
+		ClientID:      conf.OIDCClientID,
+		ClientSecret:  conf.OIDCClientSecret,
+	})
 	if err := schedulerhttp.Register(s, db, hooks); err != nil {
 		log.Fatalf("scheduler: %v", err)
 	}
@@ -93,4 +102,11 @@ func main() {
 	if err := hooks.Shutdown(context.Background()); err != nil {
 		log.Printf("shutdown completed with errors: %v", err)
 	}
+}
+
+// registerAgent monta sólo la UI del agente y el endpoint /agent/auth.
+// El runtime del agente vive exclusivamente en cmd/agent-worker.
+func registerAgent(s *server.Server, sessionLookup agenthttp.SessionLookup, oidcCfg agenthttp.OIDCRefreshConfig) {
+	agenthttp.Register(s, sessionLookup, oidcCfg)
+	log.Printf("agent: UI enabled (/agent, /agent/auth)")
 }

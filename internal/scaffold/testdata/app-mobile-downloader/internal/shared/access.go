@@ -29,9 +29,11 @@ func normalizeEmail(email string) string {
 }
 
 var allowedAppEmails = map[string]struct{}{
+	"ignaciovl.j@gmail.com": {},
 	"dev@example.com": {},
 }
 
 var allowedEditorEmails = map[string]struct{}{
+	"ignaciovl.j@gmail.com": {},
 	"dev@example.com": {},
 }

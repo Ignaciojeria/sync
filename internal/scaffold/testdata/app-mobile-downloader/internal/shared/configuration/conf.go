@@ -1,7 +1,9 @@
 package configuration
 
 type Conf struct {
-	PORT         string `env:"PORT" envDefault:"8000"`
+	// PORT default 8001: el web-server NO es público, está detrás del BFF.
+	// Para deploys sin BFF (legacy), setear PORT=8000 manualmente.
+	PORT         string `env:"PORT" envDefault:"8001"`
 	PROJECT_NAME string `env:"PROJECT_NAME"`
 
 	DATABASE_URL string `env:"DATABASE_URL" envDefault:"postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"`

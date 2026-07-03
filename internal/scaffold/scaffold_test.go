@@ -32,7 +32,7 @@ func TestMaterializeAppMobileDownloader(t *testing.T) {
 		t.Fatalf("bootstrap email count = %d, want 2 in allowlists: %q", count, accessFile)
 	}
 
-	for _, path := range []string{".air.toml", ".gitignore", "logo.svg", "login.jpeg", "design/ocean/DESIGN.md", "internal/design/http/register.go", "internal/editor/http/register.go", "scripts/_tree_generator.py", "scripts/structure.config.toml"} {
+	for _, path := range []string{".air.toml", ".gitignore", "logo.svg", "login.jpeg", "design/ocean/DESIGN.md", "internal/design/http/register.go", "internal/editor/http/register.go", "cmd/bff/main.go", "cmd/agent-worker/main.go", "pkg/agent/http/register.go", "scripts/run-all.sh", "scripts/systemd/run-bff.sh", "scripts/systemd/run-agent-worker.sh", "doc/agent-runtime.md", "scripts/_tree_generator.py", "scripts/structure.config.toml"} {
 		if _, err := os.Stat(filepath.Join(dir, path)); err != nil {
 			t.Fatalf("expected %s to be materialized: %v", path, err)
 		}
@@ -44,6 +44,14 @@ func TestMaterializeAppMobileDownloader(t *testing.T) {
 	}
 	if runtime.GOOS != "windows" && hookInfo.Mode().Perm()&0o700 != 0o700 {
 		t.Fatalf("post-checkout permissions = %o, want owner read/write/execute", hookInfo.Mode().Perm())
+	}
+
+	runBFFInfo, err := os.Stat(filepath.Join(dir, "scripts/systemd/run-bff.sh"))
+	if err != nil {
+		t.Fatalf("expected run-bff.sh to be materialized: %v", err)
+	}
+	if runtime.GOOS != "windows" && runBFFInfo.Mode().Perm()&0o700 != 0o700 {
+		t.Fatalf("run-bff.sh permissions = %o, want owner read/write/execute", runBFFInfo.Mode().Perm())
 	}
 }
 

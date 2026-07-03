@@ -118,7 +118,8 @@ func fileMode(rel string, entry fs.DirEntry) fs.FileMode {
 		mode = 0o644
 	}
 	mode |= 0o600
-	if strings.HasPrefix(filepath.ToSlash(rel), ".githooks/") {
+	unixRel := filepath.ToSlash(rel)
+	if strings.HasPrefix(unixRel, ".githooks/") || (strings.HasPrefix(unixRel, "scripts/") && strings.HasSuffix(unixRel, ".sh")) {
 		mode |= 0o111
 	}
 	return mode

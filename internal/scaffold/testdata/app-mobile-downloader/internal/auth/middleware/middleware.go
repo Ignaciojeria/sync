@@ -44,6 +44,7 @@ func JWTMiddleware(
 				next.ServeHTTP(w, r)
 				return
 			}
+
 			if os.Getenv("AUTH_DISABLED") == "true" {
 				sub := strings.TrimSpace(r.Header.Get("X-Dev-Sub"))
 				if sub == "" {
