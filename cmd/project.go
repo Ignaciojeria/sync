@@ -382,12 +382,14 @@ var initCmd = &cobra.Command{
 		}
 
 		airStarted := false
+		sidecarsStarted := false
 		mutagenReady := false
 		wedeReady := false
 		httpChecked := false
 		httpReady := false
 		httpCode := 0
 		var airErr error
+		var sidecarsErr error
 
 		if !skipMutagenCheck {
 			if err := ensureMutagenOnWindows(); err != nil {
@@ -425,6 +427,16 @@ var initCmd = &cobra.Command{
 						if !airStarted {
 							fmt.Println("❌ No se pudo iniciar Air automáticamente tras varios intentos")
 							fmt.Println("   Revisa logs con: einarc dev logs -f")
+						} else {
+							fmt.Println("🧩 Instalando sidecars del agente (systemd --user)...")
+							if err := setupAndStartRemoteAgentSidecars(&cfg); err != nil {
+								sidecarsErr = err
+								fmt.Printf("⚠️  Sidecars no listos: %v\n", err)
+								fmt.Println("   Revisa logs con: einarc dev logs -f")
+							} else {
+								sidecarsStarted = true
+								fmt.Println("✅ Sidecars del agente activos")
+							}
 						}
 					}
 				}
@@ -472,6 +484,11 @@ var initCmd = &cobra.Command{
 		} else {
 			fmt.Println("   - Air: ⚠️")
 		}
+		if sidecarsStarted {
+			fmt.Println("   - Agent sidecars: ✅")
+		} else {
+			fmt.Println("   - Agent sidecars: ⚠️")
+		}
 		if wedeReady {
 			fmt.Println("   - Wede: ✅")
 		} else {
@@ -497,6 +514,12 @@ var initCmd = &cobra.Command{
 				return fmt.Errorf("init incompleto: Air es mandatorio y no inició (%v)", airErr)
 			}
 			return fmt.Errorf("init incompleto: Air es mandatorio y no inició")
+		}
+		if airStarted && !sidecarsStarted {
+			if sidecarsErr != nil {
+				return fmt.Errorf("init incompleto: sidecars del agente no iniciaron (%v)", sidecarsErr)
+			}
+			return fmt.Errorf("init incompleto: sidecars del agente no iniciaron")
 		}
 		return nil
 	},
@@ -2476,6 +2499,111 @@ func setupAndStartRemoteAir(cfg *config.Config) error {
 		return fmt.Errorf("falló inicio de air remoto: %w", err)
 	}
 	fmt.Printf("✅ Air iniciado automáticamente en %s:%s\n", target, remotePath)
+	return nil
+}
+
+func setupAndStartRemoteAgentSidecars(cfg *config.Config) error {
+	if err := ensureWorkspaceBranchLock(cfg); err != nil {
+		return err
+	}
+	if err := ensureWorkspaceOwnership(cfg, false); err != nil {
+		return err
+	}
+	destination := strings.TrimSpace(initMutagenDestination)
+	if destination == "" {
+		destination = strings.TrimSpace(cfg.MutagenDestination)
+	}
+	destination = normalizeMutagenDestinationForProject(destination)
+	target, remotePath, ok := sshTargetAndPathFromMutagenDestination(destination)
+	if !ok {
+		return fmt.Errorf("no se pudo resolver destino remoto para sidecars del agente")
+	}
+
+	checkCmd := `set -eu
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
+[ -S "$XDG_RUNTIME_DIR/bus" ] || { echo "missing user bus at $XDG_RUNTIME_DIR/bus"; exit 41; }
+systemctl --user status >/dev/null 2>&1 && echo "systemd-user ready"`
+	msg, err := runSSHScriptWithTimeout(target, checkCmd, 20*time.Second)
+	if err != nil {
+		if strings.TrimSpace(msg) != "" {
+			return fmt.Errorf("systemd --user no disponible: %s", strings.TrimSpace(msg))
+		}
+		return fmt.Errorf("systemd --user no disponible: %w", err)
+	}
+	_ = msg
+	remoteRoot := strings.TrimSpace(remotePath)
+
+	installCmd := fmt.Sprintf(`set -eu
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
+[ -S "$XDG_RUNTIME_DIR/bus" ] || { echo "missing user bus at $XDG_RUNTIME_DIR/bus"; exit 41; }
+PROJECT_DIR=%s
+SYSTEMD_DIR="$HOME/.config/systemd/user"
+mkdir -p "$SYSTEMD_DIR" "$PROJECT_DIR/tmp" "$PROJECT_DIR/bin"
+chmod +x "$PROJECT_DIR/scripts/systemd/run-agent-worker.sh" "$PROJECT_DIR/scripts/systemd/run-bff.sh"
+cat > "$SYSTEMD_DIR/agent-worker.service" <<'EOF'
+[Unit]
+Description=Agent worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%s
+ExecStart=%s/scripts/systemd/run-agent-worker.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+EOF
+cat > "$SYSTEMD_DIR/bff.service" <<'EOF'
+[Unit]
+Description=BFF gateway
+After=network-online.target agent-worker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%s
+ExecStart=%s/scripts/systemd/run-bff.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+EOF
+systemctl --user daemon-reload
+systemctl --user enable --now agent-worker.service
+systemctl --user enable --now bff.service
+for unit in agent-worker.service bff.service; do
+  systemctl --user is-active --quiet "$unit" || {
+    systemctl --user status "$unit" --no-pager || true
+    exit 31
+  }
+done
+if command -v curl >/dev/null 2>&1; then
+  for i in $(seq 1 20); do
+    if curl -fsS http://127.0.0.1:18080/agent/healthz >/dev/null 2>&1 && curl -fsS http://127.0.0.1:8000/agent/healthz >/dev/null 2>&1; then
+      echo "agent sidecars ready"
+      exit 0
+    fi
+    sleep 1
+  done
+  echo "sidecars started but healthz did not answer in time"
+  systemctl --user status agent-worker.service bff.service --no-pager || true
+  exit 32
+fi
+`, shellQuote(remoteRoot), remoteRoot, remoteRoot, remoteRoot, remoteRoot)
+	msg, err = runSSHScriptWithTimeout(target, installCmd, 90*time.Second)
+	if err != nil {
+		if strings.TrimSpace(msg) != "" {
+			return fmt.Errorf("falló instalación/inicio de sidecars: %s", strings.TrimSpace(msg))
+		}
+		return fmt.Errorf("falló instalación/inicio de sidecars: %w", err)
+	}
+	fmt.Printf("✅ Sidecars systemd instalados en %s:%s\n", target, remotePath)
 	return nil
 }
 

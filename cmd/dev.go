@@ -86,6 +86,22 @@ var devLogsCmd = &cobra.Command{
 	},
 }
 
+var devRepairSidecarsCmd = &cobra.Command{
+	Use:   "repair-sidecars",
+	Short: "Reinstala y reinicia los sidecars del agente en la VM",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, _, target, remotePath, err := resolveDevRemote()
+		if err != nil {
+			return err
+		}
+		if err := setupAndStartRemoteAgentSidecars(&cfg); err != nil {
+			return err
+		}
+		fmt.Printf("✅ Sidecars reparados en %s:%s\n", target, remotePath)
+		return nil
+	},
+}
+
 func resolveDevRemote() (config.Config, string, string, string, error) {
 	cfg, err := config.Load()
 	if err != nil {
@@ -115,5 +131,6 @@ func init() {
 	devCmd.AddCommand(devStopCmd)
 	devCmd.AddCommand(devStatusCmd)
 	devCmd.AddCommand(devLogsCmd)
+	devCmd.AddCommand(devRepairSidecarsCmd)
 	rootCmd.AddCommand(devCmd)
 }
