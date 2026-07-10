@@ -54,7 +54,7 @@ func TestPageRenderFailingWriter(t *testing.T) {
 		CoverPercent: 88.8,
 		HasResult:    true,
 	}
-	err := Page(state).Render(context.Background(), failingTemplWriter{err: errors.New("flush failure")})
+	err := Page(state, "").Render(context.Background(), failingTemplWriter{err: errors.New("flush failure")})
 	if err == nil {
 		t.Fatal("expected flush error")
 	}
@@ -81,7 +81,7 @@ func TestTestResultRenderCancelledContext(t *testing.T) {
 func TestPageRenderCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := Page(TestRunState{}).Render(ctx, &bytes.Buffer{}); err == nil {
+	if err := Page(TestRunState{}, "").Render(ctx, &bytes.Buffer{}); err == nil {
 		t.Fatal("expected error from cancelled context")
 	}
 }

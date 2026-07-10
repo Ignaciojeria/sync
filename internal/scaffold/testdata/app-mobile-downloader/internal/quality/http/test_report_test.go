@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"app-mobile-downloader/internal/quality/ui"
+	"scaffoldxd1/internal/quality/ui"
 
 	"github.com/go-fuego/fuego"
 )

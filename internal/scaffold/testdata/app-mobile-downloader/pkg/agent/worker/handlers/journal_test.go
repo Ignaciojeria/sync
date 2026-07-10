@@ -8,6 +8,9 @@ func openJournalForTest(t *testing.T) *eventsJournal {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("AGENT_EVENTS_DIR", dir)
+	journalOpenMu.Lock()
+	journalGlobal = nil
+	journalOpenMu.Unlock()
 	j, err := openEventsJournal()
 	if err != nil {
 		t.Fatalf("open: %v", err)
@@ -58,6 +61,32 @@ func TestJournal_EmptySession(t *testing.T) {
 	}
 	if last != 0 {
 		t.Fatalf("lastSeq empty: %d, want 0", last)
+	}
+}
+
+func TestJournal_AppendOnce_DedupesSameEvent(t *testing.T) {
+	j := openJournalForTest(t)
+	payload := map[string]any{"type": "message_end", "createdAt": "2026-07-08T01:47:16Z"}
+	seq1, appended1, err := j.appendOnce("sess", "pi", payload)
+	if err != nil {
+		t.Fatalf("appendOnce #1: %v", err)
+	}
+	seq2, appended2, err := j.appendOnce("sess", "pi", payload)
+	if err != nil {
+		t.Fatalf("appendOnce #2: %v", err)
+	}
+	if !appended1 || appended2 {
+		t.Fatalf("appended flags = (%v,%v), want (true,false)", appended1, appended2)
+	}
+	if seq1 != 1 || seq2 != 1 {
+		t.Fatalf("seqs = (%d,%d), want (1,1)", seq1, seq2)
+	}
+	dst, err := j.replay("sess", 0, nil)
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if len(dst) != 1 {
+		t.Fatalf("replay len = %d, want 1", len(dst))
 	}
 }
 

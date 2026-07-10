@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"app-mobile-downloader/internal/quality/ui"
+	"scaffoldxd1/internal/quality/ui"
 )
 
 func baseDeps() RunnerDeps {

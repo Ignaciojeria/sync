@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strings"
 
-	agentui "app-mobile-downloader/pkg/agent/ui"
-	"app-mobile-downloader/internal/shared/server"
-	"app-mobile-downloader/internal/ui/layout"
+	agentui "scaffoldxd1/pkg/agent/ui"
+	"scaffoldxd1/internal/shared/server"
+	"scaffoldxd1/internal/ui/layout"
 
 	"github.com/go-fuego/fuego"
 )
@@ -37,19 +37,37 @@ func resolveUserJWT(ctx context.Context, r *http.Request, lookup SessionLookup, 
 }
 
 func pageHandler(s *server.Server, requireEditor func(http.Handler) http.Handler, lookup SessionLookup, oidcCfg OIDCRefreshConfig) {
-	fuego.Get(s.Server, "/agent", page(lookup, oidcCfg), fuego.OptionMiddleware(requireEditor))
+	mw := fuego.OptionMiddleware(requireEditor)
+	fuego.Get(s.Server, "/agent", dashboardPage(lookup, oidcCfg), mw)
+	fuego.Get(s.Server, "/agent/providers", providersPage(lookup, oidcCfg), mw)
+	fuego.Get(s.Server, "/agent/login", providersPage(lookup, oidcCfg), mw)
 }
 
-func page(lookup SessionLookup, oidcCfg OIDCRefreshConfig) func(fuego.ContextNoBody) (any, error) {
+func dashboardPage(lookup SessionLookup, oidcCfg OIDCRefreshConfig) func(fuego.ContextNoBody) (any, error) {
 	return func(c fuego.ContextNoBody) (any, error) {
 		state := agentui.PageState{
 			ActiveSessionID: strings.TrimSpace(c.QueryParam("session")),
 			DefaultCWD:      ".",
 			DefaultModel:    "",
+			CurrentView:     "dashboard",
 			UserJWT:         resolveUserJWT(c.Context(), c.Request(), lookup, oidcCfg),
 		}
 		nav := layout.FromRequest(c.Request())
 		c.SetHeader("Content-Type", "text/html; charset=utf-8")
 		return nil, agentui.StandalonePage(state, nav.ActiveThemeID, nav.ThemeCSSHref).Render(c.Context(), c.Response())
+	}
+}
+
+func providersPage(lookup SessionLookup, oidcCfg OIDCRefreshConfig) func(fuego.ContextNoBody) (any, error) {
+	return func(c fuego.ContextNoBody) (any, error) {
+		state := agentui.PageState{
+			DefaultCWD:   ".",
+			DefaultModel: "",
+			CurrentView:  "providers",
+			UserJWT:      resolveUserJWT(c.Context(), c.Request(), lookup, oidcCfg),
+		}
+		nav := layout.FromRequest(c.Request())
+		c.SetHeader("Content-Type", "text/html; charset=utf-8")
+		return nil, agentui.StandalonePageWithContent(state, nav.ActiveThemeID, nav.ThemeCSSHref, agentui.ProvidersPage(state)).Render(c.Context(), c.Response())
 	}
 }

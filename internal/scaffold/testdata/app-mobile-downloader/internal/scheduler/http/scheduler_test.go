@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	schedulerapp "app-mobile-downloader/internal/scheduler/application"
-	"app-mobile-downloader/internal/shared"
+	schedulerapp "scaffoldxd1/internal/scheduler/application"
+	"scaffoldxd1/internal/shared"
 )
 
 func TestShouldRun(t *testing.T) {

@@ -1,6 +1,11 @@
 package ui
 
-templ LoginPage() {
+import (
+	"net/url"
+	"strings"
+)
+
+templ LoginPage(previewPrefix string) {
 	<section class="hero min-h-[calc(100vh-4rem)] overflow-hidden bg-transparent">
 		<div class="pointer-events-none absolute inset-0" aria-hidden="true">
 			<div class="absolute inset-0" style="background:
@@ -46,7 +51,7 @@ templ LoginPage() {
 					</p>
 
 					<div class="mt-12 w-full max-w-xl">
-						<a class="btn btn-lg w-full justify-center gap-[1.15rem] rounded-[0.85rem] border border-base-content/10 bg-base-100 text-base-content shadow-[0_12px_32px_-18px_color-mix(in_srgb,var(--color-base-content)_14%,transparent)] transition-all duration-200 hover:-translate-y-px hover:border-base-content/14 hover:bg-base-100 hover:shadow-[0_16px_38px_-18px_color-mix(in_srgb,var(--color-base-content)_18%,transparent)] focus-visible:outline-3 focus-visible:outline-primary focus-visible:outline-offset-4" href="/auth/login/google" aria-label="Continue with Google">
+						<a class="btn btn-lg w-full justify-center gap-[1.15rem] rounded-[0.85rem] border border-base-content/10 bg-base-100 text-base-content shadow-[0_12px_32px_-18px_color-mix(in_srgb,var(--color-base-content)_14%,transparent)] transition-all duration-200 hover:-translate-y-px hover:border-base-content/14 hover:bg-base-100 hover:shadow-[0_16px_38px_-18px_color-mix(in_srgb,var(--color-base-content)_18%,transparent)] focus-visible:outline-3 focus-visible:outline-primary focus-visible:outline-offset-4" href={ googleLoginPath(previewPrefix) } aria-label="Continue with Google">
 							<svg class="h-7 w-7 flex-shrink-0" viewBox="0 0 18 18" aria-hidden="true" focusable="false">
 								<path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.91c1.7-1.57 2.69-3.88 2.69-6.62z"></path>
 								<path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.26c-.8.54-1.84.86-3.05.86-2.35 0-4.34-1.59-5.05-3.72H.94v2.33A9 9 0 0 0 9 18z"></path>
@@ -64,4 +69,31 @@ templ LoginPage() {
 			</div>
 		</div>
 	</section>
+}
+
+func googleLoginPath(prefix string) string {
+	return appPath(prefix, "/auth/login/google") + "?return_to=" + urlQueryEscape(appPath(prefix, "/"))
+}
+
+func appPath(prefix, path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		path = "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return path
+	}
+	prefix = strings.TrimRight(prefix, "/")
+	if path == "/" {
+		return prefix + "/"
+	}
+	return prefix + path
+}
+
+func urlQueryEscape(value string) string {
+	return url.QueryEscape(value)
 }

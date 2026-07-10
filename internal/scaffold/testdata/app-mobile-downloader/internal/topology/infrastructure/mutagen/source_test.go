@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	topologyapp "app-mobile-downloader/internal/topology/application"
+	topologyapp "scaffoldxd1/internal/topology/application"
 )
 
 func TestParseSyncSessionsArray(t *testing.T) {

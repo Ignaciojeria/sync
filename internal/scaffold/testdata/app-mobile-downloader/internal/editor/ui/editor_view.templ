@@ -1,12 +1,33 @@
 package ui
 
-templ EditorView() {
+import "strings"
+
+templ EditorView(previewPrefix string) {
 	<div class="flex flex-col h-[calc(100vh-4rem)]">
 		<iframe
-			src="/editor"
+			src={ appPath(previewPrefix, "/editor") }
 			class="w-full flex-1 min-h-0 border-0"
 			title="Console"
 			sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
 		></iframe>
 	</div>
+}
+
+func appPath(prefix, path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		path = "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return path
+	}
+	prefix = strings.TrimRight(prefix, "/")
+	if path == "/" {
+		return prefix + "/"
+	}
+	return prefix + path
 }

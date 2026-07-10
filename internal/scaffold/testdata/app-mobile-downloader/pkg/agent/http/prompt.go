@@ -2,10 +2,11 @@ package agent
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
-	agentapp "app-mobile-downloader/pkg/agent/application"
-	"app-mobile-downloader/internal/shared/server"
+	"scaffoldxd1/internal/shared/server"
+	agentapp "scaffoldxd1/pkg/agent/application"
 
 	"github.com/go-fuego/fuego"
 )
@@ -17,18 +18,36 @@ func promptHandler(s *server.Server, manager agentapp.AgentService, requireEdito
 }
 
 func sendPrompt(manager agentapp.AgentService) func(fuego.ContextNoBody) (any, error) {
-	return sendMessage(manager, func(ctx fuego.ContextNoBody, id string, message string) error {
-		return manager.Prompt(ctx.Context(), id, message)
+	return sendMessage(manager, func(ctx fuego.ContextNoBody, id string, body messageRequest) error {
+		input := agentapp.PromptInput{
+			Message: body.Message,
+			Action:  agentapp.PromptAction(strings.TrimSpace(body.Action)),
+			TurnID:  strings.TrimSpace(body.TurnID),
+		}
+		if err := manager.PromptRequest(ctx.Context(), id, input); err != nil {
+			return err
+		}
+		if runtimeEventsStore != nil {
+			event := agentapp.Event{
+				SessionID: id,
+				Type:      "user_prompt",
+				Payload:   []byte(`{"text":` + strconv.Quote(strings.TrimSpace(body.Message)) + `}`),
+			}
+			if _, err := runtimeEventsStore.Append(ctx.Context(), id, "pi", event); err != nil {
+				// ponytail: user prompt still persists in legacy transcript; postgres append is best-effort until legacy is removed.
+			}
+		}
+		return nil
 	})
 }
 
 func sendSteer(manager agentapp.AgentService) func(fuego.ContextNoBody) (any, error) {
-	return sendMessage(manager, func(ctx fuego.ContextNoBody, id string, message string) error {
-		return manager.Steer(ctx.Context(), id, message)
+	return sendMessage(manager, func(ctx fuego.ContextNoBody, id string, body messageRequest) error {
+		return manager.Steer(ctx.Context(), id, strings.TrimSpace(body.Message))
 	})
 }
 
-func sendMessage(manager agentapp.AgentService, send func(fuego.ContextNoBody, string, string) error) func(fuego.ContextNoBody) (any, error) {
+func sendMessage(manager agentapp.AgentService, send func(fuego.ContextNoBody, string, messageRequest) error) func(fuego.ContextNoBody) (any, error) {
 	return func(c fuego.ContextNoBody) (any, error) {
 		id, err := pathSessionID(c)
 		if err != nil {
@@ -38,11 +57,13 @@ func sendMessage(manager agentapp.AgentService, send func(fuego.ContextNoBody, s
 		if err != nil {
 			return nil, fuego.HTTPError{Status: http.StatusBadRequest, Detail: err.Error()}
 		}
-		message := strings.TrimSpace(body.Message)
-		if message == "" {
+		body.Message = strings.TrimSpace(body.Message)
+		body.Action = strings.TrimSpace(body.Action)
+		body.TurnID = strings.TrimSpace(body.TurnID)
+		if body.Message == "" {
 			return nil, fuego.HTTPError{Status: http.StatusBadRequest, Detail: "message is required"}
 		}
-		if err := send(c, id, message); err != nil {
+		if err := send(c, id, body); err != nil {
 			return nil, mapSessionError(err)
 		}
 		return map[string]any{"ok": true}, nil

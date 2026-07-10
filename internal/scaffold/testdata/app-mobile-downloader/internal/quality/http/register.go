@@ -1,8 +1,8 @@
 package dev
 
 import (
-	"app-mobile-downloader/internal/quality/application/test_report"
-	"app-mobile-downloader/internal/shared/server"
+	"scaffoldxd1/internal/quality/application/test_report"
+	"scaffoldxd1/internal/shared/server"
 )
 
 // Register wires quality (test report) routes onto the shared server.

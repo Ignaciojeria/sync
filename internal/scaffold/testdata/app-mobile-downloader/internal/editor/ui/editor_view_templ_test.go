@@ -9,7 +9,7 @@ import (
 
 func TestEditorViewRendersIframe(t *testing.T) {
 	var buf bytes.Buffer
-	if err := EditorView().Render(context.Background(), &buf); err != nil {
+	if err := EditorView("").Render(context.Background(), &buf); err != nil {
 		t.Fatalf("EditorView().Render() error = %v", err)
 	}
 	body := buf.String()

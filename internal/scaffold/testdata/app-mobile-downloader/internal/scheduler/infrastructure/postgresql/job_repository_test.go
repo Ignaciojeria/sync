@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	schedulerapp "app-mobile-downloader/internal/scheduler/application"
-	sharedpostgresql "app-mobile-downloader/internal/shared/infrastructure/postgresql"
+	schedulerapp "scaffoldxd1/internal/scheduler/application"
+	sharedpostgresql "scaffoldxd1/internal/shared/infrastructure/postgresql"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/jmoiron/sqlx"

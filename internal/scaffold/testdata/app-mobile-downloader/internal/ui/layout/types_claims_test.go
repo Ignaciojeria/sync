@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	authmiddleware "app-mobile-downloader/internal/auth/middleware"
-	"app-mobile-downloader/internal/shared/configuration"
+	authmiddleware "scaffoldxd1/internal/auth/middleware"
+	"scaffoldxd1/internal/shared/configuration"
 )
 
 // TestFromRequestWithClaimsUsesEditorEmail wires the JWT middleware in

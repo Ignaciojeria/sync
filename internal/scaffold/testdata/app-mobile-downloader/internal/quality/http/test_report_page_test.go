@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	authmiddleware "app-mobile-downloader/internal/auth/middleware"
-	"app-mobile-downloader/internal/shared/configuration"
-	"app-mobile-downloader/internal/shared/server"
+	authmiddleware "scaffoldxd1/internal/auth/middleware"
+	"scaffoldxd1/internal/shared/configuration"
+	"scaffoldxd1/internal/shared/server"
 
 	"github.com/go-fuego/fuego"
 )

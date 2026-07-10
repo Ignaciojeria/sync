@@ -5,7 +5,7 @@ import (
 	"sort"
 	"sync"
 
-	agentapp "app-mobile-downloader/pkg/agent/application"
+	agentapp "scaffoldxd1/pkg/agent/application"
 )
 
 // SessionStore persiste metadata de sesiones en memoria para el MVP.
@@ -55,5 +55,15 @@ func (s *SessionStore) Update(_ context.Context, session agentapp.Session) error
 		return agentapp.ErrSessionNotFound
 	}
 	s.sessions[session.ID] = session
+	return nil
+}
+
+func (s *SessionStore) Delete(_ context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.sessions[id]; !ok {
+		return agentapp.ErrSessionNotFound
+	}
+	delete(s.sessions, id)
 	return nil
 }

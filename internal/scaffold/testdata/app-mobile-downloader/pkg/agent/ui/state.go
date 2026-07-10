@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	agentapp "app-mobile-downloader/pkg/agent/application"
+	agentapp "scaffoldxd1/pkg/agent/application"
 )
 
 type PageState struct {
@@ -17,6 +17,9 @@ type PageState struct {
 	ActiveSessionID string
 	DefaultCWD      string
 	DefaultModel    string
+	// CurrentView controla la navegación inferior móvil del agente.
+	// Valores esperados: "dashboard" (default) o "providers".
+	CurrentView string
 	// UserJWT es el token crudo (IDToken de Casdoor) del usuario
 	// autenticado. Se embebe en el HTML como data-user-jwt y el JS del
 	// cliente lo usa en `Authorization: Bearer ...` para hablar con el
@@ -93,7 +96,7 @@ func shellSessionCWD(value string) string {
 
 func shellTitle(state PageState) string {
 	if state.ActiveSession == nil || strings.TrimSpace(state.ActiveSession.Title) == "" {
-		return "Shelley"
+		return "sync4.run"
 	}
 	return state.ActiveSession.Title
 }
@@ -116,4 +119,31 @@ func shellDir(state PageState) string {
 		return state.DefaultCWD
 	}
 	return "."
+}
+
+func previewPathForSessionID(id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return ""
+	}
+	return "/agent/sessions/" + id + "/preview/"
+}
+
+func shellPreviewPath(state PageState) string {
+	return previewPathForSessionID(activeSessionID(state))
+}
+
+func currentView(state PageState) string {
+	if strings.TrimSpace(state.CurrentView) == "providers" {
+		return "providers"
+	}
+	return "dashboard"
+}
+
+func isDashboardView(state PageState) bool {
+	return currentView(state) == "dashboard"
+}
+
+func isProvidersView(state PageState) bool {
+	return currentView(state) == "providers"
 }

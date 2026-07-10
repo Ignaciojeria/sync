@@ -1,0 +1,15 @@
+package ui
+
+// ponytail: badge minimalista. daisyUI stat para que matchee
+// el lenguaje visual del sidenav. La moneda (USD) viene implícita
+// en el prefijo $ del amount; el gateway devuelve `balance_usd`.
+templ Badge(amount string) {
+	<div class="rounded-box bg-base-100/70 border border-base-300/60 px-3 py-2 mt-3 group-has-checked:hidden">
+		<div class="text-[9px] uppercase tracking-[0.22em] opacity-55">Balance</div>
+		<div class="text-base font-semibold tabular-nums text-base-content mt-0.5">{ amount }</div>
+	</div>
+}
+
+templ CompactBadge(amount string) {
+	<div class="badge badge-ghost badge-sm border-base-300/60 tabular-nums text-base-content/84">{ amount }</div>
+}

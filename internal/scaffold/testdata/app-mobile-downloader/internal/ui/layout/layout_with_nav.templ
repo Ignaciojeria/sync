@@ -64,11 +64,35 @@ templ LayoutWithNav(title string, nav NavigationContext) {
 					padding-top: clamp(1rem, 1rem + 1vw, 1.75rem);
 					padding-bottom: clamp(1.25rem, 1.25rem + 1vw, 2.25rem);
 				}
+				/* Gmail-like mobile drawer: smooth, finger-following slide */
+				@media (max-width: 1023px) {
+					.drawer-side > .pi-sidebar-shell {
+						will-change: transform;
+						transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+					}
+					.drawer-side > .drawer-overlay {
+						transition: opacity 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+					}
+					/* left-edge affordance to catch the opening swipe */
+					.pi-edge-swipe {
+						position: fixed;
+						top: 0;
+						left: 0;
+						width: 24px;
+						height: 100vh;
+						z-index: 30;
+						touch-action: pan-y;
+					}
+				}
+				@media (min-width: 1024px) {
+					.pi-edge-swipe { display: none; }
+				}
 			</style>
 		</head>
 		<body class="min-h-screen bg-base-100 text-base-content antialiased">
 		<div class="drawer lg:drawer-open min-h-screen">
 			<input id="nav-drawer" type="checkbox" class="drawer-toggle"/>
+			<div class="pi-edge-swipe lg:hidden" aria-hidden="true"></div>
 			<div class="drawer-content flex flex-col min-h-screen">
 				<div class="navbar bg-base-100/80 backdrop-blur lg:hidden border-b border-base-200">
 					<label for="nav-drawer" class="btn btn-square btn-ghost drawer-button">
@@ -105,6 +129,82 @@ templ LayoutWithNav(title string, nav NavigationContext) {
 				</div>
 			</div>
 		</div>
+		<script>
+			(function () {
+				var toggle = document.getElementById('nav-drawer');
+				var side = document.querySelector('.drawer-side');
+				if (!toggle || !side) return;
+				var overlay = side.querySelector('.drawer-overlay');
+				var panel = side.querySelector('.pi-sidebar-shell');
+				if (!panel) return;
+
+				var EDGE = 28;          // px from the left edge that starts an opening swipe
+				var ANGLE = 8;          // px of movement before we lock the drag axis
+				var isMobile = function () { return window.matchMedia('(max-width: 1023px)').matches; };
+
+				var width = 176, startX = 0, startY = 0, dx = 0;
+				var mode = null;        // 'open' | 'close'
+				var axis = null;        // 'x' | 'y'
+
+				function beginDrag() {
+					width = panel.offsetWidth || width;
+					panel.style.transition = 'none';
+					if (overlay) overlay.style.transition = 'none';
+				}
+
+				function moveTo(tx) {
+					tx = Math.max(-width, Math.min(0, tx));
+					panel.style.transform = 'translateX(' + tx + 'px)';
+					if (overlay) overlay.style.opacity = String(1 + tx / width);
+				}
+
+				function endDrag(open) {
+					toggle.checked = open;
+					panel.style.transition = '';
+					if (overlay) overlay.style.transition = '';
+					requestAnimationFrame(function () {
+						panel.style.transform = '';
+						if (overlay) overlay.style.opacity = '';
+					});
+				}
+
+				document.addEventListener('touchstart', function (e) {
+					if (!isMobile() || e.touches.length !== 1) { mode = null; return; }
+					var t = e.touches[0];
+					startX = t.clientX; startY = t.clientY; axis = null; dx = 0;
+					if (!toggle.checked && startX <= EDGE) mode = 'open';
+					else if (toggle.checked) mode = 'close';
+					else mode = null;
+				}, { passive: true });
+
+				document.addEventListener('touchmove', function (e) {
+					if (!mode || e.touches.length !== 1) return;
+					var t = e.touches[0];
+					var mx = t.clientX - startX, my = t.clientY - startY;
+					if (axis === null) {
+						if (Math.abs(mx) < ANGLE && Math.abs(my) < ANGLE) return;
+						axis = Math.abs(mx) > Math.abs(my) ? 'x' : 'y';
+						if (axis === 'x') beginDrag(); else { mode = null; return; }
+					}
+					if (axis !== 'x') return;
+					e.preventDefault();
+					dx = mx;
+					moveTo(mode === 'open' ? -width + mx : mx);
+				}, { passive: false });
+
+				function release() {
+					if (!mode) return;
+					if (axis === 'x') {
+						var threshold = width * 0.35;
+						if (mode === 'open') endDrag(dx > threshold);
+						else endDrag(dx > -threshold);
+					}
+					mode = null; axis = null; dx = 0;
+				}
+				document.addEventListener('touchend', release);
+				document.addEventListener('touchcancel', release);
+			})();
+		</script>
 		</body>
 	</html>
 }

@@ -3,8 +3,8 @@ package agent
 import (
 	"net/http"
 
-	agentapp "app-mobile-downloader/pkg/agent/application"
-	"app-mobile-downloader/internal/shared/server"
+	"scaffoldxd1/internal/shared/server"
+	agentapp "scaffoldxd1/pkg/agent/application"
 
 	"github.com/go-fuego/fuego"
 )
@@ -14,6 +14,8 @@ func sessionsHandler(s *server.Server, manager agentapp.AgentService, requireEdi
 	fuego.Get(s.Server, "/agent/sessions", listSessions(manager), mw)
 	fuego.Post(s.Server, "/agent/sessions", createSession(manager), mw)
 	fuego.Get(s.Server, "/agent/sessions/{id}", getSession(manager), mw)
+	fuego.Delete(s.Server, "/agent/sessions/{id}", deleteSession(manager), mw)
+	fuego.Get(s.Server, "/agent/sessions/{id}/history", getHistory(manager), mw)
 }
 
 func listSessions(manager agentapp.AgentService) func(fuego.ContextNoBody) (any, error) {
@@ -56,5 +58,41 @@ func getSession(manager agentapp.AgentService) func(fuego.ContextNoBody) (any, e
 			return nil, mapSessionError(err)
 		}
 		return map[string]any{"session": session}, nil
+	}
+}
+
+func deleteSession(manager agentapp.AgentService) func(fuego.ContextNoBody) (any, error) {
+	return func(c fuego.ContextNoBody) (any, error) {
+		id, err := pathSessionID(c)
+		if err != nil {
+			return nil, err
+		}
+		if err := manager.Delete(c.Context(), id); err != nil {
+			return nil, mapSessionError(err)
+		}
+		c.Response().WriteHeader(http.StatusNoContent)
+		return nil, nil
+	}
+}
+
+func getHistory(manager agentapp.AgentService) func(fuego.ContextNoBody) (any, error) {
+	return func(c fuego.ContextNoBody) (any, error) {
+		id, err := pathSessionID(c)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := manager.Get(c.Context(), id); err != nil {
+			return nil, mapSessionError(err)
+		}
+		history, err := agentapp.LoadConversationHistoryCtx(
+			c.Context(),
+			id,
+			agentapp.ParseHistoryBefore(c.QueryParam("before")),
+			agentapp.ParseHistoryLimit(c.QueryParam("limit"), 30),
+		)
+		if err != nil {
+			return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
+		}
+		return history, nil
 	}
 }

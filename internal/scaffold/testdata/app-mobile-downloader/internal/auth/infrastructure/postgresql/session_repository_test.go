@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	authapp "app-mobile-downloader/internal/auth/application"
-	sharedpostgresql "app-mobile-downloader/internal/shared/infrastructure/postgresql"
+	authapp "scaffoldxd1/internal/auth/application"
+	sharedpostgresql "scaffoldxd1/internal/shared/infrastructure/postgresql"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/jmoiron/sqlx"

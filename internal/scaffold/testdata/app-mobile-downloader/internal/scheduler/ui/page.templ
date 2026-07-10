@@ -2,8 +2,9 @@ package ui
 
 import (
 	"time"
+	"strings"
 
-	schedulerapp "app-mobile-downloader/internal/scheduler/application"
+	schedulerapp "scaffoldxd1/internal/scheduler/application"
 )
 
 func formatTime(t *time.Time) string {
@@ -13,13 +14,13 @@ func formatTime(t *time.Time) string {
 	return t.Format("2006-01-02 15:04:05")
 }
 
-templ JobsPage(configs []schedulerapp.JobConfig) {
+templ JobsPage(configs []schedulerapp.JobConfig, previewPrefix string) {
 	<div class="container mx-auto p-6">
 		<h1 class="text-3xl font-bold mb-6">Configuración de Jobs</h1>
 		<div class="mb-6">
 			<button
 				class="btn btn-primary"
-				hx-get="/scheduler/jobs/new"
+				hx-get={ appPath(previewPrefix, "/scheduler/jobs/new") }
 				hx-target="#job-form-container"
 				hx-swap="innerHTML"
 			>
@@ -42,7 +43,7 @@ templ JobsPage(configs []schedulerapp.JobConfig) {
 				</thead>
 				<tbody id="job-table-body">
 					for _, job := range configs {
-						@JobRow(job)
+						@JobRow(job, previewPrefix)
 					}
 				</tbody>
 			</table>
@@ -50,12 +51,12 @@ templ JobsPage(configs []schedulerapp.JobConfig) {
 	</div>
 }
 
-templ JobForm() {
+templ JobForm(previewPrefix string) {
 	<div class="card bg-base-100 shadow-xl border border-base-200">
 		<div class="card-body">
 			<h2 class="card-title text-lg">Nuevo Job</h2>
 			<form
-				hx-post="/scheduler/jobs"
+				hx-post={ appPath(previewPrefix, "/scheduler/jobs") }
 				hx-target="#job-table-body"
 				hx-swap="beforeend"
 				hx-on::after-request="if(event.detail.successful) this.reset()"
@@ -81,7 +82,7 @@ templ JobForm() {
 				</div>
 				<div class="card-actions justify-end mt-2">
 					<button type="submit" class="btn btn-primary btn-sm">Crear</button>
-					<button type="button" class="btn btn-ghost btn-sm" hx-get="/scheduler/jobs/cancel" hx-target="#job-form-container" hx-swap="innerHTML">Cancelar</button>
+					<button type="button" class="btn btn-ghost btn-sm" hx-get={ appPath(previewPrefix, "/scheduler/jobs/cancel") } hx-target="#job-form-container" hx-swap="innerHTML">Cancelar</button>
 				</div>
 			</form>
 		</div>
@@ -92,7 +93,7 @@ templ EmptyForm() {
 	<div></div>
 }
 
-templ JobRow(job schedulerapp.JobConfig) {
+templ JobRow(job schedulerapp.JobConfig, previewPrefix string) {
 	<tr id={ "job-row-" + job.ID }>
 		<td class="font-medium">{ job.Name }</td>
 		<td>{ job.Description }</td>
@@ -115,7 +116,7 @@ templ JobRow(job schedulerapp.JobConfig) {
 					} else {
 						class="btn btn-sm btn-success"
 					}
-					hx-post={ "/scheduler/jobs/" + job.ID + "/toggle" }
+					hx-post={ appPath(previewPrefix, "/scheduler/jobs/" + job.ID + "/toggle") }
 					hx-target={ "#job-row-" + job.ID }
 					hx-swap="outerHTML"
 					hx-indicator=".htmx-indicator"
@@ -128,7 +129,7 @@ templ JobRow(job schedulerapp.JobConfig) {
 				</button>
 				<button
 					class="btn btn-sm btn-error btn-outline"
-					hx-delete={ "/scheduler/jobs/" + job.ID }
+					hx-delete={ appPath(previewPrefix, "/scheduler/jobs/" + job.ID) }
 					hx-target={ "#job-row-" + job.ID }
 					hx-swap="outerHTML swap:1s"
 					hx-confirm="¿Eliminar este job?"
@@ -138,4 +139,23 @@ templ JobRow(job schedulerapp.JobConfig) {
 			</div>
 		</td>
 	</tr>
+}
+
+func appPath(prefix, path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		path = "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return path
+	}
+	prefix = strings.TrimRight(prefix, "/")
+	if path == "/" {
+		return prefix + "/"
+	}
+	return prefix + path
 }

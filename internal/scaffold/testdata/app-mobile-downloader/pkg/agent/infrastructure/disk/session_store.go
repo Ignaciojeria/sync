@@ -13,7 +13,7 @@ import (
 	"strings"
 	"sync"
 
-	agentapp "app-mobile-downloader/pkg/agent/application"
+	agentapp "scaffoldxd1/pkg/agent/application"
 )
 
 // SessionStore implementa application.SessionStore con persistencia en disco.
@@ -133,6 +133,27 @@ func (s *SessionStore) Update(_ context.Context, session agentapp.Session) error
 	}
 	s.mu.Lock()
 	s.sessions[session.ID] = session
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *SessionStore) Delete(_ context.Context, id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return agentapp.ErrSessionNotFound
+	}
+	s.mu.RLock()
+	_, exists := s.sessions[id]
+	s.mu.RUnlock()
+	if !exists {
+		return agentapp.ErrSessionNotFound
+	}
+	finalPath := filepath.Join(s.dir, id+".json")
+	if err := os.Remove(finalPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("disk session store: remove %q: %w", finalPath, err)
+	}
+	s.mu.Lock()
+	delete(s.sessions, id)
 	s.mu.Unlock()
 	return nil
 }

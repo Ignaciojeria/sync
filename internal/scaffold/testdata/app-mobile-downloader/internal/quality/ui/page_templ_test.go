@@ -11,7 +11,7 @@ import (
 func TestPageRendersInitialAndResult(t *testing.T) {
 	t.Run("no result yet shows initial state", func(t *testing.T) {
 		var buf bytes.Buffer
-		if err := Page(TestRunState{}).Render(context.Background(), &buf); err != nil {
+		if err := Page(TestRunState{}, "").Render(context.Background(), &buf); err != nil {
 			t.Fatalf("Page().Render() error = %v", err)
 		}
 		body := buf.String()
@@ -36,7 +36,7 @@ func TestPageRendersInitialAndResult(t *testing.T) {
 			CoverPercent: 88.5,
 			Timestamp:    now,
 			HasResult:    true,
-		}).Render(context.Background(), &buf); err != nil {
+		}, "").Render(context.Background(), &buf); err != nil {
 			t.Fatalf("Page().Render() error = %v", err)
 		}
 		body := buf.String()
@@ -49,18 +49,15 @@ func TestPageRendersInitialAndResult(t *testing.T) {
 	})
 
 	t.Run("test button attributes injected via templ", func(t *testing.T) {
-		if _, ok := any(TestButtonAttrs).(map[string]any); !ok {
-			// attributes map is exposed through templ; smoke-verify it has the right keys
-			attrs := map[string]any(TestButtonAttrs)
-			if attrs["hx-post"] != "/report/tests/run" {
-				t.Fatalf("hx-post = %v", attrs["hx-post"])
-			}
-			if got := attrs["hx-target"]; got != "#test-result" {
-				t.Fatalf("hx-target = %v", got)
-			}
-			if got := attrs["hx-swap"]; got != "innerHTML" {
-				t.Fatalf("hx-swap = %v", got)
-			}
+		attrs := map[string]any(testButtonAttrs(""))
+		if attrs["hx-post"] != "/report/tests/run" {
+			t.Fatalf("hx-post = %v", attrs["hx-post"])
+		}
+		if got := attrs["hx-target"]; got != "#test-result" {
+			t.Fatalf("hx-target = %v", got)
+		}
+		if got := attrs["hx-swap"]; got != "innerHTML" {
+			t.Fatalf("hx-swap = %v", got)
 		}
 	})
 }

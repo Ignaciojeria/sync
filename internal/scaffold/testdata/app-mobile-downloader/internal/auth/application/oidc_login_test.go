@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"app-mobile-downloader/internal/shared/configuration"
+	"scaffoldxd1/internal/shared/configuration"
 )
 
 func TestBuildLoginURL(t *testing.T) {
@@ -89,7 +89,7 @@ func TestBuildDirectGoogleLoginURL(t *testing.T) {
 	conf := configuration.Conf{
 		OIDCIssuer:                 "https://issuer.example/",
 		OIDCUpstreamGoogleClientID: "google-client",
-		OIDCClientID:               "built-in-app-mobile-downloader-client",
+		OIDCClientID:               "built-in-scaffoldxd1-client",
 		PROJECT_NAME:               "mobile-downloader",
 		OIDCRedirectURI:            "https://app.example/cb",
 		OIDCScopes:                 "openid profile",
@@ -164,21 +164,21 @@ func TestDeriveCasdoorAppName(t *testing.T) {
 	t.Run("extracts prefix before -<slug>-", func(t *testing.T) {
 		// La función recorta hasta el final del slug incluido (excluye solo el guion
 		// final del needle). Documentamos el comportamiento real del código.
-		got, err := DeriveCasdoorAppName("built-in-app-mobile-downloader-client", "mobile-downloader")
+		got, err := DeriveCasdoorAppName("built-in-scaffoldxd1-client", "mobile-downloader")
 		if err != nil {
 			t.Fatalf("DeriveCasdoorAppName() error = %v", err)
 		}
-		if got != "built-in-app-mobile-downloader" {
-			t.Fatalf("got %q, want built-in-app-mobile-downloader", got)
+		if got != "built-in-scaffoldxd1" {
+			t.Fatalf("got %q, want built-in-scaffoldxd1", got)
 		}
 	})
 
 	t.Run("trims surrounding whitespace", func(t *testing.T) {
-		got, err := DeriveCasdoorAppName("  built-in-app-mobile-downloader-client  ", "mobile-downloader")
+		got, err := DeriveCasdoorAppName("  built-in-scaffoldxd1-client  ", "mobile-downloader")
 		if err != nil {
 			t.Fatalf("DeriveCasdoorAppName() error = %v", err)
 		}
-		if got != "built-in-app-mobile-downloader" {
+		if got != "built-in-scaffoldxd1" {
 			t.Fatalf("got %q", got)
 		}
 	})

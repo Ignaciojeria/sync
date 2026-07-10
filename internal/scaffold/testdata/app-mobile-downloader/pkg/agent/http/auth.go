@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	authapp "app-mobile-downloader/internal/auth/application"
-	"app-mobile-downloader/internal/shared/server"
+	authapp "scaffoldxd1/internal/auth/application"
+	"scaffoldxd1/internal/shared/server"
 
 	"github.com/go-fuego/fuego"
 )

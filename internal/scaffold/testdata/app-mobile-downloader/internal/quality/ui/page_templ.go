@@ -8,16 +8,20 @@ package ui
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-var TestButtonAttrs = templ.Attributes{
-	"hx-post":         "/report/tests/run",
-	"hx-target":       "#test-result",
-	"hx-swap":         "innerHTML",
-	"hx-indicator":    "#loading",
-	"hx-disabled-elt": "this",
-	"hx-select-oob":   "#dashboard-stats:outerHTML",
+import "strings"
+
+func testButtonAttrs(previewPrefix string) templ.Attributes {
+	return templ.Attributes{
+		"hx-post":         appPath(previewPrefix, "/report/tests/run"),
+		"hx-target":       "#test-result",
+		"hx-swap":         "innerHTML",
+		"hx-indicator":    "#loading",
+		"hx-disabled-elt": "this",
+		"hx-select-oob":   "#dashboard-stats:outerHTML",
+	}
 }
 
-func Page(state TestRunState) templ.Component {
+func Page(state TestRunState, previewPrefix string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -42,7 +46,7 @@ func Page(state TestRunState) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, TestButtonAttrs)
+		templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, testButtonAttrs(previewPrefix))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -59,7 +63,7 @@ func Page(state TestRunState) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if state.HasResult {
-			templ_7745c5c3_Err = TestResult(state.Success, state.Output, state.CoverPath, state.CoverPercent).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = TestResult(state.Success, state.Output, appPath(previewPrefix, state.CoverPath), state.CoverPercent).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -75,6 +79,25 @@ func Page(state TestRunState) templ.Component {
 		}
 		return nil
 	})
+}
+
+func appPath(prefix, path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		path = "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return path
+	}
+	prefix = strings.TrimRight(prefix, "/")
+	if path == "/" {
+		return prefix + "/"
+	}
+	return prefix + path
 }
 
 var _ = templruntime.GeneratedTemplate

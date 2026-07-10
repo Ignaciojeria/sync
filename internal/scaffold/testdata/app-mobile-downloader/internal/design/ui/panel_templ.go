@@ -8,9 +8,12 @@ package ui
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import designapp "app-mobile-downloader/internal/design/application"
+import (
+	"strings"
+	designapp "scaffoldxd1/internal/design/application"
+)
 
-func Panel(themes []designapp.ResolvedTheme, active designapp.ResolvedTheme) templ.Component {
+func Panel(themes []designapp.ResolvedTheme, active designapp.ResolvedTheme, previewPrefix string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -31,12 +34,44 @@ func Panel(themes []designapp.ResolvedTheme, active designapp.ResolvedTheme) tem
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<li class=\"menu-title text-[9px] uppercase tracking-[0.22em] opacity-55 mt-3 px-2 group-has-checked:hidden\">Theme</li><li><a class=\"rounded-box px-2 py-1.75 text-[13px] transition-all duration-200 hover:bg-base-100/70 border border-transparent text-base-content/68\" href=\"/design\"><svg xmlns=\"http://www.w3.org/2000/svg\" class=\"h-4 w-4 flex-shrink-0\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\" stroke-width=\"2\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M4 7h16M4 12h10M4 17h16\"></path></svg> <span class=\"group-has-checked:hidden\">Design system</span></a></li>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<li class=\"menu-title text-[9px] uppercase tracking-[0.22em] opacity-55 mt-3 px-2 group-has-checked:hidden\">Theme</li><li><a class=\"rounded-box px-2 py-1.75 text-[13px] transition-all duration-200 hover:bg-base-100/70 border border-transparent text-base-content/68\" href=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var2 templ.SafeURL
+		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinURLErrs(panelAppPath(previewPrefix, "/design"))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/design/ui/panel.templ`, Line: 11, Col: 191}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "\"><svg xmlns=\"http://www.w3.org/2000/svg\" class=\"h-4 w-4 flex-shrink-0\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\" stroke-width=\"2\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M4 7h16M4 12h10M4 17h16\"></path></svg> <span class=\"group-has-checked:hidden\">Design system</span></a></li>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		return nil
 	})
+}
+
+func panelAppPath(prefix, path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		path = "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return path
+	}
+	prefix = strings.TrimRight(prefix, "/")
+	if path == "/" {
+		return prefix + "/"
+	}
+	return prefix + path
 }
 
 var _ = templruntime.GeneratedTemplate

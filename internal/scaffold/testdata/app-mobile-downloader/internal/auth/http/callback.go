@@ -4,11 +4,12 @@ import (
 	"net/http"
 	"strings"
 
-	authapp "app-mobile-downloader/internal/auth/application"
-	authpostgresql "app-mobile-downloader/internal/auth/infrastructure/postgresql"
-	"app-mobile-downloader/internal/shared"
-	"app-mobile-downloader/internal/shared/configuration"
-	"app-mobile-downloader/internal/shared/server"
+	authapp "scaffoldxd1/internal/auth/application"
+	authpostgresql "scaffoldxd1/internal/auth/infrastructure/postgresql"
+	"scaffoldxd1/internal/shared"
+	"scaffoldxd1/internal/shared/configuration"
+	mounted "scaffoldxd1/internal/shared/mounted"
+	"scaffoldxd1/internal/shared/server"
 
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/go-fuego/fuego"
@@ -43,13 +44,14 @@ func registerAuthCallback(s *server.Server, conf configuration.Conf, store *auth
 			return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
 		}
 
+		secure := authapp.IsHTTPS(conf.OIDCRedirectURI)
 		http.SetCookie(c.Response(), &http.Cookie{
 			Name:     "oidc_state",
 			Value:    "",
 			Path:     "/",
 			MaxAge:   -1,
 			HttpOnly: true,
-			Secure:   authapp.IsHTTPS(conf.OIDCRedirectURI),
+			Secure:   secure,
 			SameSite: http.SameSiteLaxMode,
 		})
 		http.SetCookie(c.Response(), &http.Cookie{
@@ -57,11 +59,15 @@ func registerAuthCallback(s *server.Server, conf configuration.Conf, store *auth
 			Value:    sessionID,
 			Path:     "/",
 			HttpOnly: true,
-			Secure:   authapp.IsHTTPS(conf.OIDCRedirectURI),
+			Secure:   secure,
 			SameSite: http.SameSiteLaxMode,
 		})
-
-		http.Redirect(c.Response(), c.Request(), authapp.PostLoginRedirectPath, http.StatusFound)
+		redirectTo := mounted.ReadReturnTo(c.Request())
+		mounted.ClearReturnToCookie(c.Response(), secure)
+		if redirectTo == "" {
+			redirectTo = authapp.PostLoginRedirectPath
+		}
+		http.Redirect(c.Response(), c.Request(), redirectTo, http.StatusFound)
 		return nil, nil
 	})
 }

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	topologyapp "app-mobile-downloader/internal/topology/application"
+	topologyapp "scaffoldxd1/internal/topology/application"
 )
 
 func TestHomePageRendersContent(t *testing.T) {
@@ -16,7 +16,7 @@ func TestHomePageRendersContent(t *testing.T) {
 		SyncSessions: []topologyapp.SyncSession{{SessionID: "abc", ProjectName: "workspace-gateway", ClientName: "ignaciovl.j@gmail.com", Status: topologyapp.StatusSyncing, Source: "mutagen"}},
 	}
 	var buf bytes.Buffer
-	if err := HomePage(snapshot).Render(context.Background(), &buf); err != nil {
+	if err := HomePage(snapshot, "").Render(context.Background(), &buf); err != nil {
 		t.Fatalf("HomePage().Render() error = %v", err)
 	}
 	body := buf.String()

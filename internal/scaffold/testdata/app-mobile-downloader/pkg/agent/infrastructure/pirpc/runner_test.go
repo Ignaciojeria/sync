@@ -2,6 +2,7 @@ package pirpc
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	agentapp "app-mobile-downloader/pkg/agent/application"
+	agentapp "scaffoldxd1/pkg/agent/application"
 )
 
 // fakeBinary escribe un script en un tempdir y devuelve su path absoluto.
@@ -240,6 +241,35 @@ sleep 30
 	err = runtime.Prompt(context.Background(), "hola")
 	if err != ErrRuntimeClosed {
 		t.Fatalf("err = %v, want ErrRuntimeClosed", err)
+	}
+}
+
+func TestHandleRaw_ResponseFailureBecomesRuntimeError(t *testing.T) {
+	r := &piRuntime{
+		sessionID:    "s1",
+		subscribers: map[chan agentapp.Event]struct{}{},
+		done:         make(chan struct{}),
+	}
+	ch := make(chan agentapp.Event, 1)
+	r.subscribers[ch] = struct{}{}
+
+	r.handleRaw(json.RawMessage(`{"type":"response","command":"prompt","success":false,"error":"insufficient_credits"}`))
+
+	select {
+	case ev := <-ch:
+		if ev.Type != "runtime_error" {
+			t.Fatalf("event type = %q, want runtime_error", ev.Type)
+		}
+		if !strings.Contains(string(ev.Payload), "Créditos insuficientes") {
+			t.Fatalf("payload = %s, want Créditos insuficientes", string(ev.Payload))
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no event received")
+	}
+
+	state := r.State()
+	if state.Status != string(agentapp.SessionStatusError) {
+		t.Fatalf("status = %q, want error", state.Status)
 	}
 }
 

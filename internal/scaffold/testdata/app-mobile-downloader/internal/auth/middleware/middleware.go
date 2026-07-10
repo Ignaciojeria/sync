@@ -10,9 +10,10 @@ import (
 	"strings"
 	"time"
 
-	authapp "app-mobile-downloader/internal/auth/application"
-	"app-mobile-downloader/internal/shared"
-	"app-mobile-downloader/internal/shared/configuration"
+	authapp "scaffoldxd1/internal/auth/application"
+	"scaffoldxd1/internal/shared"
+	"scaffoldxd1/internal/shared/configuration"
+	mounted "scaffoldxd1/internal/shared/mounted"
 
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"
@@ -40,7 +41,8 @@ func JWTMiddleware(
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if isPublicPath(r.URL.Path) {
+			path := mounted.Relative(mounted.Prefix(r), r.URL.Path)
+			if isPublicPath(path) {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -61,7 +63,7 @@ func JWTMiddleware(
 
 			if store != nil {
 				if claims, ok := claimsFromSessionCookie(r, w, store, conf); ok {
-					if !isAuthorizedPathClaims(r.URL.Path, claims) {
+					if !isAuthorizedPathClaims(path, claims) {
 						writeForbidden(w)
 						return
 					}
@@ -74,7 +76,8 @@ func JWTMiddleware(
 			authHeader := r.Header.Get("Authorization")
 			if !strings.HasPrefix(authHeader, "Bearer ") {
 				if shouldRedirectToLogin(r) {
-					http.Redirect(w, r, "/auth/login", http.StatusFound)
+					mounted.SetReturnToCookie(w, r, mounted.CurrentAppURL(r), false)
+					http.Redirect(w, r, mounted.App(mounted.Prefix(r), "/auth/login"), http.StatusFound)
 					return
 				}
 				writeUnauthorized(w)
@@ -85,13 +88,14 @@ func JWTMiddleware(
 			claims, err := parseJWTClaims(jwks, tokenString, issuer, audience)
 			if err != nil {
 				if shouldRedirectToLogin(r) {
-					http.Redirect(w, r, "/auth/login", http.StatusFound)
+					mounted.SetReturnToCookie(w, r, mounted.CurrentAppURL(r), false)
+					http.Redirect(w, r, mounted.App(mounted.Prefix(r), "/auth/login"), http.StatusFound)
 					return
 				}
 				writeUnauthorized(w)
 				return
 			}
-			if !isAuthorizedPathClaims(r.URL.Path, claims) {
+			if !isAuthorizedPathClaims(path, claims) {
 				writeForbidden(w)
 				return
 			}
@@ -328,8 +332,19 @@ func isPublicPath(path string) bool {
 	case "/logo.svg":
 		return true
 	default:
-		return strings.HasPrefix(strings.TrimSpace(path), "/design/theme/")
+		path = strings.TrimSpace(path)
+		return strings.HasPrefix(path, "/design/theme/") ||
+			strings.HasPrefix(path, "/agent/internal/") ||
+			isPreviewProxyPath(path)
 	}
+}
+
+func isPreviewProxyPath(path string) bool {
+	path = strings.TrimSpace(path)
+	if !strings.HasPrefix(path, "/agent/sessions/") {
+		return false
+	}
+	return strings.Contains(path, "/preview")
 }
 
 func writeUnauthorized(w http.ResponseWriter) {

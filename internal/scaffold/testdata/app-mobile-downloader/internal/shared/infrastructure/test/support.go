@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"app-mobile-downloader/internal/quality/ui"
+	"scaffoldxd1/internal/quality/ui"
 )
 
 const CoverageDir = "tmp/coverage"

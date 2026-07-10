@@ -1,8 +1,11 @@
 package ui
 
-import designapp "app-mobile-downloader/internal/design/application"
+import (
+	"strings"
+	designapp "scaffoldxd1/internal/design/application"
+)
 
-templ Page(themes []designapp.ResolvedTheme, active designapp.ResolvedTheme) {
+templ Page(themes []designapp.ResolvedTheme, active designapp.ResolvedTheme, previewPrefix string) {
 	<div class="space-y-8">
 		<section class="hero rounded-[2rem] border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card)] backdrop-blur">
 			<div class="hero-content w-full max-w-none flex-col gap-8 px-6 py-8 lg:px-10 lg:py-10">
@@ -23,7 +26,7 @@ templ Page(themes []designapp.ResolvedTheme, active designapp.ResolvedTheme) {
 						</div>
 					</div>
 					<div class="w-full max-w-sm rounded-[1.5rem] border border-base-300/70 bg-base-100/90 p-5 shadow-[var(--pi-shadow-card-soft)]">
-						<form hx-post="/design/select" hx-swap="none" class="space-y-3">
+						<form hx-post={ designPageAppPath(previewPrefix, "/design/select") } hx-swap="none" class="space-y-3">
 							<div class="space-y-1">
 								<div class="text-xs font-semibold uppercase tracking-[0.24em] opacity-60">Select theme</div>
 								<div class="text-sm opacity-70">Cambiar el design activo aplica el tema completo del sitio.</div>
@@ -196,4 +199,23 @@ templ SpacingRow(label string, value string) {
 			<div class="h-3 rounded-full bg-primary shadow-[var(--pi-shadow-card-soft)]" style={ "width: clamp(2rem, calc(" + value + " * 6), 14rem);" }></div>
 		</div>
 	</div>
+}
+
+func designPageAppPath(prefix, path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		path = "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return path
+	}
+	prefix = strings.TrimRight(prefix, "/")
+	if path == "/" {
+		return prefix + "/"
+	}
+	return prefix + path
 }

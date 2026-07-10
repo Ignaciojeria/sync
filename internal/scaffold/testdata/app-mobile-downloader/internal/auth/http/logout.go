@@ -3,10 +3,11 @@ package auth
 import (
 	"net/http"
 
-	authapp "app-mobile-downloader/internal/auth/application"
-	authpostgresql "app-mobile-downloader/internal/auth/infrastructure/postgresql"
-	"app-mobile-downloader/internal/shared/configuration"
-	"app-mobile-downloader/internal/shared/server"
+	authapp "scaffoldxd1/internal/auth/application"
+	authpostgresql "scaffoldxd1/internal/auth/infrastructure/postgresql"
+	"scaffoldxd1/internal/shared/configuration"
+	mounted "scaffoldxd1/internal/shared/mounted"
+	"scaffoldxd1/internal/shared/server"
 
 	"github.com/go-fuego/fuego"
 )
@@ -16,8 +17,10 @@ func registerAuthLogout(s *server.Server, conf configuration.Conf, store *authpo
 		if cookie, err := c.Request().Cookie("app_session_id"); err == nil {
 			_ = store.RevokeSession(cookie.Value)
 		}
-		http.SetCookie(c.Response(), &http.Cookie{Name: "app_session_id", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: authapp.IsHTTPS(conf.OIDCRedirectURI), SameSite: http.SameSiteLaxMode})
-		http.Redirect(c.Response(), c.Request(), "/", http.StatusFound)
+		secure := authapp.IsHTTPS(conf.OIDCRedirectURI)
+		http.SetCookie(c.Response(), &http.Cookie{Name: "app_session_id", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode})
+		mounted.ClearReturnToCookie(c.Response(), secure)
+		http.Redirect(c.Response(), c.Request(), mounted.App(mounted.Prefix(c.Request()), "/"), http.StatusFound)
 		return nil, nil
 	})
 }

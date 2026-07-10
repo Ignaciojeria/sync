@@ -1,17 +1,18 @@
 package editor
 
 import (
-	editorui "app-mobile-downloader/internal/editor/ui"
-	"app-mobile-downloader/internal/shared/server"
-	"app-mobile-downloader/internal/ui/layout"
+	editorui "scaffoldxd1/internal/editor/ui"
+	"scaffoldxd1/internal/shared/server"
+	"scaffoldxd1/internal/ui/layout"
 
 	"github.com/go-fuego/fuego"
 )
 
 func editorViewHandler(s *server.Server) {
 	fuego.Get(s.Server, "/editor-view", func(c fuego.ContextNoBody) (any, error) {
+		nav := layout.FromRequest(c.Request())
 		c.SetHeader("Content-Type", "text/html; charset=utf-8")
-		page, err := layout.RenderPage(c, "Console", editorui.EditorView())
+		page, err := layout.RenderPage(c, "Console", editorui.EditorView(nav.PreviewPrefix))
 		if err != nil {
 			return nil, err
 		}

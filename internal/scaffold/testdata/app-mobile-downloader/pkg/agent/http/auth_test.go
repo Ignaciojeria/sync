@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	authapp "app-mobile-downloader/internal/auth/application"
+	authapp "scaffoldxd1/internal/auth/application"
 )
 
 type fakeLookup struct {

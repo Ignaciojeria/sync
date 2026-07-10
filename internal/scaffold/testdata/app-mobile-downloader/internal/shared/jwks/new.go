@@ -3,7 +3,7 @@ package jwks
 import (
 	"strings"
 
-	"app-mobile-downloader/internal/shared/configuration"
+	"scaffoldxd1/internal/shared/configuration"
 
 	"github.com/MicahParks/keyfunc/v3"
 )

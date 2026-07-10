@@ -4,10 +4,10 @@ import (
 	"log/slog"
 	"time"
 
-	schedulerapp "app-mobile-downloader/internal/scheduler/application"
-	schedulerpostgresql "app-mobile-downloader/internal/scheduler/infrastructure/postgresql"
-	"app-mobile-downloader/internal/shared"
-	sharedpostgresql "app-mobile-downloader/internal/shared/infrastructure/postgresql"
+	schedulerapp "scaffoldxd1/internal/scheduler/application"
+	schedulerpostgresql "scaffoldxd1/internal/scheduler/infrastructure/postgresql"
+	"scaffoldxd1/internal/shared"
+	sharedpostgresql "scaffoldxd1/internal/shared/infrastructure/postgresql"
 
 	"github.com/robfig/cron/v3"
 )

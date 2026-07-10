@@ -1,0 +1,16 @@
+sync:
+  defaults:
+    mode: "two-way-resolved"
+    ignore:
+      vcs: true
+      paths:
+        - "node_modules"
+        - ".git"
+        - "tmp"
+        - ".einar"
+        - ".air.log"
+        - "bin"
+
+  scaffoldxd1:
+    alpha: "."
+    beta: "exedev@scaffoldxd1.exe.xyz:/home/exedev/workspace/scaffoldxd1"

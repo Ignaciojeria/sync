@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"app-mobile-downloader/internal/shared/server"
-	topologyapp "app-mobile-downloader/internal/topology/application"
-	memory "app-mobile-downloader/internal/topology/infrastructure/memory"
+	"scaffoldxd1/internal/shared/server"
+	topologyapp "scaffoldxd1/internal/topology/application"
+	memory "scaffoldxd1/internal/topology/infrastructure/memory"
 
 	"github.com/go-fuego/fuego"
 )

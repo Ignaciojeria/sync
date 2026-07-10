@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	defaultTemplateName = "app-mobile-downloader"
-	baseModuleName      = "app-mobile-downloader"
+	templateDirName   = "app-mobile-downloader"
+	sourceModuleName  = "scaffoldxd1"
+	sourceProjectName = "scaffoldxd1"
 )
 
 //go:embed all:testdata/app-mobile-downloader
@@ -24,11 +25,11 @@ func MaterializeAppMobileDownloader(destination, moduleName, bootstrapEmail stri
 	}
 	moduleName = strings.TrimSpace(moduleName)
 	if moduleName == "" {
-		moduleName = baseModuleName
+		moduleName = sourceModuleName
 	}
 	bootstrapEmail = strings.ToLower(strings.TrimSpace(bootstrapEmail))
 
-	root := filepath.ToSlash(filepath.Join("testdata", defaultTemplateName))
+	root := filepath.ToSlash(filepath.Join("testdata", templateDirName))
 	return fs.WalkDir(templatesFS, root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -76,12 +77,19 @@ func MaterializeAppMobileDownloader(destination, moduleName, bootstrapEmail stri
 }
 
 func renderModuleName(data []byte, moduleName string) []byte {
-	if moduleName == baseModuleName {
+	if moduleName == "" {
+		moduleName = sourceModuleName
+	}
+	if moduleName == sourceModuleName {
 		return data
 	}
 	content := string(data)
-	content = strings.ReplaceAll(content, "module "+baseModuleName, "module "+moduleName)
-	content = strings.ReplaceAll(content, baseModuleName+"/", moduleName+"/")
+	content = strings.ReplaceAll(content, "module "+sourceModuleName, "module "+moduleName)
+	content = strings.ReplaceAll(content, sourceModuleName+"/", moduleName+"/")
+	content = strings.ReplaceAll(content, sourceModuleName, moduleName)
+	if sourceProjectName != sourceModuleName {
+		content = strings.ReplaceAll(content, sourceProjectName, moduleName)
+	}
 	return []byte(content)
 }
 

@@ -1,11 +1,15 @@
 package ui
 
 templ StandalonePage(state PageState, themeID string, themeCSSHref string) {
+	@StandalonePageWithContent(state, themeID, themeCSSHref, Page(state))
+}
+
+templ StandalonePageWithContent(state PageState, themeID string, themeCSSHref string, content templ.Component) {
 	<!DOCTYPE html>
 	<html lang="es" data-theme={ themeID }>
 		<head>
 			<meta charset="UTF-8"/>
-			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 			<meta name="color-scheme" content="light dark"/>
 			<title>Agent</title>
 			<script src="https://unpkg.com/htmx.org@2.0.4" crossorigin="anonymous"></script>
@@ -122,11 +126,18 @@ templ StandalonePage(state PageState, themeID string, themeCSSHref string) {
 					* {
 						scroll-behavior: auto;
 					}
+					/* El navigation drawer entra deslizando via transform;
+					 * con reduced-motion lo dejamos aparecer sin animar. */
+					.drawer-side,
+					.drawer-side > *,
+					.drawer-overlay {
+						transition-duration: 0.01ms !important;
+					}
 				}
 			</style>
 		</head>
 		<body class="h-screen text-base-content antialiased">
-			@Page(state)
+			@content
 		</body>
 	</html>
 }

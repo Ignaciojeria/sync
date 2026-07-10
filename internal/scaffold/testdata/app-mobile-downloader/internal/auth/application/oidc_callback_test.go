@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"app-mobile-downloader/internal/shared/configuration"
+	"scaffoldxd1/internal/shared/configuration"
 )
 
 func TestExchangeAuthorizationCode(t *testing.T) {

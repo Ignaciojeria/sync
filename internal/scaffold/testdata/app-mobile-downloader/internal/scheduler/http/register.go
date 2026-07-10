@@ -1,9 +1,9 @@
 package scheduler
 
 import (
-	"app-mobile-downloader/internal/shared"
-	sharedpostgresql "app-mobile-downloader/internal/shared/infrastructure/postgresql"
-	"app-mobile-downloader/internal/shared/server"
+	"scaffoldxd1/internal/shared"
+	sharedpostgresql "scaffoldxd1/internal/shared/infrastructure/postgresql"
+	"scaffoldxd1/internal/shared/server"
 )
 
 // Register wires scheduler HTTP routes and starts the cron runner.

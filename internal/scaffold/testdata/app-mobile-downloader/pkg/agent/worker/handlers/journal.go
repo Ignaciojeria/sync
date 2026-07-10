@@ -39,9 +39,15 @@ import (
 // la misma conversación), acá entra la opción de migrar a ElectricSQL
 // o similar. Hasta allora esto cubre el 99% de los casos.
 type eventsJournal struct {
-	dir string
-	mu  sync.Mutex
+	dir  string
+	mu   sync.Mutex
+	seen map[string]map[string]uint64
 }
+
+var (
+	journalOpenMu sync.Mutex
+	journalGlobal *eventsJournal
+)
 
 func openEventsJournal() (*eventsJournal, error) {
 	dir := strings.TrimSpace(os.Getenv("AGENT_EVENTS_DIR"))
@@ -51,7 +57,13 @@ func openEventsJournal() (*eventsJournal, error) {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, fmt.Errorf("mkdir events dir %q: %w", dir, err)
 	}
-	return &eventsJournal{dir: dir}, nil
+	journalOpenMu.Lock()
+	defer journalOpenMu.Unlock()
+	if journalGlobal != nil && journalGlobal.dir == dir {
+		return journalGlobal, nil
+	}
+	journalGlobal = &eventsJournal{dir: dir, seen: map[string]map[string]uint64{}}
+	return journalGlobal, nil
 }
 
 type journalEntry struct {
@@ -137,19 +149,32 @@ func (j *eventsJournal) replay(sessionID string, since uint64, dst []journalEntr
 // append bloquea hasta tener un lock (proceso-local) y luego escribe
 // atómicamente una línea al jsonl. Devuelve el seq asignado.
 func (j *eventsJournal) append(sessionID, kind string, payload any) (uint64, error) {
+	seq, _, err := j.appendOnce(sessionID, kind, payload)
+	return seq, err
+}
+
+// appendOnce dedupea el mismo evento entre múltiples subscribers SSE de la
+// misma sesión. Devuelve (seq, appended, err). Cuando appended=false, el
+// caller puede igual reenviar el evento al cliente usando el mismo seq, pero
+// NO debe volver a materializarlo en transcript ni avanzar lastSeq.
+func (j *eventsJournal) appendOnce(sessionID, kind string, payload any) (uint64, bool, error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 
-	seq, err := j.lastSeq(sessionID)
-	if err != nil {
-		return 0, fmt.Errorf("read last seq: %w", err)
-	}
-	seq++
-
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return seq, fmt.Errorf("marshal payload: %w", err)
+		return 0, false, fmt.Errorf("marshal payload: %w", err)
 	}
+	sig := kind + "\x00" + string(body)
+	if seq, ok := j.seenSeq(sessionID, sig); ok {
+		return seq, false, nil
+	}
+
+	seq, err := j.lastSeq(sessionID)
+	if err != nil {
+		return 0, false, fmt.Errorf("read last seq: %w", err)
+	}
+	seq++
 	enc, err := json.Marshal(journalEntry{
 		Seq:     seq,
 		Kind:    kind,
@@ -157,18 +182,42 @@ func (j *eventsJournal) append(sessionID, kind string, payload any) (uint64, err
 		Time:    time.Now().UTC().Format(time.RFC3339Nano),
 	})
 	if err != nil {
-		return seq, fmt.Errorf("marshal entry: %w", err)
+		return seq, false, fmt.Errorf("marshal entry: %w", err)
 	}
 
 	f, err := os.OpenFile(j.path(sessionID), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o640)
 	if err != nil {
-		return seq, fmt.Errorf("open %s: %w", j.path(sessionID), err)
+		return seq, false, fmt.Errorf("open %s: %w", j.path(sessionID), err)
 	}
 	defer f.Close()
 	if _, err := f.Write(append(enc, '\n')); err != nil {
-		return seq, fmt.Errorf("write: %w", err)
+		return seq, false, fmt.Errorf("write: %w", err)
 	}
-	return seq, nil
+	j.rememberSeq(sessionID, sig, seq)
+	return seq, true, nil
+}
+
+func (j *eventsJournal) seenSeq(sessionID, sig string) (uint64, bool) {
+	if j.seen == nil {
+		return 0, false
+	}
+	seq, ok := j.seen[sessionID][sig]
+	return seq, ok
+}
+
+func (j *eventsJournal) rememberSeq(sessionID, sig string, seq uint64) {
+	if j.seen == nil {
+		j.seen = map[string]map[string]uint64{}
+	}
+	if j.seen[sessionID] == nil {
+		j.seen[sessionID] = map[string]uint64{}
+	}
+	// ponytail: ventana chica en RAM. Si una sesión supera esto, tiramos el
+	// cache y seguimos; peor caso duplica algún replay, no corrompe el log.
+	if len(j.seen[sessionID]) >= 512 {
+		j.seen[sessionID] = map[string]uint64{}
+	}
+	j.seen[sessionID][sig] = seq
 }
 
 // parseSince acepta lo que venga en el header `Last-Event-ID` o el

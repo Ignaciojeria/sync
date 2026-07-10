@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"app-mobile-downloader/internal/shared/server"
+	"scaffoldxd1/internal/shared/server"
 
 	"github.com/go-fuego/fuego"
 )

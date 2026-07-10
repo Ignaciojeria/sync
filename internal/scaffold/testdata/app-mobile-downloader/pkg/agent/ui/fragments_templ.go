@@ -8,7 +8,7 @@ package ui
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import agentapp "app-mobile-downloader/pkg/agent/application"
+import agentapp "scaffoldxd1/pkg/agent/application"
 
 func SessionsList(state PageState) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {

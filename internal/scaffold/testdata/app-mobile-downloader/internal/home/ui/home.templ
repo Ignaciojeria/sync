@@ -1,8 +1,11 @@
 package ui
 
-import topologyapp "app-mobile-downloader/internal/topology/application"
+import (
+	"strings"
+	topologyapp "scaffoldxd1/internal/topology/application"
+)
 
-templ HomePage(snapshot topologyapp.Snapshot) {
+templ HomePage(snapshot topologyapp.Snapshot, previewPrefix string) {
 	<div class="space-y-6">
 		<section class="hero rounded-box border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card)] backdrop-blur overflow-hidden">
 			<div class="hero-content w-full max-w-none flex-col gap-6 px-6 py-7 lg:px-9 lg:py-9">
@@ -17,9 +20,9 @@ templ HomePage(snapshot topologyapp.Snapshot) {
 							<p class="max-w-2xl text-sm leading-7 opacity-72 lg:text-base">{ snapshot.Workspace.Summary }</p>
 						</div>
 						<div class="flex flex-wrap gap-3">
-							<a class="btn btn-primary" href="/editor-view">Abrir consola</a>
-							<a class="btn btn-ghost" href="/report/tests">Ver calidad</a>
-							<a class="btn btn-ghost" href="/design">Ver design system</a>
+							<a class="btn btn-primary" href={ appPath(previewPrefix, "/editor-view") }>Abrir consola</a>
+							<a class="btn btn-ghost" href={ appPath(previewPrefix, "/report/tests") }>Ver calidad</a>
+							<a class="btn btn-ghost" href={ appPath(previewPrefix, "/design") }>Ver design system</a>
 						</div>
 					</div>
 					<div class="stats stats-vertical w-full max-w-md border border-base-300/70 bg-base-100 shadow-sm lg:stats-horizontal lg:w-auto">
@@ -123,21 +126,21 @@ templ HomePage(snapshot topologyapp.Snapshot) {
 				</section>
 
 				<section class="grid gap-4 xl:grid-cols-3">
-					<a class="card border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card-soft)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-base-100" href="/editor-view">
+					<a class="card border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card-soft)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-base-100" href={ appPath(previewPrefix, "/editor-view") }>
 						<div class="card-body p-5">
 							<div class="text-[11px] uppercase tracking-[0.22em] opacity-55">Console</div>
 							<h2 class="card-title text-lg">Consola</h2>
 							<p class="text-sm leading-6 opacity-70">Continúa el flujo principal del workspace.</p>
 						</div>
 					</a>
-					<a class="card border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card-soft)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-base-100" href="/report/tests">
+					<a class="card border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card-soft)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-base-100" href={ appPath(previewPrefix, "/report/tests") }>
 						<div class="card-body p-5">
 							<div class="text-[11px] uppercase tracking-[0.22em] opacity-55">Quality</div>
 							<h2 class="card-title text-lg">Calidad</h2>
 							<p class="text-sm leading-6 opacity-70">Revisa tests y cobertura del proyecto.</p>
 						</div>
 					</a>
-					<a class="card border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card-soft)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-base-100" href="/scheduler/jobs">
+					<a class="card border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card-soft)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-base-100" href={ appPath(previewPrefix, "/scheduler/jobs") }>
 						<div class="card-body p-5">
 							<div class="text-[11px] uppercase tracking-[0.22em] opacity-55">Scheduler</div>
 							<h2 class="card-title text-lg">Jobs</h2>
@@ -233,4 +236,23 @@ templ HomePage(snapshot topologyapp.Snapshot) {
 			})();
 		</script>
 	</div>
+}
+
+func appPath(prefix, path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		path = "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return path
+	}
+	prefix = strings.TrimRight(prefix, "/")
+	if path == "/" {
+		return prefix + "/"
+	}
+	return prefix + path
 }

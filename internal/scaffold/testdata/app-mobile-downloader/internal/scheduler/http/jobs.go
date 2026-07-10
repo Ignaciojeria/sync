@@ -4,13 +4,13 @@ import (
 	"net/http"
 	"strings"
 
-	schedulerapp "app-mobile-downloader/internal/scheduler/application"
-	schedulerpostgresql "app-mobile-downloader/internal/scheduler/infrastructure/postgresql"
-	schedulerui "app-mobile-downloader/internal/scheduler/ui"
-	authmiddleware "app-mobile-downloader/internal/auth/middleware"
-	sharedpostgresql "app-mobile-downloader/internal/shared/infrastructure/postgresql"
-	"app-mobile-downloader/internal/shared/server"
-	"app-mobile-downloader/internal/ui/layout"
+	schedulerapp "scaffoldxd1/internal/scheduler/application"
+	schedulerpostgresql "scaffoldxd1/internal/scheduler/infrastructure/postgresql"
+	schedulerui "scaffoldxd1/internal/scheduler/ui"
+	authmiddleware "scaffoldxd1/internal/auth/middleware"
+	sharedpostgresql "scaffoldxd1/internal/shared/infrastructure/postgresql"
+	"scaffoldxd1/internal/shared/server"
+	"scaffoldxd1/internal/ui/layout"
 
 	"github.com/go-fuego/fuego"
 )
@@ -33,8 +33,9 @@ func listJobsPage(repo *schedulerpostgresql.JobRepository) func(fuego.ContextNoB
 		if err != nil {
 			return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
 		}
+		nav := layout.FromRequest(c.Request())
 		c.SetHeader("Content-Type", "text/html; charset=utf-8")
-		page, err := layout.RenderPage(c, "Configuración de Jobs", schedulerui.JobsPage(configs))
+		page, err := layout.RenderPage(c, "Configuración de Jobs", schedulerui.JobsPage(configs, nav.PreviewPrefix))
 		if err != nil {
 			return nil, err
 		}
@@ -44,8 +45,9 @@ func listJobsPage(repo *schedulerpostgresql.JobRepository) func(fuego.ContextNoB
 
 func newJobForm() func(fuego.ContextNoBody) (any, error) {
 	return func(c fuego.ContextNoBody) (any, error) {
+		nav := layout.FromRequest(c.Request())
 		c.SetHeader("Content-Type", "text/html; charset=utf-8")
-		return schedulerui.JobForm(), nil
+		return schedulerui.JobForm(nav.PreviewPrefix), nil
 	}
 }
 
@@ -83,8 +85,9 @@ func createJob(repo *schedulerpostgresql.JobRepository) func(fuego.ContextNoBody
 			return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
 		}
 
+		nav := layout.FromRequest(c.Request())
 		c.SetHeader("Content-Type", "text/html; charset=utf-8")
-		return schedulerui.JobRow(created), nil
+		return schedulerui.JobRow(created, nav.PreviewPrefix), nil
 	}
 }
 
@@ -123,8 +126,9 @@ func toggleJob(repo *schedulerpostgresql.JobRepository) func(fuego.ContextNoBody
 			return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
 		}
 
+		nav := layout.FromRequest(c.Request())
 		c.SetHeader("Content-Type", "text/html; charset=utf-8")
-		return schedulerui.JobRow(updated), nil
+		return schedulerui.JobRow(updated, nav.PreviewPrefix), nil
 	}
 }
 

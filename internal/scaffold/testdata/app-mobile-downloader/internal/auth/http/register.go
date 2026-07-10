@@ -1,9 +1,9 @@
 package auth
 
 import (
-	authpostgresql "app-mobile-downloader/internal/auth/infrastructure/postgresql"
-	"app-mobile-downloader/internal/shared/configuration"
-	"app-mobile-downloader/internal/shared/server"
+	authpostgresql "scaffoldxd1/internal/auth/infrastructure/postgresql"
+	"scaffoldxd1/internal/shared/configuration"
+	"scaffoldxd1/internal/shared/server"
 
 	"github.com/MicahParks/keyfunc/v3"
 )

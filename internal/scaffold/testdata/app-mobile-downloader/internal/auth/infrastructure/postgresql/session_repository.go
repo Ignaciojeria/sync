@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	authapp "app-mobile-downloader/internal/auth/application"
-	sharedpostgresql "app-mobile-downloader/internal/shared/infrastructure/postgresql"
+	authapp "scaffoldxd1/internal/auth/application"
+	sharedpostgresql "scaffoldxd1/internal/shared/infrastructure/postgresql"
 )
 
 type SessionRepository struct {

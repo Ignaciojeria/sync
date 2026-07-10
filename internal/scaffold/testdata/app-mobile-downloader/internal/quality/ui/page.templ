@@ -1,15 +1,19 @@
 package ui
 
-var TestButtonAttrs = templ.Attributes{
-	"hx-post":          "/report/tests/run",
-	"hx-target":        "#test-result",
-	"hx-swap":          "innerHTML",
-	"hx-indicator":     "#loading",
-	"hx-disabled-elt":  "this",
-	"hx-select-oob":    "#dashboard-stats:outerHTML",
+import "strings"
+
+func testButtonAttrs(previewPrefix string) templ.Attributes {
+	return templ.Attributes{
+		"hx-post":         appPath(previewPrefix, "/report/tests/run"),
+		"hx-target":       "#test-result",
+		"hx-swap":         "innerHTML",
+		"hx-indicator":    "#loading",
+		"hx-disabled-elt": "this",
+		"hx-select-oob":   "#dashboard-stats:outerHTML",
+	}
 }
 
-templ Page(state TestRunState) {
+templ Page(state TestRunState, previewPrefix string) {
 	<div class="space-y-6">
 			<div class="flex items-center justify-between">
 				<div>
@@ -17,7 +21,7 @@ templ Page(state TestRunState) {
 					<p class="text-sm text-base-content/60">Panel de control de calidad y cobertura de código</p>
 				</div>
 				<div class="flex items-center gap-3">
-					<button class="btn btn-primary btn-sm" { TestButtonAttrs... }>
+					<button class="btn btn-primary btn-sm" { testButtonAttrs(previewPrefix)... }>
 						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
 						Ejecutar
 					</button>
@@ -29,7 +33,7 @@ templ Page(state TestRunState) {
 
 			<div id="test-result">
 				if state.HasResult {
-					@TestResult(state.Success, state.Output, state.CoverPath, state.CoverPercent)
+					@TestResult(state.Success, state.Output, appPath(previewPrefix, state.CoverPath), state.CoverPercent)
 				} else {
 					<div class="alert alert-info">
 						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -38,4 +42,23 @@ templ Page(state TestRunState) {
 				}
 			</div>
 	</div>
+}
+
+func appPath(prefix, path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		path = "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return path
+	}
+	prefix = strings.TrimRight(prefix, "/")
+	if path == "/" {
+		return prefix + "/"
+	}
+	return prefix + path
 }

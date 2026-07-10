@@ -1,10 +1,10 @@
 package dev
 
 import (
-	"app-mobile-downloader/internal/quality/application/test_report"
-	authmiddleware "app-mobile-downloader/internal/auth/middleware"
-	"app-mobile-downloader/internal/shared"
-	"app-mobile-downloader/internal/shared/server"
+	"scaffoldxd1/internal/quality/application/test_report"
+	authmiddleware "scaffoldxd1/internal/auth/middleware"
+	"scaffoldxd1/internal/shared"
+	"scaffoldxd1/internal/shared/server"
 
 	"github.com/go-fuego/fuego"
 )

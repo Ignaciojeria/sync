@@ -1,8 +1,8 @@
 package auth
 
 import (
-	"app-mobile-downloader/internal/shared/configuration"
-	"app-mobile-downloader/internal/shared/server"
+	"scaffoldxd1/internal/shared/configuration"
+	"scaffoldxd1/internal/shared/server"
 
 	"github.com/go-fuego/fuego"
 )

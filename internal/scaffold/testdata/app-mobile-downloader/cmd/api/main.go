@@ -5,34 +5,45 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
-	authhttp "app-mobile-downloader/internal/auth/http"
-	authpostgresql "app-mobile-downloader/internal/auth/infrastructure/postgresql"
-	designapp "app-mobile-downloader/internal/design/application"
-	designhttp "app-mobile-downloader/internal/design/http"
-	editorhttp "app-mobile-downloader/internal/editor/http"
-	homehttp "app-mobile-downloader/internal/home/http"
-	testreport "app-mobile-downloader/internal/quality/application/test_report"
-	qualityhttp "app-mobile-downloader/internal/quality/http"
-	schedulerhttp "app-mobile-downloader/internal/scheduler/http"
-	"app-mobile-downloader/internal/shared"
-	"app-mobile-downloader/internal/shared/configuration"
-	"app-mobile-downloader/internal/shared/infrastructure/postgresql"
-	jwks "app-mobile-downloader/internal/shared/jwks"
-	server "app-mobile-downloader/internal/shared/server"
-	topologyapp "app-mobile-downloader/internal/topology/application"
-	topologyhttp "app-mobile-downloader/internal/topology/http"
-	topologymemory "app-mobile-downloader/internal/topology/infrastructure/memory"
-	topologymerged "app-mobile-downloader/internal/topology/infrastructure/merged"
-	topologymutagen "app-mobile-downloader/internal/topology/infrastructure/mutagen"
-	topologypostgresql "app-mobile-downloader/internal/topology/infrastructure/postgresql"
-	topologyworkspacefiles "app-mobile-downloader/internal/topology/infrastructure/workspacefiles"
-	agenthttp "app-mobile-downloader/pkg/agent/http"
+	authhttp "scaffoldxd1/internal/auth/http"
+	authpostgresql "scaffoldxd1/internal/auth/infrastructure/postgresql"
+	designapp "scaffoldxd1/internal/design/application"
+	designhttp "scaffoldxd1/internal/design/http"
+	editorhttp "scaffoldxd1/internal/editor/http"
+	gatewayapp "scaffoldxd1/internal/gateway/application"
+	gatewayhttp "scaffoldxd1/internal/gateway/http"
+	homehttp "scaffoldxd1/internal/home/http"
+	testreport "scaffoldxd1/internal/quality/application/test_report"
+	qualityhttp "scaffoldxd1/internal/quality/http"
+	schedulerhttp "scaffoldxd1/internal/scheduler/http"
+	"scaffoldxd1/internal/shared"
+	"scaffoldxd1/internal/shared/configuration"
+	"scaffoldxd1/internal/shared/infrastructure/postgresql"
+	jwks "scaffoldxd1/internal/shared/jwks"
+	server "scaffoldxd1/internal/shared/server"
+	topologyapp "scaffoldxd1/internal/topology/application"
+	topologyhttp "scaffoldxd1/internal/topology/http"
+	topologymemory "scaffoldxd1/internal/topology/infrastructure/memory"
+	topologymerged "scaffoldxd1/internal/topology/infrastructure/merged"
+	topologymutagen "scaffoldxd1/internal/topology/infrastructure/mutagen"
+	topologypostgresql "scaffoldxd1/internal/topology/infrastructure/postgresql"
+	topologyworkspacefiles "scaffoldxd1/internal/topology/infrastructure/workspacefiles"
+	agentapp "scaffoldxd1/pkg/agent/application"
+	agenthttp "scaffoldxd1/pkg/agent/http"
+	agentdisk "scaffoldxd1/pkg/agent/infrastructure/disk"
+	agentmemory "scaffoldxd1/pkg/agent/infrastructure/memory"
+	agentpirpc "scaffoldxd1/pkg/agent/infrastructure/pirpc"
+	agentpostgresql "scaffoldxd1/pkg/agent/infrastructure/postgresql"
+	agentpreview "scaffoldxd1/pkg/agent/infrastructure/preview"
+	agentworktree "scaffoldxd1/pkg/agent/infrastructure/worktree"
 )
 
 func main() {
+
 	conf, err := configuration.NewConf()
 	if err != nil {
 		log.Fatalf("config: %v", err)
@@ -79,10 +90,41 @@ func main() {
 	editorhttp.Register(s)
 	authhttp.Register(s, conf, sessionRepo, k)
 	qualityhttp.Register(s, testRunner)
+	gatewayhttp.Register(
+		s,
+		gatewayapp.NewBalanceService(conf.SyncAIGatewayBaseURL, conf.SyncAIGatewayAPIKey),
+		gatewayapp.NewSessionCostService(conf.SyncAIGatewayBaseURL, conf.SyncAIGatewayAPIKey),
+	)
 
-	// Agente: en el web-server sólo vive la UI (/agent) y /agent/auth.
-	// El runtime real corre en cmd/agent-worker.
-	registerAgent(s, sessionRepo, agenthttp.OIDCRefreshConfig{
+	// Agente: modo simplificado/legacy. Toda la UI y los endpoints de
+	// datos viven en el mismo binario para que air refleje los cambios
+	// en una sola app sin depender de BFF + agent-worker.
+	agentStore := loadAgentSessionStore()
+	workspaceManager := agentworktree.NewManager("", "")
+	previewLauncher := agentpreview.NewLauncher()
+	manager := agentapp.NewManager(agentStore, agentpirpc.NewRunner(""))
+	manager = manager.WithSessionPreparer(func(ctx context.Context, session agentapp.Session) (agentapp.Session, error) {
+		prepared, err := workspaceManager.Prepare(ctx, session)
+		if err != nil {
+			return session, err
+		}
+		withPreview, err := previewLauncher.Prepare(ctx, prepared)
+		if err != nil {
+			log.Printf("agent preview: %v", err)
+			return prepared, nil
+		}
+		return withPreview, nil
+	}).WithSessionDestroyer(func(ctx context.Context, session agentapp.Session) error {
+		if err := previewLauncher.Destroy(ctx, session); err != nil {
+			log.Printf("agent preview destroy: %v", err)
+		}
+		return workspaceManager.Destroy(ctx, session)
+	})
+	hooks.RegisterShutdown(manager.Close)
+	runtimeEventsStore := agentpostgresql.NewRuntimeEventsStore(db)
+	agenthttp.SetRuntimeEventsStore(runtimeEventsStore)
+	agentapp.SetRuntimeEventsHistorySource(runtimeEventsStore)
+	registerAgent(s, manager, sessionRepo, agenthttp.OIDCRefreshConfig{
 		TokenEndpoint: conf.OIDCTokenEndpoint,
 		ClientID:      conf.OIDCClientID,
 		ClientSecret:  conf.OIDCClientSecret,
@@ -104,9 +146,23 @@ func main() {
 	}
 }
 
-// registerAgent monta sólo la UI del agente y el endpoint /agent/auth.
-// El runtime del agente vive exclusivamente en cmd/agent-worker.
-func registerAgent(s *server.Server, sessionLookup agenthttp.SessionLookup, oidcCfg agenthttp.OIDCRefreshConfig) {
-	agenthttp.Register(s, sessionLookup, oidcCfg)
-	log.Printf("agent: UI enabled (/agent, /agent/auth)")
+// registerAgent monta la UI del agente y también los endpoints de datos
+// en el mismo web-server (wiring legacy) para simplificar dev con air.
+func registerAgent(s *server.Server, manager agentapp.AgentService, sessionLookup agenthttp.SessionLookup, oidcCfg agenthttp.OIDCRefreshConfig) {
+	agenthttp.RegisterAllLegacy(s, manager, sessionLookup, oidcCfg)
+	log.Printf("agent: legacy mode enabled (/agent + data endpoints in cmd/api)")
+}
+
+func loadAgentSessionStore() agentapp.SessionStore {
+	dir := strings.TrimSpace(os.Getenv("AGENT_SESSION_DIR"))
+	if dir == "" {
+		dir = "tmp/agent-sessions"
+	}
+	store, err := agentdisk.NewSessionStore(dir)
+	if err == nil {
+		log.Printf("agent session store: disk at %s", store.Dir())
+		return store
+	}
+	log.Printf("agent session store: disk unavailable (%v), fallback memory", err)
+	return agentmemory.NewSessionStore()
 }

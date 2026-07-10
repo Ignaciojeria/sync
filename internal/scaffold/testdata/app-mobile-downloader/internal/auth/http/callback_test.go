@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	authapp "app-mobile-downloader/internal/auth/application"
-	"app-mobile-downloader/internal/auth/infrastructure/postgresql"
-	"app-mobile-downloader/internal/shared/configuration"
-	sharedpostgresql "app-mobile-downloader/internal/shared/infrastructure/postgresql"
-	"app-mobile-downloader/internal/shared/server"
+	authapp "scaffoldxd1/internal/auth/application"
+	"scaffoldxd1/internal/auth/infrastructure/postgresql"
+	"scaffoldxd1/internal/shared/configuration"
+	sharedpostgresql "scaffoldxd1/internal/shared/infrastructure/postgresql"
+	"scaffoldxd1/internal/shared/server"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/MicahParks/jwkset"
@@ -139,8 +139,8 @@ func TestRegisterCallbackSuccess(t *testing.T) {
 	if res.StatusCode != http.StatusFound {
 		t.Fatalf("status = %d, want 302", res.StatusCode)
 	}
-	if loc := res.Header.Get("Location"); loc != "/" {
-		t.Fatalf("Location = %q, want /", loc)
+	if loc := res.Header.Get("Location"); loc != "/agent" {
+		t.Fatalf("Location = %q, want /agent", loc)
 	}
 
 	var gotSession bool
@@ -162,6 +162,73 @@ func TestRegisterCallbackSuccess(t *testing.T) {
 	}
 	if !cleared {
 		t.Fatal("oidc_state cookie was not cleared")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet sql expectations: %v", err)
+	}
+}
+
+func TestRegisterCallbackUsesMountedReturnTo(t *testing.T) {
+	idClaims := jwt.MapClaims{
+		"iss":   "https://issuer.example",
+		"aud":   "client-abc",
+		"sub":   "user-1",
+		"email": "dev@example.com",
+		"exp":   jwt.NewNumericDate(time.Now().Add(600 * 1e9)).Unix(),
+	}
+	idToken := signHS256(t, []byte("secret"), idClaims)
+
+	tokensrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"at","refresh_token":"rt","id_token":"` + idToken + `","token_type":"Bearer","expires_in":3600}`))
+	}))
+	defer tokensrv.Close()
+
+	conf := configuration.Conf{
+		OIDCIssuer:        "https://issuer.example",
+		OIDCClientID:      "client-abc",
+		OIDCRedirectURI:   "https://app.example/cb",
+		OIDCTokenEndpoint: tokensrv.URL,
+	}
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New(): %v", err)
+	}
+	defer db.Close()
+	store := postgresql.NewSessionRepository(&sharedpostgresql.Connection{DB: sqlx.NewDb(db, "sqlmock")})
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta("INSERT INTO users")).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("u-1"))
+	mock.ExpectQuery(regexp.QuoteMeta("INSERT INTO sessions")).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("s-1"))
+	mock.ExpectCommit()
+
+	fs := fuego.NewServer()
+	s := &server.Server{Server: fs}
+	Register(s, conf, store, inMemoryKeyfunc{secret: []byte("secret")})
+	ts := httptest.NewServer(fs.Mux)
+	defer ts.Close()
+
+	state := newOauthState(t)
+	c := ts.Client()
+	c.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/auth/callback?code=the-code&state="+state, nil)
+	req.AddCookie(&http.Cookie{Name: "oidc_state", Value: state})
+	req.AddCookie(&http.Cookie{Name: "app_return_to", Value: "/agent/sessions/s-1/preview/report/tests"})
+	res, err := c.Do(req)
+	if err != nil {
+		t.Fatalf("Do(): %v", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusFound {
+		t.Fatalf("status = %d, want 302", res.StatusCode)
+	}
+	if loc := res.Header.Get("Location"); loc != "/agent/sessions/s-1/preview/report/tests" {
+		t.Fatalf("Location = %q", loc)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet sql expectations: %v", err)

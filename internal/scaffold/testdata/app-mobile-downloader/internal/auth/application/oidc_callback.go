@@ -7,10 +7,10 @@ import (
 	"net/url"
 	"strings"
 
-	"app-mobile-downloader/internal/shared/configuration"
+	"scaffoldxd1/internal/shared/configuration"
 )
 
-const PostLoginRedirectPath = "/"
+const PostLoginRedirectPath = "/agent"
 
 type CallbackResponse struct {
 	AccessToken  string `json:"access_token,omitempty"`

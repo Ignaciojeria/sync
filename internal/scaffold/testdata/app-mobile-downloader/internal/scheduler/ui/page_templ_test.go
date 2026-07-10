@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	schedulerapp "app-mobile-downloader/internal/scheduler/application"
+	schedulerapp "scaffoldxd1/internal/scheduler/application"
 )
 
 func TestFormatTime(t *testing.T) {
@@ -28,7 +28,7 @@ func TestJobsPageRendersAllRows(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := JobsPage(configs).Render(context.Background(), &buf); err != nil {
+	if err := JobsPage(configs, "").Render(context.Background(), &buf); err != nil {
 		t.Fatalf("JobsPage().Render() error = %v", err)
 	}
 	body := buf.String()
@@ -42,7 +42,7 @@ func TestJobsPageRendersAllRows(t *testing.T) {
 
 func TestJobsPageEmptyListRendersEmptyTable(t *testing.T) {
 	var buf bytes.Buffer
-	if err := JobsPage(nil).Render(context.Background(), &buf); err != nil {
+	if err := JobsPage(nil, "").Render(context.Background(), &buf); err != nil {
 		t.Fatalf("JobsPage(nil).Render() error = %v", err)
 	}
 	body := buf.String()
@@ -53,7 +53,7 @@ func TestJobsPageEmptyListRendersEmptyTable(t *testing.T) {
 
 func TestJobFormRendersForm(t *testing.T) {
 	var buf bytes.Buffer
-	if err := JobForm().Render(context.Background(), &buf); err != nil {
+	if err := JobForm("").Render(context.Background(), &buf); err != nil {
 		t.Fatalf("JobForm().Render() error = %v", err)
 	}
 	body := buf.String()
@@ -80,7 +80,7 @@ func TestJobRowDisablesAndEnablesActions(t *testing.T) {
 	disabled := schedulerapp.JobConfig{ID: "job-1", Name: "enabled", Schedule: "* * * * *", Endpoint: "/x", Enabled: false, Description: "D"}
 
 	var buf bytes.Buffer
-	if err := JobRow(enabled).Render(context.Background(), &buf); err != nil {
+	if err := JobRow(enabled, "").Render(context.Background(), &buf); err != nil {
 		t.Fatalf("JobRow(enabled).Render() error = %v", err)
 	}
 	body := buf.String()
@@ -92,7 +92,7 @@ func TestJobRowDisablesAndEnablesActions(t *testing.T) {
 	}
 
 	buf.Reset()
-	if err := JobRow(disabled).Render(context.Background(), &buf); err != nil {
+	if err := JobRow(disabled, "").Render(context.Background(), &buf); err != nil {
 		t.Fatalf("JobRow(disabled).Render() error = %v", err)
 	}
 	body = buf.String()

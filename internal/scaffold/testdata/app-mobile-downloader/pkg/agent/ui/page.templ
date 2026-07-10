@@ -1,51 +1,74 @@
 package ui
 
 templ Page(state PageState) {
-	<div id="agent-app" class="h-screen overflow-hidden" data-active-session-id={ activeSessionID(state) } data-user-jwt={ state.UserJWT } data-chat-state="empty">
-		<div class="grid h-screen grid-cols-1 overflow-hidden text-base-content xl:grid-cols-[15.75rem_minmax(0,1fr)] 2xl:grid-cols-[16.25rem_minmax(0,1fr)]">
-			<aside class="flex min-h-0 flex-col border-r agent-shell-border">
-				@SessionsList(state)
-			</aside>
+	<div id="agent-app" class="drawer h-screen overflow-hidden text-base-content xl:drawer-open" data-active-session-id={ activeSessionID(state) } data-user-jwt={ state.UserJWT } data-chat-state="empty">
+		<input id="agent-sidebar" type="checkbox" class="drawer-toggle"/>
 
-			<section class="flex min-h-0 flex-col">
-				<header class="agent-glass-panel agent-shell-shadow relative z-10 flex items-center justify-between border-b agent-shell-border px-4 py-3 sm:px-5">
+		<div class="drawer-content flex h-screen min-w-0 flex-col overflow-hidden">
+			<section class="flex min-h-0 flex-1 flex-col">
+				<header class="agent-glass-panel agent-shell-shadow relative z-10 flex items-center justify-between border-b agent-shell-border px-3 py-2 sm:px-5 sm:py-3">
 					<div class="flex min-w-0 items-center gap-2.5">
-						<h1 id="session-title" class="truncate text-[1.15rem] font-semibold leading-none text-base-content" style="font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);">{ shellTitle(state) }</h1>
+						<label id="agent-sidebar-open" for="agent-sidebar" class="btn btn-ghost btn-sm btn-circle xl:hidden" aria-controls="agent-sidebar-panel" aria-expanded="false" aria-label="Abrir conversaciones">
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h16"/></svg>
+						</label>
+						<div id="brand-title" class="flex min-w-0 items-center gap-2.5" if state.ActiveSession != nil && state.ActiveSession.Title != "" { hidden }>
+							<img src="/logo.svg" alt="sync4.run" class="h-6 w-6 rounded-box object-contain"/>
+							<span class="truncate text-[1.02rem] font-semibold leading-none text-base-content sm:text-[1.15rem]" style="font-family: var(--pi-font-label-family, var(--pi-font-body-family, Inter, system-ui, sans-serif));">sync4.run</span>
+						</div>
+						<h1 id="session-title" class="truncate text-[0.98rem] font-semibold leading-none text-base-content sm:text-[1.08rem]" style="font-family: var(--pi-font-label-family, var(--pi-font-body-family, Inter, system-ui, sans-serif));" if state.ActiveSession == nil || state.ActiveSession.Title == "" { hidden }>{ shellTitle(state) }</h1>
 						<span id="session-status" class="badge badge-ghost text-[0.68rem] hidden sm:inline-flex"></span>
+						<span id="header-session-model" class="badge badge-ghost badge-sm max-w-[9.5rem] truncate text-[0.68rem] text-base-content/78">{ shellModel(state) }</span>
 					</div>
-					<div class="flex items-center gap-1.5 text-base-content/78">
-						<button id="abort-button" class="btn btn-ghost btn-xs hidden" type="button">Abort</button>
-						<button id="header-new-chat" class="btn btn-circle btn-xs border-none bg-base-100 text-base-content shadow-none hover:bg-base-100/85" type="button" title="Nueva conversación">
-							<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14m7-7H5"/></svg>
+					<div class="flex items-center gap-2 text-base-content/78">
+						<button id="abort-button" class="btn btn-ghost btn-sm hidden" type="button">Abort</button>
+						<button id="agent-debug-button" class="btn btn-ghost btn-sm" type="button" title="Debug sesión">Debug</button>
+						<button id="header-new-chat" class="btn btn-circle btn-sm border-none bg-base-100 text-base-content shadow-none hover:bg-base-100/85" type="button" title="Nueva conversación">
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14m7-7H5"/></svg>
 						</button>
 					</div>
 				</header>
 
-				<div id="agent-feed" class="agent-thin-scroll min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-5">
-					<div id="empty-shell" class="flex min-h-full flex-col items-center justify-center px-4 pb-18 pt-2 text-center sm:pb-24">
+				<div id="agent-feed" class="agent-thin-scroll min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5 sm:py-5">
+					<div id="agent-error-banner" class="mx-auto mb-3 hidden w-full max-w-5xl">
+						<div id="agent-error-alert" role="alert" class="alert alert-error alert-soft border border-error/35 text-sm text-error-content sm:alert-horizontal">
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86l-7.1 12.3A2 2 0 0 0 4.92 19h14.16a2 2 0 0 0 1.73-2.84l-7.1-12.3a2 2 0 0 0-3.46 0Z"/></svg>
+							<span id="agent-error-text">Ocurrió un error.</span>
+						</div>
+					</div>
+					<div id="agent-status-banner" class="mx-auto mb-3 hidden w-full max-w-5xl">
+						<div class="alert border border-warning/30 bg-warning/10 text-sm text-base-content sm:alert-horizontal">
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M10.29 3.86l-7.1 12.3A2 2 0 0 0 4.92 19h14.16a2 2 0 0 0 1.73-2.84l-7.1-12.3a2 2 0 0 0-3.46 0Z"/></svg>
+							<span id="agent-status-text">Reconectando…</span>
+							<div class="sm:ml-auto flex items-center gap-2">
+								<button id="agent-status-continue" type="button" class="btn btn-ghost btn-xs hidden">Continuar</button>
+								<button id="agent-status-retry" type="button" class="btn btn-ghost btn-xs hidden">Reintentar</button>
+							</div>
+						</div>
+					</div>
+					<div id="empty-shell" class="flex min-h-full flex-col items-center justify-center px-3 pb-16 pt-1 text-center sm:px-4 sm:pb-24 sm:pt-2">
 						<div class="w-full max-w-none">
 							<div class="flex w-full flex-col items-center gap-5 -translate-y-[7vh]">
 								<div class="flex flex-col items-center gap-3">
-									<div class="flex items-baseline justify-center gap-1.5 text-[2.55rem] font-semibold leading-none tracking-[0.015em] text-base-content/88 sm:text-[3.2rem]" style="font-family: var(--pi-font-label-family, var(--pi-font-body-family, Inter, system-ui, sans-serif));">
+									<div class="flex items-baseline justify-center gap-1.5 text-[2rem] font-semibold leading-none tracking-[0.015em] text-base-content/88 sm:text-[2.45rem]" style="font-family: var(--pi-font-label-family, var(--pi-font-body-family, Inter, system-ui, sans-serif));">
 										<span>sync</span>
 										<span><span class="text-primary text-[1.1em] font-medium tracking-[-0.08em]">4</span><span class="text-primary">.</span></span>
 										<span>run</span>
 									</div>
-									<div class="text-[0.75rem] uppercase tracking-[0.26em] text-base-content/44">coding agent workspace</div>
+									<div class="text-[0.68rem] uppercase tracking-[0.24em] text-base-content/44 sm:text-[0.72rem]">coding agent workspace</div>
 								</div>
-								<div class="mx-auto w-full max-w-[49rem] rounded-[1.75rem] border agent-shell-border bg-transparent px-4 py-2 sm:px-4.5 sm:py-2.5">
+								<div class="mx-auto w-full max-w-[49rem] rounded-[1.35rem] border agent-shell-border bg-transparent px-3 py-1.5 sm:rounded-[1.75rem] sm:px-4.5 sm:py-2.5">
 									<form id="prompt-form-empty" class="space-y-1">
-										<textarea id="prompt-input-empty" class="textarea h-13 w-full resize-none border-0 bg-transparent p-0 text-[0.9rem] leading-6 text-base-content placeholder:text-base-content/72 focus:outline-none" name="message" placeholder='Type a message or use &quot;/&quot; for commands' if activeSessionID(state) == "" { disabled }></textarea>
+										<textarea id="prompt-input-empty" class="textarea h-13 w-full resize-none border-0 bg-transparent p-0 text-[0.8rem] leading-5.5 text-base-content placeholder:text-base-content/72 focus:outline-none sm:text-[0.88rem]" style="font-family: var(--pi-font-body-family, Inter, system-ui, sans-serif);" name="message" placeholder='Type a message or use &quot;/&quot; for commands' if activeSessionID(state) == "" { disabled }></textarea>
 										<div class="flex items-center justify-between gap-3 pt-1">
 											<div class="flex items-center gap-2">
 												<button class="btn btn-ghost btn-sm btn-circle" type="button" title="Adjuntar">
 													<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9"><path stroke-linecap="round" stroke-linejoin="round" d="m18.375 12.739-7.693 7.693a3.375 3.375 0 1 1-4.773-4.773l8.489-8.49a2.25 2.25 0 1 1 3.182 3.182l-8.49 8.49a1.125 1.125 0 1 1-1.59-1.591l7.694-7.693"/></svg>
 												</button>
-												<div class="agent-glass-panel-soft agent-raised inline-flex items-center gap-2 rounded-full border agent-shell-border px-3 py-1.5 text-sm text-base-content/84">
+												<div class="agent-glass-panel-soft agent-raised inline-flex items-center gap-2 rounded-full border agent-shell-border px-3 py-1.5 text-[0.82rem] text-base-content/84 sm:text-sm">
 													<span>Agent</span>
 												</div>
 											</div>
-											<div class="flex items-center gap-3 text-sm text-base-content/82" style="font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);">
+											<div class="flex items-center gap-2.5 text-[0.76rem] text-base-content/82 sm:gap-3 sm:text-sm" style="font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);">
 												<span>{ shellModel(state) }</span>
 												<button class="agent-glass-panel btn btn-circle border agent-shell-border bg-transparent text-base-content hover:bg-base-100/10 disabled:opacity-40" type="submit" if activeSessionID(state) == "" { disabled } title="Enviar">
 													<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-7-7 7 7-7 7"/></svg>
@@ -59,45 +82,86 @@ templ Page(state PageState) {
 					</div>
 
 					<div id="conversation-shell" class="hidden min-h-full flex-col">
-						<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 py-3">
+						<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-3.5 py-2 sm:gap-5 sm:py-3">
 							<div class="flex items-center justify-between">
-								<div class="text-sm text-base-content/72" style="font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);">{ shellTitle(state) }</div>
-								<div class="text-xs text-base-content/54">live session</div>
+								<div class="text-[0.8rem] text-base-content/72 sm:text-[0.92rem]" style="font-family: var(--pi-font-label-family, var(--pi-font-body-family, Inter, system-ui, sans-serif));">{ shellTitle(state) }</div>
+								<div class="hidden text-[0.68rem] text-base-content/54 sm:block sm:text-xs">live session</div>
 							</div>
-							<div id="conversation-messages" class="space-y-5"></div>
+							<div class="flex justify-center">
+								<button id="load-older-button" class="btn btn-ghost btn-xs hidden text-[0.72rem] text-base-content/72 sm:text-xs" type="button">Cargar mensajes anteriores</button>
+							</div>
+							<div id="conversation-messages" class="space-y-3 sm:space-y-5"></div>
 						</div>
 					</div>
 				</div>
 
 				<div id="conversation-toolbar" class="hidden">
-					<div class="agent-glass-panel agent-shell-shadow relative z-10 border-t agent-shell-border px-4 py-2.5 sm:px-5">
-						<div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-							<div class="flex items-center gap-3 text-sm text-base-content/84" style="font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);">
-								<span>Model:</span>
-								<div class="agent-glass-panel-soft agent-raised inline-flex min-w-[14rem] items-center gap-3 rounded-box border agent-shell-border px-4 py-2 text-base-content">
-									<span id="session-model" class="truncate">{ shellModel(state) }</span>
-									<svg xmlns="http://www.w3.org/2000/svg" class="ml-auto h-4 w-4 text-base-content/56" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>
+					<div class="agent-glass-panel agent-shell-shadow relative z-10 hidden border-t agent-shell-border px-4 py-2.5 sm:px-5 xl:block">
+						<div class="flex flex-col gap-3">
+							<div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+								<div class="flex items-center gap-3 text-sm text-base-content/84" style="font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);">
+									<span>Model:</span>
+									<div class="agent-glass-panel-soft agent-raised inline-flex min-w-[14rem] items-center gap-3 rounded-box border agent-shell-border px-4 py-2 text-base-content">
+										<span id="session-model" class="truncate">{ shellModel(state) }</span>
+										<svg xmlns="http://www.w3.org/2000/svg" class="ml-auto h-4 w-4 text-base-content/56" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>
+									</div>
+								</div>
+								<div class="flex items-center gap-3 text-sm text-base-content/84" style="font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);">
+									<span>Dir:</span>
+									<div class="agent-glass-panel-soft agent-raised input w-full max-w-[32rem] border agent-shell-border bg-transparent text-base-content">
+										<input id="session-dir" type="text" class="grow" value={ shellDir(state) } readonly/>
+									</div>
 								</div>
 							</div>
-							<div class="flex items-center gap-3 text-sm text-base-content/84" style="font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);">
-								<span>Dir:</span>
-								<div class="agent-glass-panel-soft agent-raised input w-full max-w-[32rem] border agent-shell-border bg-transparent text-base-content">
-									<input id="session-dir" type="text" class="grow" value={ shellDir(state) } readonly/>
+							<div id="preview-url-bar" class="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+								<div class="flex items-center gap-3 text-sm text-base-content/84" style="font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);">
+									<span>Preview:</span>
+									<div class="agent-glass-panel-soft agent-raised input w-full min-w-[24rem] max-w-[48rem] border agent-shell-border bg-transparent text-base-content">
+										<input id="session-preview-url" type="text" class="grow" value={ shellPreviewPath(state) } readonly/>
+									</div>
+								</div>
+								<div class="flex items-center justify-end gap-2">
+									<a id="session-preview-open" class="btn btn-sm btn-primary" href={ shellPreviewPath(state) } target="_blank" rel="noopener noreferrer" if shellPreviewPath(state) == "" { hidden }>Open preview</a>
 								</div>
 							</div>
 						</div>
 					</div>
 
-					<div class="agent-glass-panel-soft agent-shell-shadow relative z-10 border-t agent-shell-border px-4 py-4 sm:px-5">
-						<form id="prompt-form" class="mx-auto flex w-full max-w-5xl items-end gap-3">
-							<div class="flex-1 rounded-[1.4rem] border agent-shell-border bg-transparent px-4 py-3">
-								<textarea id="prompt-input" class="textarea h-24 w-full resize-none border-0 bg-transparent p-0 text-[0.95rem] leading-6 text-base-content placeholder:text-base-content/72 focus:outline-none" name="message" placeholder="Ask away. Pics work too." if activeSessionID(state) == "" { disabled }></textarea>
+					<div class="agent-glass-panel-soft agent-shell-shadow sticky bottom-0 z-10 border-t agent-shell-border px-2.5 py-2.5 pb-[calc(0.6rem+env(safe-area-inset-bottom))] sm:px-5 sm:py-4 xl:static xl:px-4 xl:py-4">
+						<div id="queued-message-panel" class="mx-auto mb-2.5 hidden w-full max-w-5xl rounded-box border border-warning/35 bg-warning/10 px-3 py-2 text-sm text-base-content">
+						<div class="flex items-start justify-between gap-3">
+							<div class="min-w-0 flex-1">
+								<div class="mb-1 flex items-center gap-2">
+									<span id="queued-message-badge" class="badge badge-warning badge-sm">En cola</span>
+									<span id="queued-message-state" class="text-xs text-base-content/72">Se enviará al terminar la respuesta actual</span>
+								</div>
+								<div id="queued-message-text" class="truncate text-sm text-base-content/88"></div>
 							</div>
-							<div class="flex items-center gap-3 pb-2 text-base-content/72">
+						</div>
+					</div>
+					<div id="session-budget-bar" class="mx-auto mb-2.5 w-full max-w-5xl border-b agent-shell-border px-0 pb-2 text-[0.7rem] tabular-nums sm:mb-3 sm:text-[0.74rem]" data-state="loading" style="font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);">
+							<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+								<div class="flex items-center gap-2 text-base-content/72">
+									<span class="text-base-content/54">balance</span>
+									<span id="budget-balance" class="text-base-content/88">—</span>
+								</div>
+								<div class="flex items-center gap-2 text-base-content/72">
+									<span class="text-base-content/54">this session</span>
+									<span id="budget-session-spent" class="text-base-content/88">—</span>
+									<span class="text-base-content/36">·</span>
+									<span id="budget-session-requests" class="text-base-content/72">0 req</span>
+								</div>
+							</div>
+						</div>
+						<form id="prompt-form" class="mx-auto flex w-full max-w-5xl flex-col gap-2.5 sm:flex-row sm:items-end sm:gap-3">
+							<div class="flex-1 rounded-[1.1rem] border agent-shell-border bg-transparent px-3 py-2.5 sm:rounded-[1.4rem] sm:px-4 sm:py-3">
+								<textarea id="prompt-input" class="textarea h-20 w-full resize-none border-0 bg-transparent p-0 text-[0.82rem] leading-5.5 text-base-content placeholder:text-base-content/72 focus:outline-none sm:h-24 sm:text-[0.92rem]" style="font-family: var(--pi-font-body-family, Inter, system-ui, sans-serif);" name="message" placeholder="Ask away. Pics work too." if activeSessionID(state) == "" { disabled }></textarea>
+							</div>
+							<div class="flex items-center justify-end gap-3 text-base-content/72 sm:pb-2">
 								<button class="btn btn-ghost btn-sm btn-square rounded-full" type="button" title="Adjuntar">
 									<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9"><path stroke-linecap="round" stroke-linejoin="round" d="m18.375 12.739-7.693 7.693a3.375 3.375 0 1 1-4.773-4.773l8.489-8.49a2.25 2.25 0 1 1 3.182 3.182l-8.49 8.49a1.125 1.125 0 1 1-1.59-1.591l7.694-7.693"/></svg>
 								</button>
-								<button class="agent-glass-panel agent-raised btn btn-circle border agent-shell-border bg-transparent text-base-content hover:bg-base-100/10 disabled:opacity-40" type="submit" if activeSessionID(state) == "" { disabled } title="Enviar">
+								<button class="agent-glass-panel agent-raised btn btn-circle btn-sm border agent-shell-border bg-transparent text-base-content hover:bg-base-100/10 disabled:opacity-40" type="submit" if activeSessionID(state) == "" { disabled } title="Enviar">
 									<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-7-7 7 7-7 7"/></svg>
 								</button>
 							</div>
@@ -106,6 +170,31 @@ templ Page(state PageState) {
 				</div>
 			</section>
 		</div>
+
+		<div class="drawer-side z-30">
+			<label for="agent-sidebar" aria-label="Cerrar conversaciones" class="drawer-overlay"></label>
+			<aside id="agent-sidebar-panel" role="dialog" aria-modal="false" aria-label="Conversaciones" tabindex="-1" class="agent-glass-panel-soft flex h-full min-h-0 w-80 max-w-[88vw] flex-col border-r agent-shell-border bg-base-200/92 backdrop-blur xl:w-[15.75rem] 2xl:w-[16.25rem]">
+				@SessionsList(state)
+			</aside>
+		</div>
+
+		<dialog id="agent-debug-modal" class="modal">
+			<div class="modal-box max-w-3xl">
+				<div class="flex items-center justify-between gap-3">
+					<h3 class="text-lg font-semibold">Debug sesión</h3>
+					<form method="dialog"><button class="btn btn-sm btn-circle btn-ghost">✕</button></form>
+				</div>
+				<div class="mt-4 space-y-3">
+					<div class="flex items-center gap-2">
+						<button id="agent-debug-refresh" type="button" class="btn btn-sm btn-ghost">Actualizar</button>
+						<button id="agent-debug-copy" type="button" class="btn btn-sm btn-primary">Copiar diagnóstico</button>
+					</div>
+					<pre id="agent-debug-output" class="agent-glass-panel-soft max-h-[65vh] overflow-auto rounded-box border agent-shell-border p-3 text-xs text-base-content/82"></pre>
+				</div>
+			</div>
+			<form method="dialog" class="modal-backdrop"><button>Cerrar</button></form>
+		</dialog>
+
 	</div>
 
 	<script>
@@ -164,12 +253,46 @@ templ Page(state PageState) {
 		const createForm = document.getElementById("new-session-form");
 		const abortButton = document.getElementById("abort-button");
 		const headerNewChat = document.getElementById("header-new-chat");
+		const sidebarToggle = document.getElementById("agent-sidebar");
 		const sessionsList = document.getElementById("sessions-list");
 		const sessionsEmpty = document.getElementById("sessions-empty");
+		const brandTitle = document.getElementById("brand-title");
 		const sessionTitle = document.getElementById("session-title");
 		const sessionStatus = document.getElementById("session-status");
 		const sessionModel = document.getElementById("session-model");
+		const headerSessionModel = document.getElementById("header-session-model");
+		const sessionCostHeader = null; // ponytail: badge movido a la barra de presupuesto.
+		const queuedMessagePanel = document.getElementById("queued-message-panel");
+		const queuedMessageBadge = document.getElementById("queued-message-badge");
+		const queuedMessageState = document.getElementById("queued-message-state");
+		const queuedMessageTextNode = document.getElementById("queued-message-text");
+		const budgetBar = document.getElementById("session-budget-bar");
+		const budgetBalance = document.getElementById("budget-balance");
+		const budgetSessionSpent = document.getElementById("budget-session-spent");
+		const budgetSessionRequests = document.getElementById("budget-session-requests");
+		// ponytail: la barra es local de la sesión activa. No la
+		// mostramos en el estado vacío: aparece recién cuando hay
+		// chat, mismo gating que conversation-toolbar. Si el gateway
+		// está caído, el saldo se queda en "—" y la sesión sigue
+		// mostrando su propio gasto (lo que se pudo leer).
+		let sessionCostTimer = null;
+		let balanceTimer = null;
+		let lastBalanceUSD = null;
 		const sessionDir = document.getElementById("session-dir");
+		const sessionPreviewURL = document.getElementById("session-preview-url");
+		const sessionPreviewOpen = document.getElementById("session-preview-open");
+		const loadOlderButton = document.getElementById("load-older-button");
+		const errorBanner = document.getElementById("agent-error-banner");
+		const errorText = document.getElementById("agent-error-text");
+		const statusBanner = document.getElementById("agent-status-banner");
+		const statusText = document.getElementById("agent-status-text");
+		const statusContinue = document.getElementById("agent-status-continue");
+		const statusRetry = document.getElementById("agent-status-retry");
+		const debugButton = document.getElementById("agent-debug-button");
+		const debugModal = document.getElementById("agent-debug-modal");
+		const debugOutput = document.getElementById("agent-debug-output");
+		const debugRefresh = document.getElementById("agent-debug-refresh");
+		const debugCopy = document.getElementById("agent-debug-copy");
 		let streamAbort = null;
 		let currentAssistantBubble = null;
 		// lastEventId es el último id que vimos en el SSE. Si la conexión
@@ -179,7 +302,35 @@ templ Page(state PageState) {
 		// por session, no global — si el user cambia de sesión arranca
 		// de cero.
 		const lastEventIds = {};
+		const historyState = {};
 		let currentThinkingBubble = null;
+		let lastFeedScrollTop = 0;
+		let touchStartY = null;
+		let lastVisibleError = "";
+		let pendingPromptNeedsHistoryFallback = false;
+		let pendingErrorTimer = null;
+		let turnHasVisibleAssistantText = false;
+		let pendingTerminalError = "";
+		let turnIsOpen = false;
+		let turnPhase = "idle";
+		let lastUserPrompt = "";
+		let queuedMessagePending = false;
+		let queuedMessageText = "";
+		let lastTurnActivityAt = 0;
+		let turnWatchdogTimer = null;
+
+		syncPreviewURL(activeSessionId);
+
+		function closeSidebarOnMobile() {
+			if (!sidebarToggle) return;
+			if (window.matchMedia("(min-width: 1280px)").matches) return;
+			if (!sidebarToggle.checked) return;
+			sidebarToggle.checked = false;
+			// Setear .checked por JS no dispara "change"; lo emitimos a
+			// mano para que la capa de accesibilidad (focus/aria/inert)
+			// reaccione igual que a un cierre por gesto o tecla.
+			sidebarToggle.dispatchEvent(new Event("change", { bubbles: true }));
+		}
 
 		function statusBadgeClass(status) {
 			switch ((status || "").trim()) {
@@ -199,14 +350,25 @@ templ Page(state PageState) {
 			sessionsEmpty.classList.toggle("hidden", items.length > 0);
 			for (const session of items) {
 				const li = document.createElement("li");
+				const row = document.createElement("div");
+				row.className = "group flex items-start gap-2 rounded-box border border-transparent px-2 py-2 transition-all duration-200 hover:-translate-y-px hover:border-base-300/60 hover:bg-base-100/60 agent-raised";
+				if (session.id === activeSessionId) {
+					row.className += " border-base-300/70 bg-base-100/72";
+				}
 				const a = document.createElement("a");
 				a.href = `/agent?session=${encodeURIComponent(session.id)}`;
-				a.className = "group block rounded-box border border-transparent px-2.5 py-2.5 transition-all duration-200 hover:-translate-y-px hover:border-base-300/60 hover:bg-base-100/60 agent-raised";
-				if (session.id === activeSessionId) {
-					a.className += " border-base-300/70 bg-base-100/72";
-				}
+				a.className = "min-w-0 flex-1";
 				a.innerHTML = `<div class=\"flex items-start justify-between gap-3\"><div class=\"min-w-0 flex-1\"><div class=\"truncate text-[0.82rem] font-semibold text-base-content\" style=\"font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);\">${escapeHTML(session.title || "Nueva sesión")}</div><div class=\"mt-1 flex items-center gap-1 text-[0.68rem] text-base-content/62\"><span>${escapeHTML(formatSessionDate(session.updatedAt))}</span><span class=\"truncate\">${escapeHTML(session.cwd || "cwd pendiente")}</span></div><div class=\"mt-1 truncate text-[0.7rem] text-base-content/72\" style=\"font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);\">${escapeHTML(session.model || "default")}</div></div><span class=\"${statusBadgeClass(session.status)} badge-sm shrink-0\">${escapeHTML(session.status || "idle")}</span></div>`;
-				li.appendChild(a);
+				const remove = document.createElement("button");
+				remove.type = "button";
+				remove.className = "btn btn-ghost btn-xs btn-square shrink-0 text-base-content/52 hover:text-error";
+				remove.title = "Eliminar sesión";
+				remove.setAttribute("aria-label", `Eliminar sesión ${session.title || session.id}`);
+				remove.dataset.sessionDelete = session.id;
+				remove.innerHTML = `<svg xmlns=\"http://www.w3.org/2000/svg\" class=\"h-4 w-4\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\" stroke-width=\"1.9\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M6 7h12m-9 0V5.75A1.75 1.75 0 0 1 10.75 4h2.5A1.75 1.75 0 0 1 15 5.75V7m-7 0v11A2 2 0 0 0 10 20h4a2 2 0 0 0 2-2V7\"/></svg>`;
+				row.appendChild(a);
+				row.appendChild(remove);
+				li.appendChild(row);
 				sessionsList.appendChild(li);
 			}
 		}
@@ -218,6 +380,43 @@ templ Page(state PageState) {
 			return d.toLocaleDateString("es-CL");
 		}
 
+		function formatCompactNumber(value) {
+			const num = Number(value) || 0;
+			return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(num);
+		}
+
+		function previewPathForSession(sessionId) {
+			sessionId = String(sessionId || "").trim();
+			if (!sessionId) return "";
+			return `/agent/sessions/${encodeURIComponent(sessionId)}/preview/`;
+		}
+
+		function previewURLForSession(sessionId) {
+			const path = previewPathForSession(sessionId);
+			if (!path) return "";
+			return new URL(path, window.location.origin).toString();
+		}
+
+		function syncPreviewURL(sessionId) {
+			const href = previewURLForSession(sessionId);
+			if (sessionPreviewURL) sessionPreviewURL.value = href;
+			if (sessionPreviewOpen) {
+				sessionPreviewOpen.href = href || "#";
+				sessionPreviewOpen.hidden = !href;
+			}
+		}
+
+		function formatUSD(value) {
+			const num = Number(value);
+			if (!Number.isFinite(num)) return "—";
+			return new Intl.NumberFormat("en-US", {
+				style: "currency",
+				currency: "USD",
+				minimumFractionDigits: num < 0.01 ? 4 : 2,
+				maximumFractionDigits: 4,
+			}).format(num);
+		}
+
 		function escapeHTML(value) {
 			return String(value || "")
 				.replaceAll("&", "&amp;")
@@ -227,18 +426,148 @@ templ Page(state PageState) {
 				.replaceAll("'", "&#39;");
 		}
 
+		function renderSessionCost(data) {
+			// ponytail: la barra de presupuesto se compone con dos
+			// lecturas (saldo global + gasto por sesión). Si falta una,
+			// mostramos lo que tenemos. Si faltan las dos, "—".
+			if (!budgetBar || !activeSessionId) return;
+			const sessionSpent = Number(data && data.estimated_cost_usd);
+			const requests = Number(data && data.request_count) || 0;
+			const sessionValid = Number.isFinite(sessionSpent);
+			if (budgetSessionSpent) {
+				budgetSessionSpent.textContent = sessionValid ? formatUSD(sessionSpent) : "—";
+			}
+			if (budgetSessionRequests) {
+				budgetSessionRequests.textContent = `${requests} req`;
+			}
+			paintBudgetBar();
+		}
+
+		function renderBalance(data) {
+			if (!budgetBalance) return;
+			if (!data || !Number.isFinite(Number(data.balance_usd))) {
+				lastBalanceUSD = null;
+				budgetBalance.textContent = "—";
+			} else {
+				lastBalanceUSD = Number(data.balance_usd);
+				budgetBalance.textContent = formatUSD(lastBalanceUSD);
+			}
+			paintBudgetBar();
+		}
+
+		// Color de la barra según el % de saldo consumido. Sin saldo
+		// válido no pintamos nada: la barra queda neutra.
+		// ponytail: umbral único 70 % → warning, 100 % → error.
+		// Si el gasto de la sesión actual excede el saldo restante,
+		// también error (caso típico: el gateway cobra antes de
+		// refrescar el saldo).
+		function paintBudgetBar() {
+			if (!budgetBar) return;
+			const sessionSpentText = budgetSessionSpent ? budgetSessionSpent.textContent : "—";
+			const balanceText = budgetBalance ? budgetBalance.textContent : "—";
+			const sessionValid = sessionSpentText !== "—";
+			const balanceValid = balanceText !== "—";
+			budgetBar.classList.remove(
+				"border-warning/45",
+				"border-error/55",
+			);
+			if (budgetSessionSpent) {
+				budgetSessionSpent.classList.remove("text-warning", "text-error");
+			}
+			if (budgetBalance) {
+				budgetBalance.classList.remove("text-warning", "text-error");
+			}
+			if (!sessionValid && !balanceValid) {
+				budgetBar.dataset.state = "empty";
+				return;
+			}
+			budgetBar.dataset.state = "ok";
+			if (!balanceValid || lastBalanceUSD == null || lastBalanceUSD <= 0) return;
+			const sessionSpentNum = sessionValid ? parseUSD(sessionSpentText) : 0;
+			if (sessionSpentNum >= lastBalanceUSD) {
+				budgetBar.classList.add("border-error/55");
+				budgetBalance.classList.add("text-error");
+			} else if (sessionSpentNum >= lastBalanceUSD * 0.7) {
+				budgetBar.classList.add("border-warning/45");
+				budgetBalance.classList.add("text-warning");
+			}
+		}
+
+		function parseUSD(text) {
+			const cleaned = String(text || "").replace(/[^0-9.\-]/g, "");
+			const n = Number(cleaned);
+			return Number.isFinite(n) ? n : 0;
+		}
+
+		async function refreshSessionCost() {
+			if (!activeSessionId) return;
+			try {
+				const response = await fetch(`/gateway/session-cost?session_id=${encodeURIComponent(activeSessionId)}`, {
+					method: "GET",
+					headers: { "Accept": "application/json" },
+					credentials: "same-origin",
+				});
+				if (!response.ok) throw new Error(`session-cost ${response.status}`);
+				renderSessionCost(await response.json());
+			} catch (err) {
+				console.warn("agent: no pude cargar costo de sesión", err);
+				renderSessionCost({ estimated_cost_usd: NaN, request_count: 0, total_tokens: 0 });
+			}
+		}
+
+		async function refreshBalance() {
+			try {
+				const response = await fetch(`/gateway/balance?format=json`, {
+					method: "GET",
+					headers: { "Accept": "application/json" },
+					credentials: "same-origin",
+				});
+				if (!response.ok) throw new Error(`balance ${response.status}`);
+				renderBalance(await response.json());
+			} catch (err) {
+				console.warn("agent: no pude cargar saldo", err);
+				renderBalance(null);
+			}
+		}
+
+		function scheduleSessionCostPolling() {
+			if (sessionCostTimer) {
+				clearInterval(sessionCostTimer);
+				sessionCostTimer = null;
+			}
+			if (balanceTimer) {
+				clearInterval(balanceTimer);
+				balanceTimer = null;
+			}
+			if (!activeSessionId) return;
+			refreshSessionCost();
+			refreshBalance();
+			// ponytail: misma cadencia que tenía el badge del header,
+			// solo movida a la barra de abajo.
+			sessionCostTimer = setInterval(refreshSessionCost, 15000);
+			balanceTimer = setInterval(refreshBalance, 60000);
+		}
+
 		function applyActiveSession(session) {
 			if (!session) return;
 			activeSessionId = session.id || activeSessionId;
 			root.dataset.activeSessionId = activeSessionId;
-			if (sessionTitle) sessionTitle.textContent = session.title || "Shelley";
+			const nextTitle = (session.title || "").trim();
+			if (sessionTitle) {
+				sessionTitle.textContent = nextTitle;
+				sessionTitle.classList.toggle("hidden", !nextTitle);
+			}
+			if (brandTitle) brandTitle.classList.toggle("hidden", !!nextTitle);
 			if (sessionStatus) {
 				sessionStatus.textContent = (session.status || "idle").trim() || "idle";
 				sessionStatus.className = statusBadgeClass(session.status) + " hidden sm:inline-flex";
 			}
 			if (sessionModel) sessionModel.textContent = session.model || "default";
+			if (headerSessionModel) headerSessionModel.textContent = session.model || "default";
 			if (sessionDir) sessionDir.value = session.cwd || ".";
+			syncPreviewURL(activeSessionId);
 			if (abortButton) abortButton.classList.remove("hidden");
+			scheduleSessionCostPolling();
 			setBusy(false);
 		}
 
@@ -261,6 +590,40 @@ templ Page(state PageState) {
 			if (!response.ok) return null;
 			const data = await response.json();
 			return data && data.session ? data.session : null;
+		}
+
+		async function deleteSessionByID(sessionId) {
+			if (!sessionId) return;
+			clearVisibleError();
+			const response = await workerFetch(`/agent/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+			if (!response.ok) {
+				showVisibleError(await readErrorDetail(response));
+				return;
+			}
+			const sessions = await fetchSessions().catch(() => []);
+			renderSessions(sessions);
+			if (sessionId !== activeSessionId) return;
+			if (sessions.length > 0) {
+				window.location.href = `/agent?session=${encodeURIComponent(sessions[0].id)}`;
+				return;
+			}
+			window.location.href = "/agent";
+		}
+
+		async function fetchHistory(sessionId, before, limit) {
+			if (!sessionId) return { items: [], hasMore: false, nextBefore: 0, lastSeq: 0 };
+			const qs = new URLSearchParams({ limit: String(limit || 10) });
+			if (before) qs.set("before", String(before));
+			const response = await workerFetch(`/agent/sessions/${sessionId}/history?${qs.toString()}`, { method: "GET" });
+			if (!response.ok) throw new Error(`history ${response.status}`);
+			return response.json();
+		}
+
+		function sessionHistory(sessionId) {
+			if (!historyState[sessionId]) {
+				historyState[sessionId] = { nextBefore: 0, hasMore: true, loading: false, loaded: false };
+			}
+			return historyState[sessionId];
 		}
 
 		async function bootstrapSession() {
@@ -290,6 +653,15 @@ templ Page(state PageState) {
 			}
 			applyActiveSession(active);
 			renderSessions(sessions);
+			setChatState("conversation");
+			clearConversation();
+			const state = sessionHistory(activeSessionId);
+			const loadedLatest = await loadLatestPreview(activeSessionId);
+			state.loaded = loadedLatest;
+			state.nextBefore = loadedLatest ? (Number(lastEventIds[activeSessionId]) || 0) : 0;
+			state.hasMore = true;
+			state.loading = false;
+			renderHistoryControls(activeSessionId);
 			return true;
 		}
 
@@ -307,6 +679,7 @@ templ Page(state PageState) {
 		function scrollFeed() {
 			if (!feed) return;
 			feed.scrollTop = feed.scrollHeight;
+			lastFeedScrollTop = feed.scrollTop;
 		}
 
 		function appendNode(node) {
@@ -316,22 +689,75 @@ templ Page(state PageState) {
 			scrollFeed();
 		}
 
+		function appendNodeBeforeActiveResponse(node) {
+			if (!conversationMessages) return;
+			setChatState("conversation");
+			const anchor = (currentAssistantBubble && currentAssistantBubble.wrapper && currentAssistantBubble.wrapper.parentNode)
+				? currentAssistantBubble.wrapper
+				: ((currentThinkingBubble && currentThinkingBubble.parentNode) ? currentThinkingBubble : null);
+			if (anchor) {
+				conversationMessages.insertBefore(node, anchor);
+			} else {
+				conversationMessages.appendChild(node);
+			}
+			scrollFeed();
+		}
+
+		function clearConversation() {
+			if (conversationMessages) conversationMessages.innerHTML = "";
+			currentAssistantBubble = null;
+			currentThinkingBubble = null;
+			turnPhase = "idle";
+			clearVisibleError();
+			hideStatusBanner();
+		}
+
 		function makeChat(role, text) {
 			const wrapper = document.createElement("div");
 			wrapper.className = `chat ${role === "user" ? "chat-end" : "chat-start"}`;
 			const bubble = document.createElement("div");
-			bubble.className = `chat-bubble agent-glass-panel agent-raised max-w-[78ch] whitespace-pre-wrap border agent-shell-border text-base-content ${role === "user" ? "chat-bubble-primary border-primary/25 text-primary-content" : ""}`.trim();
+			bubble.className = `chat-bubble agent-glass-panel agent-raised max-w-[85vw] sm:max-w-[78ch] whitespace-pre-wrap border agent-shell-border text-[0.84rem] sm:text-[0.92rem] text-base-content ${role === "user" ? "chat-bubble-primary border-primary/25 text-primary-content" : ""}`.trim();
 			if (role === "user") {
 				bubble.style.background = "color-mix(in oklab, var(--color-primary) 78%, transparent)";
 			}
-			bubble.style.fontFamily = "var(--pi-font-code-family, 'JetBrains Mono', monospace)";
-			bubble.style.lineHeight = "1.7";
+			bubble.style.fontFamily = "var(--pi-font-body-family, Inter, system-ui, sans-serif)";
+			bubble.style.lineHeight = "1.55";
+			bubble.style.padding = "0.6rem 0.75rem";
 			bubble.textContent = text || "";
 			wrapper.appendChild(bubble);
 			return { wrapper, bubble };
 		}
 
-		function appendTool(payload) {
+		function renderQueuedMessage() {
+			if (!queuedMessagePanel) return;
+			queuedMessagePanel.classList.toggle("hidden", !queuedMessagePending || !queuedMessageText);
+			if (queuedMessageTextNode) queuedMessageTextNode.textContent = queuedMessageText || "";
+		}
+
+		function setQueuedMessage(text, stateText, badgeText) {
+			queuedMessagePending = true;
+			queuedMessageText = String(text || "").trim();
+			if (queuedMessageState) queuedMessageState.textContent = stateText || "Se enviará al terminar la respuesta actual";
+			if (queuedMessageBadge) queuedMessageBadge.textContent = badgeText || "En cola";
+			renderQueuedMessage();
+		}
+
+		function clearQueuedMessage() {
+			queuedMessagePending = false;
+			queuedMessageText = "";
+			if (queuedMessageState) queuedMessageState.textContent = "Se enviará al terminar la respuesta actual";
+			if (queuedMessageBadge) queuedMessageBadge.textContent = "En cola";
+			renderQueuedMessage();
+		}
+
+		function flushQueuedMessageToFeed() {
+			if (!queuedMessagePending || !queuedMessageText) return;
+			const userChat = makeChat("user", queuedMessageText);
+			appendNode(userChat.wrapper);
+			clearQueuedMessage();
+		}
+
+		function makeTool(payload) {
 			const card = document.createElement("div");
 			card.className = "agent-glass-panel agent-raised card card-border shadow-none";
 			const body = document.createElement("div");
@@ -345,18 +771,369 @@ templ Page(state PageState) {
 				body.appendChild(pre);
 			}
 			card.appendChild(body);
-			appendNode(card);
+			return card;
 		}
 
-		function appendError(message) {
+		function appendTool(payload) {
+			appendNodeBeforeActiveResponse(makeTool(payload));
+		}
+
+		function makeError(message) {
 			const wrapper = document.createElement("div");
 			wrapper.className = "chat chat-start";
+			wrapper.dataset.chatKind = "error";
 			const bubble = document.createElement("div");
-			bubble.className = "chat-bubble agent-glass-panel agent-raised border border-error/40 bg-error/15 text-base-content whitespace-pre-wrap max-w-[78ch]";
-			bubble.style.fontFamily = "var(--pi-font-code-family, 'JetBrains Mono', monospace)";
+			bubble.className = "chat-bubble chat-bubble-error agent-glass-panel agent-raised border border-error/40 bg-error/15 text-[0.84rem] sm:text-[0.92rem] text-base-content whitespace-pre-wrap max-w-[85vw] sm:max-w-[78ch]";
+			bubble.style.fontFamily = "var(--pi-font-body-family, Inter, system-ui, sans-serif)";
+			bubble.style.padding = "0.6rem 0.75rem";
 			bubble.textContent = message || "Error";
 			wrapper.appendChild(bubble);
-			appendNode(wrapper);
+			return wrapper;
+		}
+
+		function normalizeErrorMessage(message, fallback) {
+			const text = String(message || "").trim();
+			if (!text) return fallback || "Ocurrió un error.";
+			const normalized = text.replace(/^error:\s*/i, "").replace(/\s+/g, " ");
+			if (/insufficient_credits|payment required|créditos insuficientes|\b402\b/i.test(normalized)) {
+				return "Créditos insuficientes en el proveedor/modelo configurado.";
+			}
+			return normalized;
+		}
+
+		function showVisibleError(message) {
+			const text = normalizeErrorMessage(message, "Ocurrió un error.");
+			lastVisibleError = text;
+			if (errorText) errorText.textContent = text;
+			if (errorBanner) errorBanner.classList.remove("hidden");
+		}
+
+		function clearVisibleError() {
+			lastVisibleError = "";
+			if (errorBanner) errorBanner.classList.add("hidden");
+		}
+
+		function clearPendingError() {
+			if (pendingErrorTimer) {
+				clearTimeout(pendingErrorTimer);
+				pendingErrorTimer = null;
+			}
+			pendingTerminalError = "";
+		}
+
+		function clearTurnErrorState() {
+			clearPendingError();
+			clearVisibleError();
+			dropRecentGenericErrorBubbles();
+		}
+
+		function showStatusBanner(message, options) {
+			if (statusText) statusText.textContent = message || "Reconectando…";
+			if (statusBanner) statusBanner.classList.remove("hidden");
+			const opts = options || {};
+			if (statusContinue) statusContinue.classList.toggle("hidden", !opts.showContinue);
+			if (statusRetry) statusRetry.classList.toggle("hidden", !opts.showRetry);
+		}
+
+		function hideStatusBanner() {
+			if (statusBanner) statusBanner.classList.add("hidden");
+			if (statusContinue) statusContinue.classList.add("hidden");
+			if (statusRetry) statusRetry.classList.add("hidden");
+		}
+
+		function turnPhaseMessage(phase) {
+			switch (phase) {
+				case "thinking":
+					return queuedMessagePending ? "Analizando… · mensaje en cola" : "Analizando…";
+				case "tooling":
+					return queuedMessagePending ? "Ejecutando herramientas… · mensaje en cola" : "Ejecutando herramientas…";
+				case "answering":
+					return queuedMessagePending ? "Redactando respuesta… · mensaje en cola" : "Redactando respuesta…";
+				case "recovering":
+					return queuedMessagePending ? "Recuperando respuesta… · mensaje en cola" : "Recuperando respuesta…";
+				default:
+					return queuedMessagePending ? "Mensaje en cola…" : "";
+			}
+		}
+
+		function renderTurnPhase() {
+			if (!turnIsOpen || turnPhase === "idle") {
+				hideStatusBanner();
+				return;
+			}
+			if ((root.dataset.connectionState || "") !== "connected") return;
+			showStatusBanner(turnPhaseMessage(turnPhase), { showContinue: false, showRetry: false });
+		}
+
+		function setTurnPhase(phase) {
+			turnPhase = phase || "idle";
+			renderTurnPhase();
+		}
+
+		function noteTurnActivity() {
+			lastTurnActivityAt = Date.now();
+		}
+
+		function stopTurnWatchdog() {
+			if (!turnWatchdogTimer) return;
+			clearInterval(turnWatchdogTimer);
+			turnWatchdogTimer = null;
+		}
+
+		function startTurnWatchdog() {
+			stopTurnWatchdog();
+			noteTurnActivity();
+			turnWatchdogTimer = setInterval(() => {
+				if (!turnIsOpen) return;
+				if (!lastTurnActivityAt) return;
+				if (Date.now() - lastTurnActivityAt < 10000) return;
+				showStatusBanner("La respuesta se interrumpió. Intentando reconectar…", { showContinue: true, showRetry: !!lastUserPrompt });
+				setConnectionState("reconnecting");
+			}, 2000);
+		}
+
+		function appendErrorNow(message, source) {
+			const text = normalizeErrorMessage(message, "Ocurrió un error.");
+			console.warn("[agent] appendError:", source || "unknown", text);
+			appendNode(makeError(text));
+			showVisibleError(text);
+		}
+
+		function appendError(message, source, options) {
+			const opts = options || {};
+			const delayMs = Number(opts.delayMs) || 0;
+			clearPendingError();
+			if (delayMs <= 0) {
+				appendErrorNow(message, source);
+				return;
+			}
+			pendingErrorTimer = setTimeout(() => {
+				pendingErrorTimer = null;
+				appendErrorNow(message, (source || "unknown") + ".delayed");
+			}, delayMs);
+		}
+
+		function isAlreadyProcessingError(message) {
+			const text = String(message || "").trim().toLowerCase();
+			if (!text) return false;
+			return text.includes("agent is already processing") ||
+				text.includes("streamingbehavior") ||
+				text.includes("followup") ||
+				text.includes("already processing");
+		}
+
+		async function recoverBusyTurn(detail) {
+			hideThinking("runtime busy; recovering turn");
+			clearVisibleError();
+			turnIsOpen = true;
+			setTurnPhase("recovering");
+			showStatusBanner("El agente sigue procesando. Intentando recuperar la respuesta…", { showContinue: true, showRetry: !!lastUserPrompt });
+			try {
+				await connectStream(activeSessionId);
+			} catch (_) {
+				// ignore: el banner ya quedó visible y el watchdog volverá a intentar.
+			}
+			refreshConversationFromHistory(activeSessionId);
+		}
+
+		function dropRecentGenericErrorBubbles() {
+			if (!conversationMessages) return;
+			const nodes = Array.from(conversationMessages.children);
+			for (let i = nodes.length - 1; i >= 0; i--) {
+				const node = nodes[i];
+				if (!(node instanceof HTMLElement)) continue;
+				if (node.dataset.chatKind !== "error") break;
+				const text = String(node.textContent || "").trim();
+				if (!isGenericHistoryError(text)) break;
+				node.remove();
+			}
+		}
+
+		async function readErrorDetail(response) {
+			let detail = `${response.status} ${response.statusText}`.trim();
+			const contentType = (response.headers.get("content-type") || "").toLowerCase();
+			try {
+				if (contentType.includes("application/json")) {
+					const body = await response.json();
+					const candidate = body && (body.detail || body.message || body.error);
+					if (candidate) return normalizeErrorMessage(candidate, detail);
+				}
+				const text = await response.text();
+				if (text && text.trim()) return normalizeErrorMessage(text, detail);
+			} catch (_) {
+				// ignore
+			}
+			return normalizeErrorMessage(detail, "Ocurrió un error.");
+		}
+
+		function renderHistoryControls(sessionId) {
+			if (!loadOlderButton) return;
+			const state = sessionHistory(sessionId || activeSessionId);
+			loadOlderButton.classList.toggle("hidden", !!state.loaded && !state.hasMore);
+			loadOlderButton.disabled = !!state.loading;
+			if (state.loading) {
+				loadOlderButton.textContent = "Cargando…";
+			} else if (!state.loaded) {
+				loadOlderButton.textContent = "Cargar conversación";
+			} else {
+				loadOlderButton.textContent = "Cargar mensajes anteriores";
+			}
+		}
+
+		function isGenericHistoryError(text) {
+			const normalized = normalizeErrorMessage(text || "", "").toLowerCase();
+			if (!normalized) return true;
+			return normalized === "ocurrió un error." || normalized === "runtime error" || normalized === "500 \"internal_error\"";
+		}
+
+		function sanitizeHistoryItems(items) {
+			if (!Array.isArray(items) || items.length === 0) return [];
+			return items.filter((item, index) => {
+				if (!item || item.kind !== "error") return true;
+				if (!isGenericHistoryError(item.text || "")) return true;
+				for (let i = index + 1; i < items.length; i++) {
+					if (items[i] && items[i].kind === "assistant" && String(items[i].text || "").trim() !== "") {
+						return false;
+					}
+				}
+				return true;
+			});
+		}
+
+		function makeHistoryNode(item) {
+			switch ((item && item.kind) || "") {
+				case "tool": {
+					let args = item.args;
+					if (typeof args === "string") {
+						try { args = JSON.parse(args); } catch (_) { /* ignore */ }
+					}
+					return makeTool({ toolName: item.toolName, args });
+				}
+				case "error":
+					return makeError(item.text || "Error");
+				case "user":
+					return makeChat("user", item.text || "").wrapper;
+				default:
+					return makeChat("assistant", item.text || "").wrapper;
+			}
+		}
+
+		function prependHistory(items) {
+			items = sanitizeHistoryItems(items);
+			if (!conversationMessages || !Array.isArray(items) || items.length === 0) return;
+			const previousHeight = feed ? feed.scrollHeight : 0;
+			const frag = document.createDocumentFragment();
+			for (const item of items) frag.appendChild(makeHistoryNode(item));
+			conversationMessages.prepend(frag);
+			if (feed) {
+				feed.scrollTop += feed.scrollHeight - previousHeight;
+				lastFeedScrollTop = feed.scrollTop;
+			}
+		}
+
+		function renderInitialHistory(items) {
+			clearConversation();
+			items = sanitizeHistoryItems(items);
+			if (!Array.isArray(items) || items.length === 0) return;
+			setChatState("conversation");
+			const frag = document.createDocumentFragment();
+			for (const item of items) frag.appendChild(makeHistoryNode(item));
+			conversationMessages.appendChild(frag);
+			scrollFeed();
+		}
+
+		function renderSessionPreview(session) {
+			if (!session) return false;
+			const text = String(session.lastPreview || "").trim();
+			if (!text) return false;
+			renderInitialHistory([{ kind: session.lastPreviewKind || "assistant", text }]);
+			lastEventIds[session.id] = Number(session.lastSeq) || 0;
+			return true;
+		}
+
+		async function loadLatestPreview(sessionId) {
+			if (!sessionId) return false;
+			try {
+				const data = await fetchHistory(sessionId, 0, 1);
+				const items = Array.isArray(data && data.items) ? data.items : [];
+				if (items.length === 0) return false;
+				renderInitialHistory(items);
+				lastEventIds[sessionId] = Number(data && data.lastSeq) || 0;
+				return true;
+			} catch (err) {
+				console.warn("agent: no pude cargar último mensaje", err);
+				return false;
+			}
+		}
+
+		async function refreshConversationFromHistory(sessionId) {
+			if (!sessionId) return false;
+			try {
+				const data = await fetchHistory(sessionId, 0, 2);
+				const items = Array.isArray(data && data.items) ? data.items : [];
+				if (items.length === 0) return false;
+				renderInitialHistory(items);
+				lastEventIds[sessionId] = Number(data && data.lastSeq) || 0;
+				return true;
+			} catch (err) {
+				console.warn("agent: no pude refrescar historia reciente", err);
+				return false;
+			}
+		}
+
+		async function sealAssistantResponseFromHistory(sessionId) {
+			if (!sessionId) return false;
+			try {
+				const data = await fetchHistory(sessionId, 0, 4);
+				const items = Array.isArray(data && data.items) ? data.items : [];
+				let lastAssistant = null;
+				for (let i = items.length - 1; i >= 0; i--) {
+					if (items[i] && items[i].kind === "assistant" && String(items[i].text || "").trim() !== "") {
+						lastAssistant = items[i];
+						break;
+					}
+				}
+				if (!lastAssistant) return false;
+				const sealed = String(lastAssistant.text || "");
+				if (!sealed.trim()) return false;
+				if (currentAssistantBubble && currentAssistantBubble.bubble) {
+					currentAssistantBubble.bubble.textContent = sealed;
+					scrollFeed();
+					return true;
+				}
+				return false;
+			} catch (err) {
+				console.warn("agent: no pude sellar respuesta final desde history", err);
+				return false;
+			}
+		}
+
+		async function loadOlderHistory() {
+			if (!activeSessionId) return;
+			const state = sessionHistory(activeSessionId);
+			if (state.loading) return;
+			if (!state.nextBefore) return;
+			if (state.loaded && !state.hasMore) return;
+			state.loading = true;
+			renderHistoryControls(activeSessionId);
+			try {
+				const data = await fetchHistory(activeSessionId, state.nextBefore, 10);
+				prependHistory(data && data.items);
+				lastEventIds[activeSessionId] = Number(data && data.lastSeq) || lastEventIds[activeSessionId] || 0;
+				state.loaded = true;
+				state.nextBefore = Number(data && data.nextBefore) || 0;
+				state.hasMore = !!(data && data.hasMore && state.nextBefore);
+			} catch (err) {
+				console.warn("agent: no pude cargar mensajes anteriores", err);
+			} finally {
+				state.loading = false;
+				renderHistoryControls(activeSessionId);
+			}
+		}
+
+		function maybeAutoLoadOlder() {
+			if (!feed || feed.scrollTop > 80) return;
+			loadOlderHistory();
 		}
 
 		// Burbuja de "generando respuesta": tres puntos animados en
@@ -417,6 +1194,11 @@ templ Page(state PageState) {
 			}
 			indicator.textContent = state === "connected" ? "live" : (state === "reconnecting" ? "reconectando…" : "desconectado");
 			indicator.classList.toggle("text-error/70", state !== "connected");
+			if (state === "connected") {
+				renderTurnPhase();
+			} else if (turnIsOpen) {
+				showStatusBanner(state === "reconnecting" ? "Reconectando la respuesta…" : "Conexión interrumpida", { showContinue: true, showRetry: !!lastUserPrompt });
+			}
 		}
 
 		async function connectStream(sessionId) {
@@ -443,9 +1225,15 @@ templ Page(state PageState) {
 					if (lastId) headers["Last-Event-ID"] = String(lastId);
 					// ?resume=N es un fallback para proxies que filtran
 					// el header Last-Event-ID (BFF no debería, pero por
-					// las dudas).
+					// las dudas). Si todavía no tenemos un lastId,
+					// arrancamos en `live` para NO replayear backlog:
+					// el historial visible lo carga /history.
 					let url = `/agent/sessions/${sessionId}/events`;
-					if (lastId) url += `?resume=${encodeURIComponent(String(lastId))}`;
+					if (lastId) {
+						url += `?resume=${encodeURIComponent(String(lastId))}`;
+					} else {
+						url += `?resume=live`;
+					}
 					response = await fetch(url, {
 						headers,
 						signal: controller.signal,
@@ -533,7 +1321,7 @@ templ Page(state PageState) {
 						}
 						if (line.startsWith("data:")) {
 							const data = line.slice(5).trim();
-							handleStreamPayload(currentEvent, data);
+							void handleStreamPayload(currentEvent, data);
 						}
 					}
 				}
@@ -544,7 +1332,7 @@ templ Page(state PageState) {
 			}
 		}
 
-		function handleStreamPayload(eventName, rawData) {
+		async function handleStreamPayload(eventName, rawData) {
 			if (eventName !== "pi") return;
 			let envelope;
 			try {
@@ -556,7 +1344,21 @@ templ Page(state PageState) {
 			const payload = envelope.payload || {};
 			console.log("[agent] SSE event:", envelope.type, eventName === "pi" ? "" : "(evento " + eventName + ")");
 			switch (envelope.type) {
-				case "message_start":
+				case "message_start": {
+					turnIsOpen = true;
+					setTurnPhase("thinking");
+					noteTurnActivity();
+					const message = payload && payload.message ? payload.message : null;
+					const assistantStopError = message && message.role === "assistant" ? normalizeErrorMessage(message.errorMessage || "", "") : "";
+					if (assistantStopError) {
+						pendingPromptNeedsHistoryFallback = false;
+						pendingTerminalError = assistantStopError;
+						console.warn("[agent] deferError:", "message_start.assistant_error", assistantStopError);
+						break;
+					}
+					// Cualquier progreso normal invalida un error efímero
+					// previamente diferido para este turno.
+					clearTurnErrorState();
 					// El modelo está por arrancar (otro) sub-message del
 					// turno. NO creamos la burbuja del asistente acá: la
 					// burbuja nace con el primer `text_delta`. Si los dots
@@ -570,11 +1372,19 @@ templ Page(state PageState) {
 						console.log("[agent] message_start (dots siguen)");
 					}
 					break;
+				}
 				case "message_update":
+					if (payload.assistantMessageEvent) {
+						noteTurnActivity();
+						clearTurnErrorState();
+					}
 					if (payload.assistantMessageEvent && payload.assistantMessageEvent.type === "text_delta") {
+						pendingPromptNeedsHistoryFallback = false;
+						turnHasVisibleAssistantText = true;
+						setTurnPhase("answering");
 						if (!currentAssistantBubble) {
 							currentAssistantBubble = makeChat("assistant", "");
-							appendNode(currentAssistantBubble.wrapper);
+							appendNodeBeforeActiveResponse(currentAssistantBubble.wrapper);
 						}
 						// El texto empieza a llegar, pero no ocultamos los
 						// dots: persisten mientras la respuesta completa
@@ -584,34 +1394,115 @@ templ Page(state PageState) {
 					}
 					break;
 				case "message_end":
-					// Turno cerrado → la respuesta ya está renderizada.
-					// Recién acá ocultamos los dots.
-					hideThinking("message_end (respuesta renderizada)");
-					currentAssistantBubble = null;
+					// message_end cierra un sub-bloque del provider, no
+					// necesariamente la respuesta visible completa. Para UX,
+					// dejamos los dots hasta turn_end/agent_end.
+					console.log("[agent] message_end (sub-bloque; thinking sigue)");
 					break;
 				case "tool_execution_start":
-					// El asistente arrancó a ejecutar una herramienta,
-					// todavía no respondió. Mantenemos los dots.
+					// El asistente arrancó a ejecutar una herramienta.
+					// Si ya empezó a emitir texto visible para este turno,
+					// tratamos el tooling tardío como anomalía UX y no lo
+					// mostramos como parte normal del flujo.
+					pendingPromptNeedsHistoryFallback = false;
+					noteTurnActivity();
+					clearTurnErrorState();
+					if (turnHasVisibleAssistantText) {
+						console.warn("[agent] late tool_execution_start ignored after text_delta", payload);
+						setTurnPhase("answering");
+						break;
+					}
+					setTurnPhase("tooling");
 					console.log("[agent] tool_execution_start (dots siguen)");
 					appendTool(payload);
 					break;
 				case "runtime_error":
 				case "stderr": {
-					hideThinking(envelope.type);
-					const msg = makeChat("assistant", (payload && payload.message) || "runtime error");
-					msg.bubble.classList.add("chat-bubble-error", "border-error/30");
-					appendNode(msg.wrapper);
+					pendingPromptNeedsHistoryFallback = false;
+					noteTurnActivity();
+					const detail = normalizeErrorMessage(payload && payload.message, envelope.type === "stderr" ? "El agente reportó un error." : "Runtime error");
+					pendingTerminalError = detail;
+					console.warn("[agent] deferError:", envelope.type, detail);
 					break;
 				}
-				case "runtime_exit":
-					// El proceso pi murió (timeout, crash). Lo decimos al
-					// usuario para que sepa que el próximo prompt
-					// intentará respawnear.
-					hideThinking("runtime_exit");
-					appendError(`Sesión del agente finalizada: ${(payload && payload.reason) || payload && payload.message || ""}`);
+				case "turn_end":
+				case "agent_end":
+					// Fin real del turno para la UI: recién acá apagamos los
+					// dots, no en message_end. Antes de soltar la referencia
+					// local, sellamos la respuesta desde history para evitar
+					// quedar con un texto visual truncado si faltó algún delta.
+					await sealAssistantResponseFromHistory(activeSessionId);
+					hideThinking(envelope.type);
 					currentAssistantBubble = null;
+					setBusy(false);
+					refreshSessionCost();
+					if (!turnHasVisibleAssistantText && pendingTerminalError) {
+						appendErrorNow(pendingTerminalError, envelope.type + ".final");
+					}
+					if (queuedMessagePending) {
+						flushQueuedMessageToFeed();
+					}
+					turnIsOpen = false;
+					setTurnPhase("idle");
+					stopTurnWatchdog();
+					pendingTerminalError = "";
+					break;
+				case "runtime_exit":
+					// El proceso pi murió (timeout, crash). Si ya hubo texto
+					// visible, no ensuciamos la UX con un error tardío.
+					pendingPromptNeedsHistoryFallback = false;
+					hideThinking("runtime_exit");
+					currentAssistantBubble = null;
+					setBusy(false);
+					refreshSessionCost();
+					if (!turnHasVisibleAssistantText) {
+						appendErrorNow(`Sesión del agente finalizada: ${(payload && payload.reason) || payload && payload.message || ""}`, "runtime_exit");
+					}
+					turnIsOpen = false;
+					setTurnPhase("idle");
+					stopTurnWatchdog();
+					pendingTerminalError = "";
 					break;
 			}
+		}
+
+		async function buildDebugSnapshot() {
+			const sessionId = activeSessionId || "";
+			let history = null;
+			let historyError = "";
+			if (sessionId) {
+				try {
+					const response = await workerFetch(`/agent/sessions/${sessionId}/history?limit=10`, { method: "GET" });
+					if (!response.ok) throw new Error(`history ${response.status}`);
+					history = await response.json();
+				} catch (err) {
+					historyError = String(err && err.message ? err.message : err);
+				}
+			}
+			return {
+				timestamp: new Date().toISOString(),
+				location: window.location.href,
+				sessionId,
+				connectionState: root.dataset.connectionState || "",
+				chatState: root.dataset.chatState || "",
+				turnIsOpen,
+				turnPhase,
+				turnHasVisibleAssistantText,
+				pendingTerminalError,
+				lastVisibleError,
+				lastUserPrompt,
+				lastEventId: sessionId ? (lastEventIds[sessionId] || 0) : 0,
+				historyState: sessionId ? (historyState[sessionId] || null) : null,
+				messageCount: conversationMessages ? conversationMessages.children.length : 0,
+				historyError,
+				history,
+			};
+		}
+
+		async function refreshDebugOutput() {
+			if (!debugOutput) return;
+			const snapshot = await buildDebugSnapshot();
+			debugOutput.textContent = JSON.stringify(snapshot, null, 2);
 		}
 
 		function setBusy(busy) {
@@ -619,27 +1510,48 @@ templ Page(state PageState) {
 			if (emptyPromptInput) emptyPromptInput.disabled = busy;
 		}
 
-		async function sendPrompt(message) {
+		function isRecoveryAwareMode() {
+			if (turnIsOpen) return true;
+			if (turnPhase === "recovering") return true;
+			if (statusBanner && !statusBanner.classList.contains("hidden")) return true;
+			if (statusContinue && !statusContinue.classList.contains("hidden")) return true;
+			return false;
+		}
+
+		async function sendPrompt(message, options) {
 			if (!activeSessionId || !message) return;
-			const userChat = makeChat("user", message);
-			appendNode(userChat.wrapper);
+			const opts = Object.assign({ action: "", appendUserMessage: true }, options || {});
+			pendingPromptNeedsHistoryFallback = true;
+			turnIsOpen = true;
+			setTurnPhase("thinking");
+			if (!opts.action) {
+				lastUserPrompt = message;
+			}
+			turnHasVisibleAssistantText = false;
+			clearPendingError();
+			clearVisibleError();
+			if (opts.appendUserMessage) {
+				const userChat = makeChat("user", message);
+				appendNode(userChat.wrapper);
+			}
 			setBusy(true);
 			showThinking();
+			startTurnWatchdog();
 			try {
-				let response = await postPrompt(message, false);
+				let response = await postPrompt(message, opts.action, false);
 				// Si el worker nos rechazó con 401, asumimos que el JWT
 				// embebido venció. Forzamos refresh y reintentamos una vez.
 				if (response.status === 401) {
-					response = await postPrompt(message, true);
+					response = await postPrompt(message, opts.action, true);
 				}
 				if (!response.ok) {
-					let detail = `${response.status} ${response.statusText}`;
-					try {
-						const errBody = await response.json();
-						if (errBody && errBody.detail) detail += `: ${errBody.detail}`;
-					} catch (_) { /* ignore */ }
+					const detail = await readErrorDetail(response);
+					if (isAlreadyProcessingError(detail)) {
+						await recoverBusyTurn(detail);
+						return;
+					}
 					hideThinking("POST no OK (" + response.status + ")");
-					appendError(`No pude enviar el mensaje (${detail}). Reintentá o revisá la conexión.`);
+					appendError(`No pude enviar el mensaje: ${detail}`, "prompt.post_not_ok");
 					// Si el server mató la runtime, forzamos reconexión SSE
 					// para que el siguiente prompt dispare un respawn limpio.
 					if (response.status >= 500) {
@@ -648,43 +1560,159 @@ templ Page(state PageState) {
 				}
 			} catch (err) {
 				hideThinking("error de red en POST");
-				appendError(`Error de red al enviar el mensaje: ${err && err.message ? err.message : err}`);
+				appendError(`Error de red al enviar el mensaje: ${err && err.message ? err.message : err}`, "prompt.network_error");
 				connectStream(activeSessionId);
 			} finally {
 				setBusy(false);
+				setTimeout(() => {
+					refreshSessionCost();
+					// Fallback sólo si el SSE no mostró nada Y tampoco hay
+					// thinking visible. Si no, clearConversation() del
+					// renderInitialHistory barre los dots antes de tiempo.
+					if (pendingPromptNeedsHistoryFallback && !currentAssistantBubble && !currentThinkingBubble && !lastVisibleError) {
+						pendingPromptNeedsHistoryFallback = false;
+						refreshConversationFromHistory(activeSessionId);
+					}
+				}, 1200);
 			}
 		}
 
-		async function postPrompt(message, forceRefresh) {
+		async function postPrompt(message, action, forceRefresh) {
 			await getAuthToken(forceRefresh);
 			const headers = await authHeaders();
+			const body = { message };
+			if (action) body.action = action;
 			return fetch(`/agent/sessions/${activeSessionId}/prompt`, {
 				method: "POST",
 				headers,
-				body: JSON.stringify({ message }),
+				body: JSON.stringify(body),
 			});
+		}
+
+		async function createSessionFromForm() {
+			if (!createForm) return;
+			clearVisibleError();
+			const body = Object.fromEntries(new FormData(createForm).entries());
+			const response = await workerFetch("/agent/sessions", {
+				method: "POST",
+				body: JSON.stringify(body),
+			});
+			if (!response.ok) {
+				showVisibleError(await readErrorDetail(response));
+				return;
+			}
+			const data = await response.json();
+			if (data.session && data.session.id) {
+				closeSidebarOnMobile();
+				window.location.href = `/agent?session=${data.session.id}`;
+				return;
+			}
+			showVisibleError("No se pudo crear la sesión.");
 		}
 
 		if (createForm) {
 			createForm.addEventListener("submit", async (e) => {
 				e.preventDefault();
-				const body = Object.fromEntries(new FormData(createForm).entries());
-				const response = await workerFetch("/agent/sessions", {
-					method: "POST",
-					body: JSON.stringify(body),
-				});
-				if (!response.ok) return;
-				const data = await response.json();
-				if (data.session && data.session.id) {
-					window.location.href = `/agent?session=${data.session.id}`;
-				}
+				await createSessionFromForm();
 			});
 		}
 
 		if (headerNewChat) {
-			headerNewChat.addEventListener("click", () => {
-				if (createForm) createForm.requestSubmit();
+			headerNewChat.addEventListener("click", async () => {
+				closeSidebarOnMobile();
+				await createSessionFromForm();
 			});
+		}
+
+		if (sessionsList) {
+			sessionsList.addEventListener("click", async (e) => {
+				const target = e.target;
+				if (!(target instanceof Element)) return;
+				const deleteButton = target.closest("button[data-session-delete]");
+				if (deleteButton instanceof HTMLButtonElement) {
+					e.preventDefault();
+					e.stopPropagation();
+					const sessionId = deleteButton.dataset.sessionDelete || "";
+					if (!sessionId) return;
+					if (!window.confirm("¿Eliminar esta sesión y su workspace?")) return;
+					await deleteSessionByID(sessionId);
+					return;
+				}
+				if (!target.closest("a")) return;
+				closeSidebarOnMobile();
+			});
+		}
+
+		if (statusContinue) {
+			statusContinue.addEventListener("click", async () => {
+				setTurnPhase("recovering");
+				showStatusBanner("Intentando recuperar la respuesta…", { showContinue: false, showRetry: !!lastUserPrompt });
+				await connectStream(activeSessionId);
+				await sendPrompt("continua", { action: "resume", appendUserMessage: false });
+				refreshConversationFromHistory(activeSessionId);
+			});
+		}
+
+		if (statusRetry) {
+			statusRetry.addEventListener("click", async () => {
+				if (!lastUserPrompt) return;
+				showStatusBanner("Reintentando…", { showContinue: false, showRetry: false });
+				await sendPrompt(lastUserPrompt);
+			});
+		}
+
+		if (loadOlderButton) {
+			loadOlderButton.addEventListener("click", () => {
+				loadOlderHistory();
+			});
+		}
+
+		if (debugButton && debugModal) {
+			debugButton.addEventListener("click", async () => {
+				await refreshDebugOutput();
+				debugModal.showModal();
+			});
+		}
+		if (debugRefresh) {
+			debugRefresh.addEventListener("click", () => {
+				refreshDebugOutput();
+			});
+		}
+		if (debugCopy) {
+			debugCopy.addEventListener("click", async () => {
+				await refreshDebugOutput();
+				if (!debugOutput) return;
+				try {
+					await navigator.clipboard.writeText(debugOutput.textContent || "");
+					debugCopy.textContent = "Copiado";
+					setTimeout(() => { debugCopy.textContent = "Copiar diagnóstico"; }, 1200);
+				} catch (_) {
+					debugCopy.textContent = "No pude copiar";
+					setTimeout(() => { debugCopy.textContent = "Copiar diagnóstico"; }, 1200);
+				}
+			});
+		}
+
+		if (feed) {
+			feed.addEventListener("scroll", () => {
+				const currentTop = feed.scrollTop;
+				if (currentTop < lastFeedScrollTop) {
+					maybeAutoLoadOlder();
+				}
+				lastFeedScrollTop = currentTop;
+			}, { passive: true });
+			feed.addEventListener("touchstart", (e) => {
+				touchStartY = e.touches && e.touches[0] ? e.touches[0].clientY : null;
+			}, { passive: true });
+			feed.addEventListener("touchmove", (e) => {
+				const currentY = e.touches && e.touches[0] ? e.touches[0].clientY : null;
+				if (touchStartY != null && currentY != null && currentY > touchStartY) {
+					maybeAutoLoadOlder();
+				}
+			}, { passive: true });
+			feed.addEventListener("wheel", (e) => {
+				if (e.deltaY < 0) maybeAutoLoadOlder();
+			}, { passive: true });
 		}
 
 		// Enter envía; Shift+Enter inserta newline (UX estándar de
@@ -706,13 +1734,24 @@ templ Page(state PageState) {
 			});
 		}
 
+		async function submitChatMessage(message) {
+			if (!message) return;
+			if (isRecoveryAwareMode()) {
+				setQueuedMessage(message, "Se enviará al terminar la respuesta actual", "En cola");
+				showStatusBanner("Turno ocupado o recuperable. Tu mensaje quedó en cola y se enviará al terminar la respuesta actual…", { showContinue: !!(statusContinue && !statusContinue.classList.contains("hidden")), showRetry: !!lastUserPrompt });
+				await sendPrompt(message, { appendUserMessage: false });
+				return;
+			}
+			await sendPrompt(message);
+		}
+
 		if (emptyPromptForm && emptyPromptInput && activeSessionId) {
 			emptyPromptForm.addEventListener("submit", async (e) => {
 				e.preventDefault();
 				const message = emptyPromptInput.value.trim();
 				if (!message) return;
 				emptyPromptInput.value = "";
-				await sendPrompt(message);
+				await submitChatMessage(message);
 			});
 			wireEnterToSend(emptyPromptInput, emptyPromptForm);
 		}
@@ -723,7 +1762,7 @@ templ Page(state PageState) {
 				const message = promptInput.value.trim();
 				if (!message) return;
 				promptInput.value = "";
-				await sendPrompt(message);
+				await submitChatMessage(message);
 			});
 			wireEnterToSend(promptInput, promptForm);
 		}
@@ -744,6 +1783,135 @@ templ Page(state PageState) {
 			console.warn("agent: bootstrap failed", err);
 			appendError(`No pude inicializar la sesión del agente: ${err && err.message ? err.message : err}`);
 		});
+	})();
+	</script>
+	<script>
+	// Navigation drawer a11y + gestos (mejora progresiva sobre el
+	// componente drawer de DaisyUI). En desktop (>=1280px) el drawer
+	// es permanente (xl:drawer-open) y NO aplica el patrón modal; toda
+	// esta lógica solo corre en mobile/tablet, siguiendo el patrón
+	// dialog (modal) de WAI-ARIA APG y el navigation drawer de Material.
+	(() => {
+		const toggle = document.getElementById("agent-sidebar");
+		const panel = document.getElementById("agent-sidebar-panel");
+		const openBtn = document.getElementById("agent-sidebar-open");
+		const app = document.getElementById("agent-app");
+		if (!toggle || !panel || !app) return;
+
+		const content = app.querySelector(".drawer-content");
+		const mqDesktop = window.matchMedia("(min-width: 1280px)");
+		const isDesktop = () => mqDesktop.matches;
+		let lastFocused = null;
+
+		// Elementos enfocables visibles dentro del panel. offsetParent
+		// null = elemento oculto (display:none), lo descartamos.
+		function focusables() {
+			return Array.from(panel.querySelectorAll(
+				'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+			)).filter((el) => el.offsetParent !== null || el === document.activeElement);
+		}
+
+		// Sincroniza aria-expanded/aria-modal e inert del contenido de
+		// fondo. inert bloquea foco+eventos del fondo mientras el drawer
+		// modal está abierto (equivalente accesible al scrim).
+		function syncAria() {
+			const open = toggle.checked && !isDesktop();
+			if (openBtn) openBtn.setAttribute("aria-expanded", open ? "true" : "false");
+			panel.setAttribute("aria-modal", open ? "true" : "false");
+			if (content) {
+				if (open) content.setAttribute("inert", "");
+				else content.removeAttribute("inert");
+			}
+		}
+
+		function onOpen() {
+			if (isDesktop()) return;
+			lastFocused = document.activeElement;
+			syncAria();
+			const first = focusables()[0] || panel;
+			requestAnimationFrame(() => first.focus());
+		}
+
+		function onClose() {
+			syncAria();
+			if (!isDesktop() && lastFocused && typeof lastFocused.focus === "function") {
+				lastFocused.focus();
+			}
+			lastFocused = null;
+		}
+
+		toggle.addEventListener("change", () => {
+			if (toggle.checked) onOpen();
+			else onClose();
+		});
+
+		// Escape cierra el drawer en mobile.
+		document.addEventListener("keydown", (e) => {
+			if (e.key === "Escape" && toggle.checked && !isDesktop()) {
+				e.preventDefault();
+				toggle.checked = false;
+				onClose();
+			}
+		});
+
+		// Focus trap: Tab/Shift+Tab ciclan dentro del panel mientras
+		// está abierto en mobile.
+		panel.addEventListener("keydown", (e) => {
+			if (e.key !== "Tab") return;
+			if (!toggle.checked || isDesktop()) return;
+			const items = focusables();
+			if (items.length === 0) return;
+			const first = items[0];
+			const last = items[items.length - 1];
+			if (e.shiftKey && document.activeElement === first) {
+				e.preventDefault(); last.focus();
+			} else if (!e.shiftKey && document.activeElement === last) {
+				e.preventDefault(); first.focus();
+			}
+		});
+
+		// Mantener el estado aria coherente al cruzar el breakpoint
+		// (ej. rotar el device o redimensionar a desktop).
+		mqDesktop.addEventListener("change", syncAria);
+
+		// Gestos táctiles: swipe a la izquierda sobre el panel para
+		// cerrar; edge-swipe desde el borde izquierdo para abrir.
+		const SWIPE = 50;
+		let startX = 0, startY = 0, tracking = false;
+
+		panel.addEventListener("touchstart", (e) => {
+			if (isDesktop() || !toggle.checked) return;
+			const t = e.changedTouches[0];
+			startX = t.clientX; startY = t.clientY; tracking = true;
+		}, { passive: true });
+		panel.addEventListener("touchend", (e) => {
+			if (!tracking) return;
+			tracking = false;
+			const t = e.changedTouches[0];
+			const dx = t.clientX - startX, dy = t.clientY - startY;
+			if (dx < -SWIPE && Math.abs(dx) > Math.abs(dy)) {
+				toggle.checked = false;
+				onClose();
+			}
+		}, { passive: true });
+
+		document.addEventListener("touchstart", (e) => {
+			if (isDesktop() || toggle.checked) return;
+			const t = e.changedTouches[0];
+			if (t.clientX <= 20) { startX = t.clientX; startY = t.clientY; tracking = true; }
+		}, { passive: true });
+		document.addEventListener("touchend", (e) => {
+			if (!tracking || toggle.checked) return;
+			tracking = false;
+			const t = e.changedTouches[0];
+			const dx = t.clientX - startX, dy = t.clientY - startY;
+			if (dx > 60 && Math.abs(dx) > Math.abs(dy)) {
+				toggle.checked = true;
+				onOpen();
+			}
+		}, { passive: true });
+
+		syncAria();
 	})();
 	</script>
 }

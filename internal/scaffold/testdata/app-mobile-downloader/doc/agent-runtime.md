@@ -1,9 +1,47 @@
-# Runtime del agente pi en `app-mobile-downloader`
+# Runtime del agente pi en `scaffoldxd1`
 
 > Documento vivo para entender qué partes del módulo `internal/agent`
 > sobreviven a un fork del repo sin intervención y qué partes requieren
 > ajustes al migrar a otro proyecto (boilerplate). También cubre los
 > puntos pendientes para llegar a 12-factor compliance estricto.
+
+> **Nota 2026-07-08:** el modo activo del proyecto volvió a **app única**
+> en `cmd/api`. Las secciones sobre BFF / `cmd/agent-worker` /
+> `scripts/run-all.sh` quedan como **contexto histórico** de una etapa
+> anterior y no describen el flujo actual de dev.
+
+## 0. Pool de runtimes (cambio del 2026-07-03 — baja RAM drástica)
+
+**Antes**: cada chat usado mantenía 1 proceso `pi` vivo
+(`map[sessionID]Runtime` en `pkg/agent/application/manager.go`).
+Con N chats: N procesos.
+
+**Ahora**: pool de runtimes con cap configurable. Default
+`poolSize=1` vía `Manager.WithPoolSize(n)`. Cuando llega un
+prompt para una sesión que no tiene slot, se le hace lugar
+evictando al LRU (mata el `pi` viejo y respawnea con
+`--session=<nuevo>`). Ver `maybeEvictForNewSlot` y `pickLRU` en
+el manager.
+
+**Resultado**: `poolSize × RSS de pi` es el techo de RAM para
+el agente, no `sesiones × RSS de pi`.
+
+- Con 1 chat: 1 proceso (igual que antes).
+- Con 2+ chats: la sesión menos usada recientemente se mata y
+  su próxima iteración respawnea (~1–2 s).
+
+**Tests**: `TestManagerPool_DefaultSizeIsOne`,
+`TestManagerPool_SizeAllowsConcurrency`,
+`TestManagerPool_ReusesSameSessionSlot`,
+`TestManagerPool_LRUEvictsOldest`.
+
+Si querés switch en caliente sin matar el proceso, está
+disponible el RPC `switch_session` en pi (verificado en
+`node_modules/@mariozechner/pi-coding-agent/dist/modes/rpc/rpc-types.d.ts`).
+El approach actual (respawn) es más simple y evita el
+`cancelled: true` que devuelve pi cuando está mid-turn; upgrade
+path documentado en `pkg/agent/application/manager.go` §
+`maybeEvictForNewSlot`.
 
 ## 1. Lo verificado el 2026-07-02
 
@@ -43,12 +81,12 @@ claude-sonnet` desde una VM con `air` activo:
 ### 3.1. Renombre de módulo Go (obligatorio)
 
 Todos los archivos `.go` tienen el module path
-`app-mobile-downloader/<paquete>`. Al forkear a un proyecto nuevo hay que:
+`scaffoldxd1/<paquete>`. Al forkear a un proyecto nuevo hay que:
 
 ```sh
 # desde la raíz del fork
 go mod edit -module github.com/mi-org/mi-proyecto
-rg -l "app-mobile-downloader" | xargs sed -i 's|app-mobile-downloader|mi-proyecto|g'
+rg -l "scaffoldxd1" | xargs sed -i 's|scaffoldxd1|mi-proyecto|g'
 go mod tidy
 ```
 
@@ -156,7 +194,7 @@ Variables que NO existen (deberían):
 ```sh
 # 1. Renombrar el módulo y los imports
 go mod edit -module <nuevo-path>
-rg -l "app-mobile-downloader" | xargs sed -i 's|app-mobile-downloader|<nuevo-path>|g'
+rg -l "scaffoldxd1" | xargs sed -i 's|scaffoldxd1|<nuevo-path>|g'
 go mod tidy
 
 # 2. Asegurar que el hot-reload ignore tmp/

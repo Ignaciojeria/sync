@@ -7,14 +7,14 @@ import (
 	"strings"
 	"testing"
 
-	designapp "app-mobile-downloader/internal/design/application"
+	designapp "scaffoldxd1/internal/design/application"
 
 	"github.com/a-h/templ"
 )
 
 func TestPanelRendersLink(t *testing.T) {
 	var buf bytes.Buffer
-	if err := Panel([]designapp.ResolvedTheme{{ID: "ocean", Name: "Ocean"}}, designapp.ResolvedTheme{ID: "ocean", Name: "Ocean"}).Render(context.Background(), &buf); err != nil {
+	if err := Panel([]designapp.ResolvedTheme{{ID: "ocean", Name: "Ocean"}}, designapp.ResolvedTheme{ID: "ocean", Name: "Ocean"}, "").Render(context.Background(), &buf); err != nil {
 		t.Fatalf("Panel().Render() error = %v", err)
 	}
 	body := buf.String()
@@ -31,12 +31,12 @@ func TestPanelRendersLink(t *testing.T) {
 
 func TestPanelErrorAndContextBranches(t *testing.T) {
 	w := failingWriter{err: errors.New("flush")}
-	if err := Panel(nil, designapp.ResolvedTheme{}).Render(context.Background(), w); err == nil {
+	if err := Panel(nil, designapp.ResolvedTheme{}, "").Render(context.Background(), w); err == nil {
 		t.Fatal("expected Panel render error")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := Panel(nil, designapp.ResolvedTheme{}).Render(ctx, &bytes.Buffer{}); err == nil {
+	if err := Panel(nil, designapp.ResolvedTheme{}, "").Render(ctx, &bytes.Buffer{}); err == nil {
 		t.Fatal("expected Panel cancelled context error")
 	}
 }
@@ -44,7 +44,7 @@ func TestPanelErrorAndContextBranches(t *testing.T) {
 func TestPanelRendersWithChildrenInContext(t *testing.T) {
 	ctx := templ.WithChildren(context.Background(), templ.Raw("<child/>"))
 	var buf bytes.Buffer
-	if err := Panel(nil, designapp.ResolvedTheme{}).Render(ctx, &buf); err != nil {
+	if err := Panel(nil, designapp.ResolvedTheme{}, "").Render(ctx, &buf); err != nil {
 		t.Fatalf("Panel().Render() error = %v", err)
 	}
 	if !strings.Contains(buf.String(), "Design system") {

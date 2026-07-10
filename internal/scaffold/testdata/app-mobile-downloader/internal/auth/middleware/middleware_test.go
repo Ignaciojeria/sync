@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	authapp "app-mobile-downloader/internal/auth/application"
-	"app-mobile-downloader/internal/shared"
-	"app-mobile-downloader/internal/shared/configuration"
+	authapp "scaffoldxd1/internal/auth/application"
+	"scaffoldxd1/internal/shared"
+	"scaffoldxd1/internal/shared/configuration"
 
 	"github.com/MicahParks/jwkset"
 	"github.com/golang-jwt/jwt/v5"
@@ -232,7 +232,7 @@ func TestPathHelpers(t *testing.T) {
 	if isEditorPath("/home") {
 		t.Fatal("did not expect /home to be an editor path")
 	}
-	if !isPublicPath("/auth/login") || !isPublicPath("/manifest.json") || !isPublicPath("/logo.svg") || isPublicPath("/") || isPublicPath("/private") {
+	if !isPublicPath("/auth/login") || !isPublicPath("/manifest.json") || !isPublicPath("/logo.svg") || !isPublicPath("/agent/sessions/s-1/preview/") || isPublicPath("/") || isPublicPath("/private") {
 		t.Fatal("unexpected public path result")
 	}
 }
@@ -515,6 +515,58 @@ func TestJWTMiddleware(t *testing.T) {
 		}
 		if location := rr.Header().Get("Location"); location != "/auth/login" {
 			t.Fatalf("location = %q", location)
+		}
+	})
+
+	t.Run("mounted auth login path is treated as public", func(t *testing.T) {
+		t.Setenv("AUTH_DISABLED", "false")
+		called := false
+		handler := JWTMiddleware(nil, nil, configuration.Conf{})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			called = true
+			w.WriteHeader(http.StatusNoContent)
+		}))
+
+		req := httptest.NewRequest(http.MethodGet, "/agent/sessions/s-1/preview/auth/login", nil)
+		req.Header.Set("Accept", "text/html")
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if !called {
+			t.Fatal("expected public mounted auth path to reach next handler")
+		}
+		if rr.Code != http.StatusNoContent {
+			t.Fatalf("status = %d", rr.Code)
+		}
+	})
+
+	t.Run("html request under mount redirects to mounted login and stores return path", func(t *testing.T) {
+		t.Setenv("AUTH_DISABLED", "false")
+		handler := JWTMiddleware(nil, nil, configuration.Conf{})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Fatal("next handler should not be called")
+		}))
+
+		req := httptest.NewRequest(http.MethodGet, "/agent/sessions/s-1/preview/private?tab=1", nil)
+		req.Header.Set("Accept", "text/html")
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusFound {
+			t.Fatalf("status = %d", rr.Code)
+		}
+		if location := rr.Header().Get("Location"); location != "/agent/sessions/s-1/preview/auth/login" {
+			t.Fatalf("location = %q", location)
+		}
+		found := false
+		for _, ck := range rr.Result().Cookies() {
+			if ck.Name == "app_return_to" {
+				found = true
+				if ck.Value != "/agent/sessions/s-1/preview/private?tab=1" {
+					t.Fatalf("return_to = %q", ck.Value)
+				}
+			}
+		}
+		if !found {
+			t.Fatal("expected app_return_to cookie")
 		}
 	})
 

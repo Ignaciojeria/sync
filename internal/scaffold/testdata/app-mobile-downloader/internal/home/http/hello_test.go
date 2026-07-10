@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"app-mobile-downloader/internal/shared/server"
-	topologyapp "app-mobile-downloader/internal/topology/application"
+	"scaffoldxd1/internal/shared/server"
+	topologyapp "scaffoldxd1/internal/topology/application"
 
 	"github.com/go-fuego/fuego"
 )

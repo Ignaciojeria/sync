@@ -1,8 +1,8 @@
 package design
 
 import (
-	designapp "app-mobile-downloader/internal/design/application"
-	"app-mobile-downloader/internal/shared/server"
+	designapp "scaffoldxd1/internal/design/application"
+	"scaffoldxd1/internal/shared/server"
 )
 
 // Register wires design-system runtime routes onto the shared server.

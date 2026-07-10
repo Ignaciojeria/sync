@@ -1,7 +1,7 @@
 version: 1
 
 project:
-  slug: app-mobile-downloader
+  slug: scaffoldxd1
 
 defaults:
   baseBranch: main

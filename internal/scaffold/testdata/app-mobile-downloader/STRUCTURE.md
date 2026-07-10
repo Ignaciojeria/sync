@@ -7,18 +7,10 @@
 .
 ├── .air.toml
 ├── AGENTS.md
-├── AGENT_IMPLEMENTATION_PLAN.md
 ├── STRUCTURE.md
 ├── go.mod
-├── bin/
 ├── cmd/
-│   ├── agent-worker/
-│   │   ├── main.go
-│   │   └── main_test.go
-│   ├── api/
-│   │   ├── main.go
-│   │   └── main_test.go
-│   └── bff/
+│   └── api/
 │       ├── main.go
 │       └── main_test.go
 ├── design/
@@ -102,6 +94,16 @@
 │   │       ├── editor_view_templ.go
 │   │       ├── editor_view_templ_test.go
 │   │       └── extra_render_test.go
+│   ├── gateway/
+│   │   ├── application/
+│   │   │   ├── balance.go
+│   │   │   ├── session_cost.go
+│   │   │   └── session_cost_test.go
+│   │   ├── http/
+│   │   │   └── balance.go
+│   │   └── ui/
+│   │       ├── balance.templ
+│   │       └── balance_templ.go
 │   ├── home/
 │   │   ├── http/
 │   │   │   ├── hello.go
@@ -184,7 +186,9 @@
 │   │   │   │       ├── 000001_create_users_and_sessions.down.sql
 │   │   │   │       ├── 000001_create_users_and_sessions.up.sql
 │   │   │   │       ├── 000002_create_job_configs_and_logs.down.sql
-│   │   │   │       └── 000002_create_job_configs_and_logs.up.sql
+│   │   │   │       ├── 000002_create_job_configs_and_logs.up.sql
+│   │   │   │       ├── 000003_create_agent_runtime_events.down.sql
+│   │   │   │       └── 000003_create_agent_runtime_events.up.sql
 │   │   │   └── test/
 │   │   │       ├── support.go
 │   │   │       └── support_test.go
@@ -240,12 +244,17 @@
 │   └── agent/
 │       ├── application/
 │       │   ├── event.go
+│       │   ├── history.go
+│       │   ├── history_test.go
 │       │   ├── manager.go
 │       │   ├── manager_test.go
 │       │   ├── runner.go
+│       │   ├── runtime_inventory.go
 │       │   └── session.go
 │       ├── http/
 │       │   ├── abort.go
+│       │   ├── auth.go
+│       │   ├── auth_test.go
 │       │   ├── events.go
 │       │   ├── page.go
 │       │   ├── prompt.go
@@ -257,26 +266,41 @@
 │       │   │   └── session_store.go
 │       │   ├── memory/
 │       │   │   └── session_store.go
-│       │   └── pirpc/
-│       │       ├── process.go
-│       │       ├── reader.go
-│       │       ├── runner.go
-│       │       ├── runner_test.go
-│       │       ├── sandbox.go
-│       │       └── sandbox_test.go
-│       └── ui/
-│           ├── fragments.templ
-│           ├── fragments_templ.go
-│           ├── page.templ
-│           ├── page_templ.go
-│           ├── page_templ_test.go
-│           ├── standalone.templ
-│           ├── standalone_templ.go
-│           └── state.go
+│       │   ├── pirpc/
+│       │   │   ├── process.go
+│       │   │   ├── reader.go
+│       │   │   ├── runner.go
+│       │   │   ├── runner_test.go
+│       │   │   ├── sandbox.go
+│       │   │   └── sandbox_test.go
+│       │   ├── postgresql/
+│       │   │   └── runtime_events.go
+│       │   └── worktree/
+│       │       ├── manager.go
+│       │       └── manager_test.go
+│       ├── ui/
+│       │   ├── fragments.templ
+│       │   ├── fragments_templ.go
+│       │   ├── page.templ
+│       │   ├── page_templ.go
+│       │   ├── page_templ_test.go
+│       │   ├── providers.templ
+│       │   ├── providers_templ.go
+│       │   ├── standalone.templ
+│       │   ├── standalone_templ.go
+│       │   └── state.go
+│       └── worker/
+│           └── handlers/
+│               ├── events.go
+│               ├── handlers.go
+│               ├── journal.go
+│               ├── journal_test.go
+│               ├── runtimes.go
+│               └── sessions.go
 └── scripts/
     ├── _tree_generator.py
     ├── generate-structure.sh
-    ├── run-all.sh
+    ├── run-api.sh
     └── structure.config.toml
 ```
 

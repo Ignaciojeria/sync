@@ -17,7 +17,7 @@ import (
 	"net/http"
 	"strings"
 
-	agentapp "app-mobile-downloader/pkg/agent/application"
+	agentapp "scaffoldxd1/pkg/agent/application"
 )
 
 // sessionIDFromPath extrae el session id de paths como
@@ -73,5 +73,26 @@ func mapSessionError(err error) (int, string) {
 	if errors.Is(err, agentapp.ErrSessionNotFound) {
 		return http.StatusNotFound, err.Error()
 	}
+	if errors.Is(err, agentapp.ErrResumeUnavailable) {
+		return http.StatusBadRequest, err.Error()
+	}
+	if status, detail, ok := providerHTTPError(err); ok {
+		return status, detail
+	}
 	return http.StatusInternalServerError, err.Error()
+}
+
+func providerHTTPError(err error) (int, string, bool) {
+	text := strings.TrimSpace(strings.ToLower(err.Error()))
+	if text == "" {
+		return 0, "", false
+	}
+	if strings.Contains(text, "insufficient_credits") ||
+		strings.Contains(text, "créditos insuficientes") ||
+		strings.Contains(text, "payment required") ||
+		strings.Contains(text, `"status": 402`) ||
+		strings.Contains(text, `"status":402`) {
+		return http.StatusPaymentRequired, "Créditos insuficientes", true
+	}
+	return 0, "", false
 }

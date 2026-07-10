@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -58,6 +59,16 @@ func (s *stubStore) Update(ctx context.Context, session Session) error {
 	return nil
 }
 
+func (s *stubStore) Delete(ctx context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.sessions[id]; !ok {
+		return ErrSessionNotFound
+	}
+	delete(s.sessions, id)
+	return nil
+}
+
 // --- runtime stub ---
 
 type stubRuntime struct {
@@ -66,6 +77,7 @@ type stubRuntime struct {
 	started         bool
 	closed          bool
 	promptCalls     int
+	lastPrompt      string
 	promptErr       error
 	promptHook      func(ctx context.Context, msg string) error
 	subscribeCh     chan Event
@@ -83,6 +95,7 @@ func (r *stubRuntime) SessionID() string { return "" }
 func (r *stubRuntime) Prompt(ctx context.Context, message string) error {
 	r.mu.Lock()
 	r.promptCalls++
+	r.lastPrompt = message
 	hook := r.promptHook
 	r.mu.Unlock()
 	if hook != nil {
@@ -180,6 +193,70 @@ func TestNewManager_WiresDeps(t *testing.T) {
 	}
 	if m.runner != runner {
 		t.Fatal("runner no wireado")
+	}
+}
+
+func TestManagerCreate_UsesSessionPreparer(t *testing.T) {
+	store := newStubStore()
+	runner := &factoryRunner{}
+	m := NewManager(store, runner).WithSessionPreparer(func(_ context.Context, session Session) (Session, error) {
+		session.WorkspacePath = "/tmp/workspaces/" + session.ID
+		session.CWD = session.WorkspacePath + "/repo"
+		session.Branch = "agent/" + session.ID
+		return session, nil
+	})
+
+	sess, err := m.Create(context.Background(), CreateSessionInput{Title: "t", CWD: "."})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if !strings.Contains(sess.WorkspacePath, sess.ID) {
+		t.Fatalf("WorkspacePath = %q, esperaba contener %q", sess.WorkspacePath, sess.ID)
+	}
+	if got, want := sess.Branch, "agent/"+sess.ID; got != want {
+		t.Fatalf("Branch = %q, want %q", got, want)
+	}
+	stored, err := store.Get(context.Background(), sess.ID)
+	if err != nil {
+		t.Fatalf("store.Get: %v", err)
+	}
+	if got, want := stored.CWD, sess.CWD; got != want {
+		t.Fatalf("stored.CWD = %q, want %q", got, want)
+	}
+}
+
+func TestManagerDelete_RemovesSessionAndClosesRuntime(t *testing.T) {
+	store := newStubStore()
+	runner := &factoryRunner{}
+	destroyed := ""
+	m := NewManager(store, runner).WithSessionDestroyer(func(_ context.Context, session Session) error {
+		destroyed = session.ID
+		return nil
+	})
+
+	ctx := context.Background()
+	sess, err := m.Create(ctx, CreateSessionInput{Title: "t", CWD: os.TempDir()})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := m.Ensure(ctx, sess.ID); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	rt := runner.last()
+	if rt == nil {
+		t.Fatal("runtime nil")
+	}
+	if err := m.Delete(ctx, sess.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if _, err := store.Get(ctx, sess.ID); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("store.Get err = %v, want ErrSessionNotFound", err)
+	}
+	if !rt.State().Closed {
+		t.Fatal("runtime no fue cerrado")
+	}
+	if destroyed != sess.ID {
+		t.Fatalf("destroyer recibió %q, want %q", destroyed, sess.ID)
 	}
 }
 
@@ -379,6 +456,102 @@ func TestManagerPrompt_NonTimeoutRuntimeErrorIsPropagated(t *testing.T) {
 	}
 	if errors.Is(err, errPromptTerminated) {
 		t.Fatal("err de runtime no debe etiquetarse como timeout")
+	}
+}
+
+func TestManagerPromptRequest_RewritesResumeActionUsingLastAssistantTurn(t *testing.T) {
+	store := newStubStore()
+	runner := &factoryRunner{}
+	m := NewManager(store, runner)
+
+	ctx := context.Background()
+	sess, err := m.Create(ctx, CreateSessionInput{Title: "t", CWD: os.TempDir()})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	MaterializeEvent(sess.ID, 10, Event{Type: "message_start"})
+	MaterializeEvent(sess.ID, 11, Event{Type: "message_update", Payload: []byte(`{"assistantMessageEvent":{"type":"text_delta","delta":"primera parte"}}`)})
+	MaterializeEvent(sess.ID, 12, Event{Type: "message_end"})
+
+	if err := m.PromptRequest(ctx, sess.ID, PromptInput{Message: "continua", Action: PromptActionResume}); err != nil {
+		t.Fatalf("PromptRequest: %v", err)
+	}
+
+	rt := runner.last()
+	if rt == nil {
+		t.Fatal("runner sin runtime")
+	}
+	if got := rt.lastPrompt; !strings.Contains(got, "Tu respuesta anterior fue interrumpida") {
+		t.Fatalf("lastPrompt = %q, want resume rewrite", got)
+	}
+	if got := rt.lastPrompt; !strings.Contains(got, "primera parte") {
+		t.Fatalf("lastPrompt = %q, want assistant tail", got)
+	}
+}
+
+func TestManagerPromptRequest_ResumeFailsWhenNoAssistantTurnExists(t *testing.T) {
+	store := newStubStore()
+	runner := &factoryRunner{}
+	m := NewManager(store, runner)
+
+	ctx := context.Background()
+	sess, err := m.Create(ctx, CreateSessionInput{Title: "t", CWD: os.TempDir()})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	err = m.PromptRequest(ctx, sess.ID, PromptInput{Message: "continua", Action: PromptActionResume})
+	if err == nil {
+		t.Fatal("esperaba error, obtuve nil")
+	}
+	if !errors.Is(err, ErrResumeUnavailable) {
+		t.Fatalf("err = %v, want ErrResumeUnavailable", err)
+	}
+}
+
+func TestManagerPromptRequest_QueuesLatestInputWhileSessionRunning(t *testing.T) {
+	store := newStubStore()
+	runner := &factoryRunner{}
+	m := NewManager(store, runner)
+
+	ctx := context.Background()
+	sess, err := m.Create(ctx, CreateSessionInput{Title: "t", CWD: os.TempDir()})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if err := m.Prompt(ctx, sess.ID, "hola"); err != nil {
+		t.Fatalf("Prompt #1: %v", err)
+	}
+	rt := runner.last()
+	if rt == nil {
+		t.Fatal("runner sin runtime")
+	}
+	if got, want := rt.promptCalls, 1; got != want {
+		t.Fatalf("promptCalls = %d, want %d", got, want)
+	}
+
+	if err := m.PromptRequest(ctx, sess.ID, PromptInput{Message: "segundo"}); err != nil {
+		t.Fatalf("PromptRequest queued: %v", err)
+	}
+	if got, want := rt.promptCalls, 1; got != want {
+		t.Fatalf("promptCalls tras queue = %d, want %d", got, want)
+	}
+
+	m.broadcast(sess.ID, Event{SessionID: sess.ID, Type: "turn_end"})
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if got := rt.promptCalls; got >= 2 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got, want := rt.promptCalls, 2; got != want {
+		t.Fatalf("promptCalls tras flush = %d, want %d", got, want)
+	}
+	if got, want := rt.lastPrompt, "segundo"; got != want {
+		t.Fatalf("lastPrompt = %q, want %q", got, want)
 	}
 }
 

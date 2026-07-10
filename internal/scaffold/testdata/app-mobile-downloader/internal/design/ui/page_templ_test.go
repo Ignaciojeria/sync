@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	designapp "app-mobile-downloader/internal/design/application"
+	designapp "scaffoldxd1/internal/design/application"
 
 	"github.com/a-h/templ"
 )
@@ -57,7 +57,7 @@ func TestPageRendersThemeShowcase(t *testing.T) {
 	active := sampleTheme()
 
 	var buf bytes.Buffer
-	if err := Page(themes, active).Render(context.Background(), &buf); err != nil {
+	if err := Page(themes, active, "").Render(context.Background(), &buf); err != nil {
 		t.Fatalf("Page().Render() error = %v", err)
 	}
 	body := buf.String()
@@ -89,7 +89,7 @@ func TestPageOmitsDescriptionWhenEmpty(t *testing.T) {
 	active.Description = ""
 
 	var buf bytes.Buffer
-	if err := Page([]designapp.ResolvedTheme{active}, active).Render(context.Background(), &buf); err != nil {
+	if err := Page([]designapp.ResolvedTheme{active}, active, "").Render(context.Background(), &buf); err != nil {
 		t.Fatalf("Page().Render() error = %v", err)
 	}
 	body := buf.String()
@@ -121,7 +121,7 @@ func TestPagePrimitivesRenderAndErrorBranches(t *testing.T) {
 	}
 
 	w := failingWriter{err: errors.New("flush")}
-	if err := Page([]designapp.ResolvedTheme{sampleTheme()}, sampleTheme()).Render(context.Background(), w); err == nil {
+	if err := Page([]designapp.ResolvedTheme{sampleTheme()}, sampleTheme(), "").Render(context.Background(), w); err == nil {
 		t.Fatal("expected Page render error")
 	}
 	if err := ColorSwatch("Primary", "#fff").Render(context.Background(), w); err == nil {
@@ -138,7 +138,7 @@ func TestPagePrimitivesRenderAndErrorBranches(t *testing.T) {
 func TestPageCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := Page([]designapp.ResolvedTheme{sampleTheme()}, sampleTheme()).Render(ctx, &bytes.Buffer{}); err == nil {
+	if err := Page([]designapp.ResolvedTheme{sampleTheme()}, sampleTheme(), "").Render(ctx, &bytes.Buffer{}); err == nil {
 		t.Fatal("expected Page cancelled context error")
 	}
 }
@@ -163,7 +163,7 @@ func TestPageHelpers(t *testing.T) {
 func TestPageRendersWithChildrenInContext(t *testing.T) {
 	ctx := templ.WithChildren(context.Background(), templ.Raw("<child/>"))
 	var buf bytes.Buffer
-	if err := Page([]designapp.ResolvedTheme{sampleTheme()}, sampleTheme()).Render(ctx, &buf); err != nil {
+	if err := Page([]designapp.ResolvedTheme{sampleTheme()}, sampleTheme(), "").Render(ctx, &buf); err != nil {
 		t.Fatalf("Page().Render() error = %v", err)
 	}
 	if !strings.Contains(buf.String(), "Design system") {

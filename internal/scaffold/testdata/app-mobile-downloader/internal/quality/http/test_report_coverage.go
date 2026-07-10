@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
-	authmiddleware "app-mobile-downloader/internal/auth/middleware"
-	"app-mobile-downloader/internal/shared/server"
-	infratest "app-mobile-downloader/internal/shared/infrastructure/test"
+	authmiddleware "scaffoldxd1/internal/auth/middleware"
+	"scaffoldxd1/internal/shared/server"
+	infratest "scaffoldxd1/internal/shared/infrastructure/test"
 
 	"github.com/go-fuego/fuego"
 )

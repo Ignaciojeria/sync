@@ -1,13 +1,14 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 
-	agentapp "app-mobile-downloader/pkg/agent/application"
+	agentapp "scaffoldxd1/pkg/agent/application"
 )
 
 // handleEvents sirve el stream SSE para una sesión del agente.
@@ -53,30 +54,36 @@ func handleEvents(w http.ResponseWriter, r *http.Request, mgr agentapp.AgentServ
 	w.Header().Set("Connection", "keep-alive")
 
 	// Resume: ?resume=N o header Last-Event-ID. Si ambos presentes, el
-	// header gana (es el estándar SSE). Si ninguno, replay desde 0.
-	since := parseSince(r.URL.Query().Get("resume"))
+	// header gana (es el estándar SSE). `resume=live` NO debe tocar el
+	// journal histórico: la UI abre la sesión en modo shell-first y el
+	// stream queda sólo para eventos nuevos.
+	resumeRaw := r.URL.Query().Get("resume")
+	since := parseSince(resumeRaw)
+	liveOnly := resumeRaw == "live"
 	if h := r.Header.Get("Last-Event-ID"); h != "" {
 		since = parseSince(h)
+		liveOnly = false
 	}
 
-	// Replay de la cola pendiente antes de empezar el stream en vivo.
-	// Sin esto, un cliente que perdió 5 eventos durante una desconexión
-	// de 2 s perdería esos 5 eventos para siempre.
-	entries, replayErr := journal.replay(id, since, nil)
-	if replayErr == nil {
-		for _, e := range entries {
-			if err := writeSSERaw(w, e.Kind, e.Seq, e.Payload); err != nil {
-				return
+	// Replay solo cuando el cliente trae un cursor real. En modo live
+	// puro no escaneamos el journal: conectar a una sesión vieja debe
+	// ser O(1), no O(tamaño del archivo).
+	if !liveOnly && since > 0 {
+		entries, replayErr := journal.replay(id, since, nil)
+		if replayErr == nil {
+			for _, e := range entries {
+				if err := writeSSERaw(w, e.Kind, e.Seq, e.Payload); err != nil {
+					return
+				}
 			}
+			if len(entries) > 0 {
+				flusher.Flush()
+			}
+		} else {
+			// Si falla el replay (no es crítico, sólo perdemos replay),
+			// seguimos adelante: el stream en vivo funciona igual.
+			_ = replayErr
 		}
-		if len(entries) > 0 {
-			flusher.Flush()
-		}
-	} else {
-		// Si falla el replay (no es crítico, sólo perdemos replay),
-		// seguimos adelante: el stream en vivo funciona igual. Logueamos
-		// para que el operator pueda actuar si pasa seguido.
-		_ = replayErr // logged
 	}
 
 	if err := writeSSE(w, "status", map[string]any{"status": "connected", "sessionId": id}); err != nil {
@@ -98,13 +105,20 @@ func handleEvents(w http.ResponseWriter, r *http.Request, mgr agentapp.AgentServ
 			if !ok {
 				return
 			}
-			// Persistir + enviar. Si la persistencia falla,
-			// seguimos adelante con el envío: el cliente ve el evento,
-			// aunque el journal quede desfasado y el próximo replay
-			// tenga un hueco. Logueamos para diagnóstico.
-			seq, pErr := journal.append(id, "pi", event)
+			// Persistir una sola vez por evento aunque existan múltiples
+			// conexiones SSE mirando la misma sesión (tab duplicada,
+			// reconnect superpuesto, etc.). Sin esto, cada subscriber
+			// reappendía el mismo evento y duplicaba transcript / replay.
+			seq, appended, pErr := journal.appendOnce(id, "pi", event)
 			if pErr != nil {
 				_ = pErr // no fatal; log abajo
+			} else if appended {
+				if seqSetter, ok := mgr.(interface {
+					SetLastSeq(context.Context, string, uint64)
+				}); ok {
+					seqSetter.SetLastSeq(r.Context(), id, seq)
+				}
+				agentapp.MaterializeEvent(id, seq, event)
 			}
 			payload, mErr := json.Marshal(event)
 			if mErr != nil {

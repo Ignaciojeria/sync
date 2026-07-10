@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"app-mobile-downloader/internal/quality/ui"
+	"scaffoldxd1/internal/quality/ui"
 )
 
 // TestNewRunner wires the production Runner with the real dependencies from

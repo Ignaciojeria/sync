@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	agentapp "app-mobile-downloader/pkg/agent/application"
+	agentapp "scaffoldxd1/pkg/agent/application"
 )
 
 // Tamaño del buffer de cada subscriber. Suficiente para amortiguar picos de
@@ -253,7 +253,13 @@ func (r *piRuntime) consumeStderr(stderr io.Reader) {
 		if len(line) > 0 {
 			line = bytes.TrimRight(line, "\r\n")
 			if len(bytes.TrimSpace(line)) > 0 {
-				r.broadcastLocal("stderr", map[string]any{"message": string(line)})
+				message := string(line)
+				if normalized, ok := normalizeProviderRuntimeError(message); ok {
+					r.broadcastLocal("runtime_error", map[string]any{"message": normalized})
+					r.setError(normalized)
+				} else {
+					r.broadcastLocal("stderr", map[string]any{"message": message})
+				}
 			}
 		}
 		if err != nil {
@@ -291,12 +297,35 @@ func (r *piRuntime) wait() {
 
 func (r *piRuntime) handleRaw(raw json.RawMessage) {
 	var header struct {
-		Type string `json:"type"`
+		Type    string          `json:"type"`
+		Message json.RawMessage `json:"message"`
+		Error   string          `json:"error"`
+		Status  int             `json:"status"`
+		Detail  string          `json:"detail"`
+		Success bool            `json:"success"`
 	}
 	if err := json.Unmarshal(raw, &header); err != nil {
 		r.broadcastLocal("runtime_error", map[string]any{"message": err.Error()})
 		r.setError(err.Error())
 		return
+	}
+	if header.Type == "response" && !header.Success {
+		message := firstNonEmpty(strings.TrimSpace(header.Error), strings.TrimSpace(header.Detail), strings.TrimSpace(string(header.Message)))
+		if normalized, ok := normalizeProviderRuntimeError(string(raw)); ok {
+			message = normalized
+		}
+		if strings.TrimSpace(message) == "" {
+			message = "El agente rechazó la operación."
+		}
+		header.Type = "runtime_error"
+		raw = mustMarshal(map[string]any{"type": "runtime_error", "message": message})
+		r.setError(message)
+	}
+	if header.Type == "runtime_error" {
+		if normalized, ok := normalizeProviderRuntimeError(string(raw)); ok {
+			raw = mustMarshal(map[string]any{"type": "runtime_error", "message": normalized})
+			r.setError(normalized)
+		}
 	}
 	r.updateState(header.Type)
 	r.broadcastEvent(header.Type, raw)
@@ -364,4 +393,51 @@ func (r *piRuntime) broadcastEvent(eventType string, payload json.RawMessage) {
 func mustMarshal(v any) json.RawMessage {
 	data, _ := json.Marshal(v)
 	return data
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if s := strings.TrimSpace(v); s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+func normalizeProviderRuntimeError(message string) (string, bool) {
+	trimmed := strings.TrimSpace(message)
+	if trimmed == "" {
+		return "", false
+	}
+
+	var payload struct {
+		Error   string `json:"error"`
+		Message string `json:"message"`
+		Detail  string `json:"detail"`
+		Title   string `json:"title"`
+		Status  int    `json:"status"`
+	}
+	if err := json.Unmarshal([]byte(trimmed), &payload); err == nil {
+		if isInsufficientCredits(payload.Error, payload.Message, payload.Detail, payload.Title, payload.Status) {
+			return "Créditos insuficientes en el proveedor/modelo configurado.", true
+		}
+	}
+
+	if isInsufficientCredits("", trimmed, trimmed, trimmed, 0) {
+		return "Créditos insuficientes en el proveedor/modelo configurado.", true
+	}
+	return "", false
+}
+
+func isInsufficientCredits(errorCode, message, detail, title string, status int) bool {
+	if status == 402 {
+		return true
+	}
+	text := strings.ToLower(strings.Join([]string{errorCode, message, detail, title}, " "))
+	return strings.Contains(text, "insufficient_credits") ||
+		strings.Contains(text, "insufficient credits") ||
+		strings.Contains(text, "créditos insuficientes") ||
+		strings.Contains(text, "payment required") ||
+		strings.Contains(text, `"status": 402`) ||
+		strings.Contains(text, `"status":402`)
 }

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	agentapp "app-mobile-downloader/pkg/agent/application"
+	agentapp "scaffoldxd1/pkg/agent/application"
 )
 
 // Register cuelga TODOS los endpoints de datos del agente en mux.
@@ -13,13 +13,13 @@ import (
 //
 // Rutas expuestas:
 //
-//   GET    /agent/sessions                  -> listar sesiones
-//   POST   /agent/sessions                  -> crear sesión
-//   GET    /agent/sessions/<id>             -> obtener sesión
-//   POST   /agent/sessions/<id>/prompt      -> enviar prompt
-//   POST   /agent/sessions/<id>/steer       -> enviar steer
-//   POST   /agent/sessions/<id>/abort       -> abortar turn
-//   GET    /agent/sessions/<id>/events      -> SSE stream
+//	GET    /agent/sessions                  -> listar sesiones
+//	POST   /agent/sessions                  -> crear sesión
+//	GET    /agent/sessions/<id>             -> obtener sesión
+//	POST   /agent/sessions/<id>/prompt      -> enviar prompt
+//	POST   /agent/sessions/<id>/steer       -> enviar steer
+//	POST   /agent/sessions/<id>/abort       -> abortar turn
+//	GET    /agent/sessions/<id>/events      -> SSE stream
 //
 // La página completa (GET /agent) sigue en el web-server porque
 // depende de templ + layout.
@@ -53,6 +53,8 @@ func Register(mux *http.ServeMux, mgr agentapp.AgentService, requireRequire func
 			handleAbort(w, r, mgr, id)
 		case strings.HasSuffix(r.URL.Path, "/events") && r.Method == http.MethodGet:
 			handleEvents(w, r, mgr, id)
+		case strings.HasSuffix(r.URL.Path, "/history") && r.Method == http.MethodGet:
+			handleHistory(w, r, mgr, id)
 		case r.URL.Path == "/agent/sessions/"+id && r.Method == http.MethodGet:
 			handleGetSession(w, r, mgr, id)
 		default:
@@ -83,6 +85,8 @@ type createSessionRequest struct {
 
 type messageRequest struct {
 	Message string `json:"message"`
+	Action  string `json:"action,omitempty"`
+	TurnID  string `json:"turnId,omitempty"`
 }
 
 func handleListSessions(w http.ResponseWriter, r *http.Request, mgr agentapp.AgentService) {
@@ -125,18 +129,42 @@ func handleGetSession(w http.ResponseWriter, r *http.Request, mgr agentapp.Agent
 	_ = writeJSON(w, http.StatusOK, map[string]any{"session": session})
 }
 
+func handleHistory(w http.ResponseWriter, r *http.Request, mgr agentapp.AgentService, id string) {
+	if _, err := mgr.Get(r.Context(), id); err != nil {
+		status, detail := mapSessionError(err)
+		http.Error(w, detail, status)
+		return
+	}
+	history, err := agentapp.LoadConversationHistory(
+		id,
+		agentapp.ParseHistoryBefore(r.URL.Query().Get("before")),
+		agentapp.ParseHistoryLimit(r.URL.Query().Get("limit"), 30),
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_ = writeJSON(w, http.StatusOK, history)
+}
+
 func handlePrompt(w http.ResponseWriter, r *http.Request, mgr agentapp.AgentService, id string) {
 	body, err := readJSON[messageRequest](r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	message := strings.TrimSpace(body.Message)
-	if message == "" {
+	body.Message = strings.TrimSpace(body.Message)
+	body.Action = strings.TrimSpace(body.Action)
+	body.TurnID = strings.TrimSpace(body.TurnID)
+	if body.Message == "" {
 		http.Error(w, "message is required", http.StatusBadRequest)
 		return
 	}
-	if err := mgr.Prompt(r.Context(), id, message); err != nil {
+	if err := mgr.PromptRequest(r.Context(), id, agentapp.PromptInput{
+		Message: body.Message,
+		Action:  agentapp.PromptAction(body.Action),
+		TurnID:  body.TurnID,
+	}); err != nil {
 		status, detail := mapSessionError(err)
 		http.Error(w, detail, status)
 		return
@@ -171,4 +199,3 @@ func handleAbort(w http.ResponseWriter, r *http.Request, mgr agentapp.AgentServi
 	}
 	_ = writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
-

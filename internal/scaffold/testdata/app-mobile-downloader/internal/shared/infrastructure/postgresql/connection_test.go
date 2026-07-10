@@ -3,7 +3,7 @@ package postgresql
 import (
 	"testing"
 
-	"app-mobile-downloader/internal/shared/configuration"
+	"scaffoldxd1/internal/shared/configuration"
 )
 
 func TestNewConnectionReturnsErrorWhenDatabaseURLIsEmpty(t *testing.T) {

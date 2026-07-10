@@ -3,7 +3,7 @@ package jwks
 import (
 	"testing"
 
-	"app-mobile-downloader/internal/shared/configuration"
+	"scaffoldxd1/internal/shared/configuration"
 )
 
 func TestNewReturnsErrorWhenNoJWKSURLIsConfigured(t *testing.T) {

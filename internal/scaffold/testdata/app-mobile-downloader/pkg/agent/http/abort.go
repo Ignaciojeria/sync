@@ -3,8 +3,8 @@ package agent
 import (
 	"net/http"
 
-	agentapp "app-mobile-downloader/pkg/agent/application"
-	"app-mobile-downloader/internal/shared/server"
+	agentapp "scaffoldxd1/pkg/agent/application"
+	"scaffoldxd1/internal/shared/server"
 
 	"github.com/go-fuego/fuego"
 )

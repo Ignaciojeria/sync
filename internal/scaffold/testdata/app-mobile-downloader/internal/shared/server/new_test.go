@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"app-mobile-downloader/internal/shared"
-	"app-mobile-downloader/internal/shared/configuration"
+	"scaffoldxd1/internal/shared"
+	"scaffoldxd1/internal/shared/configuration"
 
 	"github.com/go-fuego/fuego"
 )

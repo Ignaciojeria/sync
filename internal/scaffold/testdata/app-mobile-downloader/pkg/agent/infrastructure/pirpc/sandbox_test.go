@@ -83,6 +83,101 @@ func TestResolveCWD_RejectsEmptySessionIDWithDefault(t *testing.T) {
 	}
 }
 
+func TestResolveCWD_SeedsPiConfig(t *testing.T) {
+	prev, _ := os.Getwd()
+	tmp := t.TempDir()
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(prev) })
+
+	// Simulamos un repo con .pi/extensions/provider.ts
+	extDir := filepath.Join(tmp, PiConfigDir, "extensions")
+	if err := os.MkdirAll(extDir, 0o755); err != nil {
+		t.Fatalf("mkdir .pi: %v", err)
+	}
+	want := []byte("export const provider = {}\n")
+	if err := os.WriteFile(filepath.Join(extDir, "provider.ts"), want, 0o644); err != nil {
+		t.Fatalf("write provider: %v", err)
+	}
+
+	sandbox, err := resolveCWD("", "agent-seed-001")
+	if err != nil {
+		t.Fatalf("resolveCWD: %v", err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(sandbox, PiConfigDir, "extensions", "provider.ts"))
+	if err != nil {
+		t.Fatalf(".pi no sembrado en el sandbox: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Fatalf("contenido copiado = %q, want %q", got, want)
+	}
+}
+
+func TestSeedPiConfig_Idempotent(t *testing.T) {
+	prev, _ := os.Getwd()
+	tmp := t.TempDir()
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(prev) })
+
+	if err := os.MkdirAll(filepath.Join(tmp, PiConfigDir), 0o755); err != nil {
+		t.Fatalf("mkdir .pi: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, PiConfigDir, "config"), []byte("orig"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	dest := filepath.Join(tmp, "sandbox")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		t.Fatalf("mkdir dest: %v", err)
+	}
+
+	// Primera siembra.
+	if err := seedPiConfig(dest); err != nil {
+		t.Fatalf("seedPiConfig 1: %v", err)
+	}
+	// El agente modifica la config dentro del sandbox.
+	sandboxCfg := filepath.Join(dest, PiConfigDir, "config")
+	if err := os.WriteFile(sandboxCfg, []byte("modificado"), 0o644); err != nil {
+		t.Fatalf("write sandbox: %v", err)
+	}
+	// Segunda siembra no debe pisar lo del sandbox.
+	if err := seedPiConfig(dest); err != nil {
+		t.Fatalf("seedPiConfig 2: %v", err)
+	}
+	got, err := os.ReadFile(sandboxCfg)
+	if err != nil {
+		t.Fatalf("read sandbox cfg: %v", err)
+	}
+	if string(got) != "modificado" {
+		t.Fatalf("seedPiConfig pisó config existente: %q", got)
+	}
+}
+
+func TestSeedPiConfig_NoRepoConfig(t *testing.T) {
+	prev, _ := os.Getwd()
+	tmp := t.TempDir()
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(prev) })
+
+	dest := filepath.Join(tmp, "sandbox")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		t.Fatalf("mkdir dest: %v", err)
+	}
+	// Sin .pi en el repo no debe ser error.
+	if err := seedPiConfig(dest); err != nil {
+		t.Fatalf("seedPiConfig sin .pi debe ser no-op, got: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dest, PiConfigDir)); !os.IsNotExist(err) {
+		t.Fatalf("no debería existir .pi en el sandbox, stat err = %v", err)
+	}
+}
+
 func TestResolveCWD_AcceptsRelativeExplicitCWD(t *testing.T) {
 	prev, _ := os.Getwd()
 	tmp := t.TempDir()

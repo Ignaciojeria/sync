@@ -22,3 +22,25 @@ func TestNavigationContextStructFields(t *testing.T) {
 		t.Fatal("expected NavigationContext fields to round-trip")
 	}
 }
+
+func TestFromRequestStripsPreviewPrefixFromCurrentPath(t *testing.T) {
+	req := httptest.NewRequest("GET", "/agent/sessions/s1/preview/scheduler/jobs", nil)
+	req.Header.Set("X-Forwarded-Prefix", "/agent/sessions/s1/preview/")
+	nav := FromRequest(req)
+	if got, want := nav.PreviewPrefix, "/agent/sessions/s1/preview/"; got != want {
+		t.Fatalf("PreviewPrefix = %q, want %q", got, want)
+	}
+	if got, want := nav.CurrentPath, "/scheduler/jobs"; got != want {
+		t.Fatalf("CurrentPath = %q, want %q", got, want)
+	}
+}
+
+func TestNavigationContextAppPathKeepsAgentUIOutsidePreview(t *testing.T) {
+	nav := NavigationContext{PreviewPrefix: "/agent/sessions/s1/preview/"}
+	if got, want := nav.AppPath("/scheduler/jobs"), "/agent/sessions/s1/preview/scheduler/jobs"; got != want {
+		t.Fatalf("AppPath = %q, want %q", got, want)
+	}
+	if got, want := nav.HostPath("/agent"), "/agent"; got != want {
+		t.Fatalf("HostPath = %q, want %q", got, want)
+	}
+}

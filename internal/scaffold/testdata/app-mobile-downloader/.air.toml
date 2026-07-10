@@ -3,21 +3,11 @@ root = "."
 tmp_dir = "tmp"
 
 [build]
-	cmd = "sh -c 'TEMPL_BIN=$(command -v templ || true); if [ -z \"$TEMPL_BIN\" ] && [ -x \"$HOME/go/bin/templ\" ]; then TEMPL_BIN=\"$HOME/go/bin/templ\"; fi; if [ -z \"$TEMPL_BIN\" ]; then echo \"templ not found; run: go install github.com/a-h/templ/cmd/templ@latest\"; exit 127; fi; \"$TEMPL_BIN\" generate && go build -o ./tmp/web ./cmd/api && go build -o ./tmp/agent-worker ./cmd/agent-worker'"
-  bin = "./tmp/web"
-	# Builds dos binarios: el web-server (./cmd/api → ./tmp/main) y el
-	# agent-worker (./cmd/agent-worker → ./tmp/agent-worker).
-	# El ./tmp/main es lo que air corre como proceso principal.
-	# El ./tmp/agent-worker se levanta explícitamente con scripts/run-all.sh
-	# o un supervisor. Ver doc/agent-runtime.md §11 para la topología
-	# completa (BFF en :8000 → web-server en :8001 → agent-worker en :18080).
+	cmd = "sh -c 'TEMPL_BIN=$(command -v templ || true); if [ -z \"$TEMPL_BIN\" ] && [ -x \"$HOME/go/bin/templ\" ]; then TEMPL_BIN=\"$HOME/go/bin/templ\"; fi; if [ -z \"$TEMPL_BIN\" ]; then echo \"templ not found; run: go install github.com/a-h/templ/cmd/templ@latest\"; exit 127; fi; \"$TEMPL_BIN\" generate && if [ -f ./cmd/api/main.go ]; then go build -o ./tmp/main ./cmd/api; elif [ -f ./cmd/main.go ]; then go build -o ./tmp/main ./cmd; else go build -o ./tmp/main .; fi'"
+  bin = "./tmp/main"
 	include_ext = ["go", "templ", "tpl", "tmpl", "html"]
 	exclude_ext = ["_templ.go"]
   exclude_dir = ["assets", "tmp", "vendor", "node_modules", ".git", ".einar"]
-  # "tmp" cubre tmp/agent-work/, el sandbox por sesión del agente pi
-  # (ver internal/agent/infrastructure/pirpc/sandbox.go). Sin esto las
-  # ediciones del pi dispararían un rebuild y matarían al servidor en
-  # medio de una conversación.
   delay = 500
 
 [log]

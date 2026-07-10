@@ -8,7 +8,12 @@ package ui
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-func LoginPage() templ.Component {
+import (
+	"net/url"
+	"strings"
+)
+
+func LoginPage(previewPrefix string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -29,12 +34,52 @@ func LoginPage() templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section class=\"hero min-h-[calc(100vh-4rem)] overflow-hidden bg-transparent\"><div class=\"pointer-events-none absolute inset-0\" aria-hidden=\"true\"><div class=\"absolute inset-0\" style=\"background:\n\t\t\t\tradial-gradient(circle at 78% 42%, color-mix(in srgb, var(--color-primary) 10%, var(--color-base-100)), transparent 28%),\n\t\t\t\tlinear-gradient(180deg, color-mix(in srgb, var(--color-base-100) 92%, white), color-mix(in srgb, var(--pi-surface-muted, var(--color-base-200)) 88%, white));\"></div><div class=\"absolute right-[12%] top-[18%] h-64 w-80 opacity-45\" style=\"background-image: radial-gradient(circle at 2px 2px, color-mix(in srgb, var(--color-base-content) 16%, transparent) 1.2px, transparent 0); background-size: 18px 18px;\"></div><svg class=\"absolute inset-0 h-full w-full opacity-65\" viewBox=\"0 0 1600 900\" preserveAspectRatio=\"none\" fill=\"none\"><g stroke=\"color-mix(in srgb, var(--color-base-content) 14%, transparent)\" stroke-width=\"1.3\"><path d=\"M980 -30 C890 90 884 190 980 252 C1100 329 1042 472 908 584 C806 670 762 742 808 860\"></path> <path d=\"M1168 -18 C1060 120 1046 220 1168 304 C1300 398 1228 548 1092 660 C990 744 952 816 1010 882\"></path> <path d=\"M1336 -8 C1212 142 1184 262 1288 364 C1416 490 1354 646 1210 760\"></path> <path d=\"M890 704 C1010 654 1090 584 1128 462 C1172 316 1274 242 1438 230\"></path> <path d=\"M812 832 C930 804 1002 724 1038 616 C1076 488 1182 410 1348 398\"></path> <path d=\"M1176 104 L1440 164 L1562 128\"></path> <path d=\"M1320 332 L1456 286 L1592 220\"></path> <path d=\"M1178 736 L1334 628 L1504 676\"></path></g> <g><circle cx=\"1200\" cy=\"138\" r=\"11\" fill=\"color-mix(in srgb, var(--color-primary) 88%, white)\"></circle> <circle cx=\"1428\" cy=\"182\" r=\"7\" fill=\"color-mix(in srgb, var(--color-base-content) 24%, white)\"></circle> <circle cx=\"1326\" cy=\"332\" r=\"6\" fill=\"color-mix(in srgb, var(--color-accent) 82%, white)\"></circle> <circle cx=\"1466\" cy=\"284\" r=\"7\" fill=\"color-mix(in srgb, var(--color-base-content) 20%, white)\"></circle> <circle cx=\"1246\" cy=\"420\" r=\"9\" fill=\"color-mix(in srgb, var(--color-primary) 82%, white)\"></circle> <circle cx=\"1140\" cy=\"526\" r=\"8\" fill=\"color-mix(in srgb, var(--color-primary) 78%, white)\"></circle> <circle cx=\"1006\" cy=\"624\" r=\"9\" fill=\"color-mix(in srgb, var(--color-base-content) 18%, white)\"></circle> <circle cx=\"900\" cy=\"744\" r=\"8\" fill=\"color-mix(in srgb, var(--color-accent) 48%, white)\"></circle> <circle cx=\"1328\" cy=\"744\" r=\"8\" fill=\"color-mix(in srgb, var(--color-base-content) 16%, white)\"></circle> <circle cx=\"1440\" cy=\"666\" r=\"8\" fill=\"color-mix(in srgb, var(--color-base-content) 16%, white)\"></circle></g></svg></div><div class=\"hero-content relative w-full max-w-none px-5 py-10 text-center sm:px-8 lg:px-12\"><div class=\"w-full max-w-4xl\"><div class=\"mx-auto flex max-w-3xl flex-col items-center text-center\"><div class=\"text-base-content flex items-center justify-center gap-2 text-[clamp(3rem,7vw,5.4rem)] font-semibold leading-none tracking-[0.015em]\" style=\"font-family: var(--pi-font-label-family, var(--pi-font-body-family, Inter, system-ui, sans-serif));\"><span>sync</span> <span><span class=\"text-primary align-baseline text-[1.16em] font-medium tracking-[-0.08em]\">4</span><span class=\"text-primary\">.</span></span> <span>run</span></div><p class=\"mt-4 text-[clamp(0.72rem,1.4vw,0.98rem)] font-semibold uppercase tracking-[0.34em] text-base-content/78 sm:whitespace-nowrap\">Persistent cloud workspaces for AI agents</p><div class=\"mt-12 w-full max-w-xl\"><a class=\"btn btn-lg w-full justify-center gap-[1.15rem] rounded-[0.85rem] border border-base-content/10 bg-base-100 text-base-content shadow-[0_12px_32px_-18px_color-mix(in_srgb,var(--color-base-content)_14%,transparent)] transition-all duration-200 hover:-translate-y-px hover:border-base-content/14 hover:bg-base-100 hover:shadow-[0_16px_38px_-18px_color-mix(in_srgb,var(--color-base-content)_18%,transparent)] focus-visible:outline-3 focus-visible:outline-primary focus-visible:outline-offset-4\" href=\"/auth/login/google\" aria-label=\"Continue with Google\"><svg class=\"h-7 w-7 flex-shrink-0\" viewBox=\"0 0 18 18\" aria-hidden=\"true\" focusable=\"false\"><path fill=\"#4285F4\" d=\"M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.91c1.7-1.57 2.69-3.88 2.69-6.62z\"></path> <path fill=\"#34A853\" d=\"M9 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.26c-.8.54-1.84.86-3.05.86-2.35 0-4.34-1.59-5.05-3.72H.94v2.33A9 9 0 0 0 9 18z\"></path> <path fill=\"#FBBC05\" d=\"M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.16.28-1.7V4.97H.94A9 9 0 0 0 0 9c0 1.45.34 2.82.94 4.03l3.01-2.33z\"></path> <path fill=\"#EA4335\" d=\"M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58A8.64 8.64 0 0 0 9 0 9 9 0 0 0 .94 4.97L3.95 7.3C4.66 5.17 6.65 3.58 9 3.58z\"></path></svg> <span class=\"translate-y-px text-[1.1rem] font-semibold sm:text-[1.35rem]\">Continue with Google</span></a></div><p class=\"mt-7 text-sm text-base-content/45 sm:text-[0.95rem]\">Secure authentication powered by <span class=\"font-medium text-base-content/60\">Sync.</span></p></div></div></div></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section class=\"hero min-h-[calc(100vh-4rem)] overflow-hidden bg-transparent\"><div class=\"pointer-events-none absolute inset-0\" aria-hidden=\"true\"><div class=\"absolute inset-0\" style=\"background:\n\t\t\t\tradial-gradient(circle at 78% 42%, color-mix(in srgb, var(--color-primary) 10%, var(--color-base-100)), transparent 28%),\n\t\t\t\tlinear-gradient(180deg, color-mix(in srgb, var(--color-base-100) 92%, white), color-mix(in srgb, var(--pi-surface-muted, var(--color-base-200)) 88%, white));\"></div><div class=\"absolute right-[12%] top-[18%] h-64 w-80 opacity-45\" style=\"background-image: radial-gradient(circle at 2px 2px, color-mix(in srgb, var(--color-base-content) 16%, transparent) 1.2px, transparent 0); background-size: 18px 18px;\"></div><svg class=\"absolute inset-0 h-full w-full opacity-65\" viewBox=\"0 0 1600 900\" preserveAspectRatio=\"none\" fill=\"none\"><g stroke=\"color-mix(in srgb, var(--color-base-content) 14%, transparent)\" stroke-width=\"1.3\"><path d=\"M980 -30 C890 90 884 190 980 252 C1100 329 1042 472 908 584 C806 670 762 742 808 860\"></path> <path d=\"M1168 -18 C1060 120 1046 220 1168 304 C1300 398 1228 548 1092 660 C990 744 952 816 1010 882\"></path> <path d=\"M1336 -8 C1212 142 1184 262 1288 364 C1416 490 1354 646 1210 760\"></path> <path d=\"M890 704 C1010 654 1090 584 1128 462 C1172 316 1274 242 1438 230\"></path> <path d=\"M812 832 C930 804 1002 724 1038 616 C1076 488 1182 410 1348 398\"></path> <path d=\"M1176 104 L1440 164 L1562 128\"></path> <path d=\"M1320 332 L1456 286 L1592 220\"></path> <path d=\"M1178 736 L1334 628 L1504 676\"></path></g> <g><circle cx=\"1200\" cy=\"138\" r=\"11\" fill=\"color-mix(in srgb, var(--color-primary) 88%, white)\"></circle> <circle cx=\"1428\" cy=\"182\" r=\"7\" fill=\"color-mix(in srgb, var(--color-base-content) 24%, white)\"></circle> <circle cx=\"1326\" cy=\"332\" r=\"6\" fill=\"color-mix(in srgb, var(--color-accent) 82%, white)\"></circle> <circle cx=\"1466\" cy=\"284\" r=\"7\" fill=\"color-mix(in srgb, var(--color-base-content) 20%, white)\"></circle> <circle cx=\"1246\" cy=\"420\" r=\"9\" fill=\"color-mix(in srgb, var(--color-primary) 82%, white)\"></circle> <circle cx=\"1140\" cy=\"526\" r=\"8\" fill=\"color-mix(in srgb, var(--color-primary) 78%, white)\"></circle> <circle cx=\"1006\" cy=\"624\" r=\"9\" fill=\"color-mix(in srgb, var(--color-base-content) 18%, white)\"></circle> <circle cx=\"900\" cy=\"744\" r=\"8\" fill=\"color-mix(in srgb, var(--color-accent) 48%, white)\"></circle> <circle cx=\"1328\" cy=\"744\" r=\"8\" fill=\"color-mix(in srgb, var(--color-base-content) 16%, white)\"></circle> <circle cx=\"1440\" cy=\"666\" r=\"8\" fill=\"color-mix(in srgb, var(--color-base-content) 16%, white)\"></circle></g></svg></div><div class=\"hero-content relative w-full max-w-none px-5 py-10 text-center sm:px-8 lg:px-12\"><div class=\"w-full max-w-4xl\"><div class=\"mx-auto flex max-w-3xl flex-col items-center text-center\"><div class=\"text-base-content flex items-center justify-center gap-2 text-[clamp(3rem,7vw,5.4rem)] font-semibold leading-none tracking-[0.015em]\" style=\"font-family: var(--pi-font-label-family, var(--pi-font-body-family, Inter, system-ui, sans-serif));\"><span>sync</span> <span><span class=\"text-primary align-baseline text-[1.16em] font-medium tracking-[-0.08em]\">4</span><span class=\"text-primary\">.</span></span> <span>run</span></div><p class=\"mt-4 text-[clamp(0.72rem,1.4vw,0.98rem)] font-semibold uppercase tracking-[0.34em] text-base-content/78 sm:whitespace-nowrap\">Persistent cloud workspaces for AI agents</p><div class=\"mt-12 w-full max-w-xl\"><a class=\"btn btn-lg w-full justify-center gap-[1.15rem] rounded-[0.85rem] border border-base-content/10 bg-base-100 text-base-content shadow-[0_12px_32px_-18px_color-mix(in_srgb,var(--color-base-content)_14%,transparent)] transition-all duration-200 hover:-translate-y-px hover:border-base-content/14 hover:bg-base-100 hover:shadow-[0_16px_38px_-18px_color-mix(in_srgb,var(--color-base-content)_18%,transparent)] focus-visible:outline-3 focus-visible:outline-primary focus-visible:outline-offset-4\" href=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var2 templ.SafeURL
+		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinURLErrs(googleLoginPath(previewPrefix))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/auth/ui/login.templ`, Line: 54, Col: 543}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "\" aria-label=\"Continue with Google\"><svg class=\"h-7 w-7 flex-shrink-0\" viewBox=\"0 0 18 18\" aria-hidden=\"true\" focusable=\"false\"><path fill=\"#4285F4\" d=\"M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.91c1.7-1.57 2.69-3.88 2.69-6.62z\"></path> <path fill=\"#34A853\" d=\"M9 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.26c-.8.54-1.84.86-3.05.86-2.35 0-4.34-1.59-5.05-3.72H.94v2.33A9 9 0 0 0 9 18z\"></path> <path fill=\"#FBBC05\" d=\"M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.16.28-1.7V4.97H.94A9 9 0 0 0 0 9c0 1.45.34 2.82.94 4.03l3.01-2.33z\"></path> <path fill=\"#EA4335\" d=\"M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58A8.64 8.64 0 0 0 9 0 9 9 0 0 0 .94 4.97L3.95 7.3C4.66 5.17 6.65 3.58 9 3.58z\"></path></svg> <span class=\"translate-y-px text-[1.1rem] font-semibold sm:text-[1.35rem]\">Continue with Google</span></a></div><p class=\"mt-7 text-sm text-base-content/45 sm:text-[0.95rem]\">Secure authentication powered by <span class=\"font-medium text-base-content/60\">Sync.</span></p></div></div></div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		return nil
 	})
+}
+
+func googleLoginPath(prefix string) string {
+	return appPath(prefix, "/auth/login/google") + "?return_to=" + urlQueryEscape(appPath(prefix, "/"))
+}
+
+func appPath(prefix, path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		path = "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return path
+	}
+	prefix = strings.TrimRight(prefix, "/")
+	if path == "/" {
+		return prefix + "/"
+	}
+	return prefix + path
+}
+
+func urlQueryEscape(value string) string {
+	return url.QueryEscape(value)
 }
 
 var _ = templruntime.GeneratedTemplate

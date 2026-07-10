@@ -209,75 +209,41 @@ No hay dependencias del agente que el resto del código acuse de recibo.
 
 ---
 
-## Topología de tres procesos (a partir del 2026-07-02)
+## Modo runtime actual: app única (`cmd/api`)
 
-El boilerplate corre tres binarios en paralelo en dev/prod. Cumplen
-12-factor IX (disposability) en conjunto y desacoplan los restart
-cycles:
+El proyecto corre ahora como **una sola app** en dev:
 
 ```
-   browser
-      ↓
-   BFF  (cmd/bff/, :8000)        proxy inverso 'tonto'. Hand-built,
-                                 frozen, NO tocado por air.
-      ↓                ↓
-   /agent/*          /*
-      ↓                ↓
-   agent-worker      web-server
-   :18080            :8001
-   (cmd/agent-worker/)(cmd/api/)
-   hot-reload vía    hot-reload OK
-   air (cambia       (cambia mucho;
-   poco)             el grueso de
-                     la app vive acá)
+browser
+   ↓
+cmd/api (:8001)
+   ├─ /agent
+   ├─ /agent/auth
+   └─ /agent/sessions/*
 ```
-
-### Authentication (Opción A — producción)
-
-Cada servicio valida JWT contra el IdP (Casdoor) independientemente.
-**NO** propagamos un internal token HMAC: el BFF deja pasar el
-`Authorization` header tal cual al upstream, y tanto web-server como
-agent-worker corren su propio `JWTMiddleware` con `JWKS_URL`,
-`OIDC_ISSUER`, `JWT_AUDIENCE`. Cero secretos compartidos. Si el BFF
-se cae, los upstreams siguen sirviendo con JWT válido.
-
-Detalles y justificación en `doc/agent-runtime.md` §14.
 
 ### Reglas
 
-1. El BFF solo rutea. No tiene lógica de negocio, no tiene handlers,
-   no tiene estado. Si lo abrís y ves más de ~50 líneas de código,
-   algo está mal.
-2. El web-server (cmd/api) es el grueso del boilerplate. Editar acá
-   dispara hot-reload por air.
-3. El agent-worker (cmd/agent-worker) sostiene la runtime del agente.
-   Cambios acá sólo matan al worker, no al web-server.
-4. Editar cmd/bff NO requiere reinicio del web-server o del worker.
-   Hay que recompilar `./bin/bff` a mano.
+1. El entrypoint activo es `cmd/api`.
+2. El agente corre embebido en el mismo proceso vía `agenthttp.RegisterAllLegacy(...)`.
+3. `air` recompila `cmd/api` y deja los cambios visibles de una vez.
+4. `cmd/bff` y `cmd/agent-worker` fueron eliminados; cualquier referencia vieja es histórica.
 
 ### Arranque para dev
 
 ```sh
-# compila y arranca los tres procesos
-scripts/run-all.sh start
+# hot-reload normal
+air
 
-# muestra pidfiles + reachability de las dos URLs principales
-scripts/run-all.sh status
-
-# limpieza
-scripts/run-all.sh stop
+# o sin air
+bash ./scripts/run-api.sh start
+bash ./scripts/run-api.sh status
+bash ./scripts/run-api.sh stop
 ```
 
-### Producción
+### Nota histórica
 
-1. Construir cada binario en su propio target del Dockerfile / build
-   pipeline.
-2. Como tres servicios separados en compose / k8s.
-3. El BFF es estable: deployar con replace strategy `Recreate` o
-   `RollingUpdate` con zero-downtime no es estrictamente necesario
-   porque el binario no cambia seguido.
-
-Cuando el ciclo del agente migre a worker (step 2), el web-server ya
-no registrará handlers de /agent/*. La documentación de los pasos
-siguientes está en `doc/agent-runtime.md` §11+.
+La documentación de 3 procesos se mantiene solo como referencia histórica en
+`doc/agent-runtime.md` y debe considerarse stale salvo que se indique lo
+contrario.
 

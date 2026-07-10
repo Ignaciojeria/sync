@@ -4,8 +4,9 @@ import (
 	"net/http"
 	"strings"
 
-	authapp "app-mobile-downloader/internal/auth/application"
-	"app-mobile-downloader/internal/shared/configuration"
+	authapp "scaffoldxd1/internal/auth/application"
+	"scaffoldxd1/internal/shared/configuration"
+	mounted "scaffoldxd1/internal/shared/mounted"
 
 	"github.com/go-fuego/fuego"
 )
@@ -16,16 +17,23 @@ func startGoogleLogin(c fuego.ContextNoBody, conf configuration.Conf, preferGoog
 		return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: "cannot generate oauth state"}
 	}
 
+	secure := authapp.IsHTTPS(conf.OIDCRedirectURI)
 	http.SetCookie(c.Response(), &http.Cookie{
 		Name:     "oidc_state",
 		Value:    state,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   authapp.IsHTTPS(conf.OIDCRedirectURI),
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	})
+	returnTo := strings.TrimSpace(c.QueryParam("return_to"))
+	if mounted.IsSafeReturnTo(returnTo) {
+		mounted.SetReturnToCookie(c.Response(), c.Request(), returnTo, secure)
+	} else if mounted.ReadReturnTo(c.Request()) == "" {
+		mounted.SetReturnToCookie(c.Response(), c.Request(), mounted.CurrentAppURL(c.Request()), secure)
+	}
 
-	if preferGoogle && strings.TrimSpace(conf.OIDCUpstreamGoogleClientID) != "" {
+	if preferGoogle && conf.OIDCUpstreamGoogleClientID != "" {
 		googleURL, err := authapp.BuildDirectGoogleLoginURL(conf, state)
 		if err != nil {
 			return nil, fuego.HTTPError{Status: http.StatusBadGateway, Title: "could not build direct google redirect", Detail: err.Error()}
