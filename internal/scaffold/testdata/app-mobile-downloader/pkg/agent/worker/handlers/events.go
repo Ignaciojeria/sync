@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	agentapp "scaffoldxd1/pkg/agent/application"
+	agentapp "testboi1/pkg/agent/application"
 )
 
 // handleEvents sirve el stream SSE para una sesión del agente.

@@ -1,10 +1,10 @@
 package design
 
 import (
-	designapp "scaffoldxd1/internal/design/application"
-	designui "scaffoldxd1/internal/design/ui"
-	"scaffoldxd1/internal/shared/server"
-	"scaffoldxd1/internal/ui/layout"
+	designapp "testboi1/internal/design/application"
+	designui "testboi1/internal/design/ui"
+	"testboi1/internal/shared/server"
+	"testboi1/internal/ui/layout"
 
 	"github.com/go-fuego/fuego"
 )

@@ -64,6 +64,16 @@ type Config struct {
 	MachineAuthClientSecretRef   string `json:"machineAuthClientSecretRef,omitempty"`
 	MachineAuthAudience          string `json:"machineAuthAudience,omitempty"`
 	MachineAuthScopes            string `json:"machineAuthScopes,omitempty"`
+	AIGatewayProvider            string `json:"aiGatewayProvider,omitempty"`
+	AIGatewayAPIBaseURL         string `json:"aiGatewayApiBaseUrl,omitempty"`
+	AIGatewayClientID            string `json:"aiGatewayClientId,omitempty"`
+	AIGatewayClientName          string `json:"aiGatewayClientName,omitempty"`
+	AIGatewayClientEmail         string `json:"aiGatewayClientEmail,omitempty"`
+	AIGatewayKeyLabel            string `json:"aiGatewayKeyLabel,omitempty"`
+	AIGatewayKeyID               string `json:"aiGatewayKeyId,omitempty"`
+	AIGatewayKeyPrefix           string `json:"aiGatewayKeyPrefix,omitempty"`
+	AIGatewayAPIKey              string `json:"aiGatewayApiKey,omitempty"`
+	AIGatewayAPIKeyRef           string `json:"aiGatewayApiKeyRef,omitempty"`
 }
 
 type projectDiskConfig struct {
@@ -171,6 +181,18 @@ type projectDiskConfig struct {
 		Audience        string   `json:"audience,omitempty"`
 		Scopes          []string `json:"scopes,omitempty"`
 	} `json:"machineAuth,omitempty"`
+	AIGateway struct {
+		Provider    string `json:"provider,omitempty"`
+		APIBaseURL  string `json:"apiBaseUrl,omitempty"`
+		ClientID    string `json:"clientId,omitempty"`
+		ClientName  string `json:"clientName,omitempty"`
+		ClientEmail string `json:"clientEmail,omitempty"`
+		KeyLabel    string `json:"keyLabel,omitempty"`
+		KeyID       string `json:"keyId,omitempty"`
+		KeyPrefix   string `json:"keyPrefix,omitempty"`
+		APIKey      string `json:"apiKey,omitempty"`
+		APIKeyRef   string `json:"apiKeyRef,omitempty"`
+	} `json:"aiGateway,omitempty"`
 
 	// Compatibilidad con formatos legacy flat.
 	LastProjectID                string `json:"lastProjectId,omitempty"`
@@ -223,6 +245,16 @@ type projectDiskConfig struct {
 	MachineAuthClientSecretRef   string `json:"machineAuthClientSecretRef,omitempty"`
 	MachineAuthAudience          string `json:"machineAuthAudience,omitempty"`
 	MachineAuthScopes            string `json:"machineAuthScopes,omitempty"`
+	AIGatewayProvider            string `json:"aiGatewayProvider,omitempty"`
+	AIGatewayAPIBaseURL         string `json:"aiGatewayApiBaseUrl,omitempty"`
+	AIGatewayClientID            string `json:"aiGatewayClientId,omitempty"`
+	AIGatewayClientName          string `json:"aiGatewayClientName,omitempty"`
+	AIGatewayClientEmail         string `json:"aiGatewayClientEmail,omitempty"`
+	AIGatewayKeyLabel            string `json:"aiGatewayKeyLabel,omitempty"`
+	AIGatewayKeyID               string `json:"aiGatewayKeyId,omitempty"`
+	AIGatewayKeyPrefix           string `json:"aiGatewayKeyPrefix,omitempty"`
+	AIGatewayAPIKey              string `json:"aiGatewayApiKey,omitempty"`
+	AIGatewayAPIKeyRef           string `json:"aiGatewayApiKeyRef,omitempty"`
 }
 
 func Resolve(apiURLFlag, tokenFlag string) (Config, error) {
@@ -287,6 +319,16 @@ func Resolve(apiURLFlag, tokenFlag string) (Config, error) {
 	cfg.MachineAuthClientSecretRef = strings.TrimSpace(projectCfg.MachineAuthClientSecretRef)
 	cfg.MachineAuthAudience = strings.TrimSpace(projectCfg.MachineAuthAudience)
 	cfg.MachineAuthScopes = strings.TrimSpace(projectCfg.MachineAuthScopes)
+	cfg.AIGatewayProvider = strings.TrimSpace(projectCfg.AIGatewayProvider)
+	cfg.AIGatewayAPIBaseURL = strings.TrimSpace(projectCfg.AIGatewayAPIBaseURL)
+	cfg.AIGatewayClientID = strings.TrimSpace(projectCfg.AIGatewayClientID)
+	cfg.AIGatewayClientName = strings.TrimSpace(projectCfg.AIGatewayClientName)
+	cfg.AIGatewayClientEmail = strings.TrimSpace(projectCfg.AIGatewayClientEmail)
+	cfg.AIGatewayKeyLabel = strings.TrimSpace(projectCfg.AIGatewayKeyLabel)
+	cfg.AIGatewayKeyID = strings.TrimSpace(projectCfg.AIGatewayKeyID)
+	cfg.AIGatewayKeyPrefix = strings.TrimSpace(projectCfg.AIGatewayKeyPrefix)
+	cfg.AIGatewayAPIKey = strings.TrimSpace(projectCfg.AIGatewayAPIKey)
+	cfg.AIGatewayAPIKeyRef = strings.TrimSpace(projectCfg.AIGatewayAPIKeyRef)
 
 	if envAPI := strings.TrimSpace(os.Getenv("EINAR_API_URL")); envAPI != "" {
 		cfg.APIURL = envAPI
@@ -488,6 +530,16 @@ func Load() (Config, error) {
 			machineAuthScopes = strings.Join(disk.MachineAuth.Scopes, " ")
 		}
 	}
+	aiGatewayProvider := firstNonEmpty(strings.TrimSpace(disk.AIGateway.Provider), strings.TrimSpace(disk.AIGatewayProvider))
+	aiGatewayAPIBaseURL := firstNonEmpty(strings.TrimSpace(disk.AIGateway.APIBaseURL), strings.TrimSpace(disk.AIGatewayAPIBaseURL))
+	aiGatewayClientID := firstNonEmpty(strings.TrimSpace(disk.AIGateway.ClientID), strings.TrimSpace(disk.AIGatewayClientID))
+	aiGatewayClientName := firstNonEmpty(strings.TrimSpace(disk.AIGateway.ClientName), strings.TrimSpace(disk.AIGatewayClientName))
+	aiGatewayClientEmail := firstNonEmpty(strings.TrimSpace(disk.AIGateway.ClientEmail), strings.TrimSpace(disk.AIGatewayClientEmail))
+	aiGatewayKeyLabel := firstNonEmpty(strings.TrimSpace(disk.AIGateway.KeyLabel), strings.TrimSpace(disk.AIGatewayKeyLabel))
+	aiGatewayKeyID := firstNonEmpty(strings.TrimSpace(disk.AIGateway.KeyID), strings.TrimSpace(disk.AIGatewayKeyID))
+	aiGatewayKeyPrefix := firstNonEmpty(strings.TrimSpace(disk.AIGateway.KeyPrefix), strings.TrimSpace(disk.AIGatewayKeyPrefix))
+	aiGatewayAPIKey := firstNonEmpty(strings.TrimSpace(disk.AIGateway.APIKey), strings.TrimSpace(disk.AIGatewayAPIKey))
+	aiGatewayAPIKeyRef := firstNonEmpty(strings.TrimSpace(disk.AIGateway.APIKeyRef), strings.TrimSpace(disk.AIGatewayAPIKeyRef))
 
 	return Config{
 		LastProjectID:                projectID,
@@ -540,6 +592,16 @@ func Load() (Config, error) {
 		MachineAuthClientSecretRef:   machineAuthClientSecretRef,
 		MachineAuthAudience:          machineAuthAudience,
 		MachineAuthScopes:            machineAuthScopes,
+		AIGatewayProvider:            aiGatewayProvider,
+		AIGatewayAPIBaseURL:         aiGatewayAPIBaseURL,
+		AIGatewayClientID:            aiGatewayClientID,
+		AIGatewayClientName:          aiGatewayClientName,
+		AIGatewayClientEmail:         aiGatewayClientEmail,
+		AIGatewayKeyLabel:            aiGatewayKeyLabel,
+		AIGatewayKeyID:               aiGatewayKeyID,
+		AIGatewayKeyPrefix:           aiGatewayKeyPrefix,
+		AIGatewayAPIKey:              aiGatewayAPIKey,
+		AIGatewayAPIKeyRef:           aiGatewayAPIKeyRef,
 	}, nil
 }
 
@@ -642,6 +704,21 @@ func Save(cfg Config) error {
 	}
 	if len(identityExtensions) > 0 {
 		onDisk["identityExtensions"] = identityExtensions
+	}
+
+	aiGateway := map[string]any{}
+	setIf(aiGateway, "provider", cfg.AIGatewayProvider)
+	setIf(aiGateway, "apiBaseUrl", cfg.AIGatewayAPIBaseURL)
+	setIf(aiGateway, "clientId", cfg.AIGatewayClientID)
+	setIf(aiGateway, "clientName", cfg.AIGatewayClientName)
+	setIf(aiGateway, "clientEmail", cfg.AIGatewayClientEmail)
+	setIf(aiGateway, "keyLabel", cfg.AIGatewayKeyLabel)
+	setIf(aiGateway, "keyId", cfg.AIGatewayKeyID)
+	setIf(aiGateway, "keyPrefix", cfg.AIGatewayKeyPrefix)
+	setIf(aiGateway, "apiKey", cfg.AIGatewayAPIKey)
+	setIf(aiGateway, "apiKeyRef", cfg.AIGatewayAPIKeyRef)
+	if len(aiGateway) > 0 {
+		onDisk["aiGateway"] = aiGateway
 	}
 
 	var buf strings.Builder

@@ -16,8 +16,8 @@ import (
 	"sync"
 	"time"
 
-	"scaffoldxd1/internal/shared/server"
-	agentapp "scaffoldxd1/pkg/agent/application"
+	"testboi1/internal/shared/server"
+	agentapp "testboi1/pkg/agent/application"
 
 	"github.com/go-fuego/fuego"
 )

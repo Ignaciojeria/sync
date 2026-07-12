@@ -50,6 +50,8 @@ func TestMaterializeAppMobileDownloader(t *testing.T) {
 		"wede.config.json",
 		"workspaces.yaml",
 		"mutagen.yml",
+		".pi/extensions/provider.ts",
+		".pi/extensions/smoke.ts",
 	} {
 		if _, err := os.Stat(filepath.Join(dir, path)); err != nil {
 			t.Fatalf("expected %s to be materialized: %v", path, err)
@@ -69,7 +71,6 @@ func TestMaterializeAppMobileDownloader(t *testing.T) {
 	for _, path := range []string{
 		".git/config",
 		".einar/config.json",
-		".pi/extensions",
 		"tmp",
 		"bin/bff",
 		"api.exe",

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	sharedpostgresql "scaffoldxd1/internal/shared/infrastructure/postgresql"
-	"scaffoldxd1/pkg/agent/application"
+	sharedpostgresql "testboi1/internal/shared/infrastructure/postgresql"
+	"testboi1/pkg/agent/application"
 )
 
 type RuntimeEventRow struct {

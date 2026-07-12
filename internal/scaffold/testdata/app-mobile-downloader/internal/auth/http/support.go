@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"strings"
 
-	authapp "scaffoldxd1/internal/auth/application"
-	"scaffoldxd1/internal/shared/configuration"
-	mounted "scaffoldxd1/internal/shared/mounted"
+	authapp "testboi1/internal/auth/application"
+	"testboi1/internal/shared/configuration"
+	mounted "testboi1/internal/shared/mounted"
 
 	"github.com/go-fuego/fuego"
 )

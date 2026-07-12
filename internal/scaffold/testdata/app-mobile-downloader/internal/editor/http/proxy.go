@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"scaffoldxd1/internal/shared/server"
+	"testboi1/internal/shared/server"
 
 	"github.com/go-fuego/fuego"
 )

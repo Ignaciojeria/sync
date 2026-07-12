@@ -24,7 +24,7 @@ entre frontend y backend del host.
 
 ### Proyecto consumidor
 
-- Repo local: `C:\_git\einarc\scaffoldxd1`
+- Repo local: `C:\_git\einarc\testboi1`
 - Rol: host del chat del agente que consume el upstream vía runtime / gateway.
 - Entrada HTTP del chat en este proyecto: `/agent/sessions/{id}/prompt`
 - UI del chat: `pkg/agent/ui/page.templ`
@@ -33,7 +33,7 @@ entre frontend y backend del host.
 
 ### Criterio de reparto de responsabilidades
 
-- **Consumidor (`scaffoldxd1`)**:
+- **Consumidor (`testboi1`)**:
   - detectar turno interrumpido;
   - mostrar CTA de continuación;
   - soportar `resume=true` o acción equivalente;

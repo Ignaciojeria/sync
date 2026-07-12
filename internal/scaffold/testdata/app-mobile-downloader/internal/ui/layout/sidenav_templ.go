@@ -10,7 +10,7 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import (
 	"strings"
-	designui "scaffoldxd1/internal/design/ui"
+	designui "testboi1/internal/design/ui"
 )
 
 func SideNav(nav NavigationContext) templ.Component {
@@ -136,9 +136,9 @@ func SideNav(nav NavigationContext) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var10 templ.SafeURL
-			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinURLErrs(nav.HostPath("/agent"))
+			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinURLErrs(nav.AppPath("/agent"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/layout/sidenav.templ`, Line: 27, Col: 165}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/layout/sidenav.templ`, Line: 27, Col: 164}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 			if templ_7745c5c3_Err != nil {

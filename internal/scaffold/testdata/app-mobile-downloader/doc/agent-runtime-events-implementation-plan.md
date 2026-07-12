@@ -313,7 +313,7 @@ Eliminar duplicidad y complejidad accidental.
 
 ### No tocar `sync-ai-gateway` todavía
 
-La evidencia actual apunta a inconsistencia local en `scaffoldxd1`, no a una causa
+La evidencia actual apunta a inconsistencia local en `testboi1`, no a una causa
 raíz primaria en el gateway.
 
 ### No meter ElectricSQL todavía

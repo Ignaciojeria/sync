@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	authapp "scaffoldxd1/internal/auth/application"
-	authpostgresql "scaffoldxd1/internal/auth/infrastructure/postgresql"
-	"scaffoldxd1/internal/shared/configuration"
-	sharedpostgresql "scaffoldxd1/internal/shared/infrastructure/postgresql"
-	"scaffoldxd1/internal/shared/server"
+	authapp "testboi1/internal/auth/application"
+	authpostgresql "testboi1/internal/auth/infrastructure/postgresql"
+	"testboi1/internal/shared/configuration"
+	sharedpostgresql "testboi1/internal/shared/infrastructure/postgresql"
+	"testboi1/internal/shared/server"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-fuego/fuego"
@@ -101,7 +101,7 @@ func TestRegisterLoginGoogle(t *testing.T) {
 		OIDCTokenEndpoint:         "https://issuer.example/token",
 		OIDCAuthorizationEndpoint: "https://issuer.example/auth",
 		OIDCLoginURL:              "https://issuer.example/login",
-		OIDCClientID:              "built-in-scaffoldxd1-client",
+		OIDCClientID:              "built-in-testboi1-client",
 		PROJECT_NAME:              "mobile-downloader",
 	}
 
@@ -181,8 +181,8 @@ func TestRegisterLoginGoogle(t *testing.T) {
 	t.Run("host login can still use direct google when configured", func(t *testing.T) {
 		c := conf
 		c.OIDCUpstreamGoogleClientID = "google-client"
-		c.OIDCClientID = "mobile-downloader-scaffoldxd1-client"
-		c.PROJECT_NAME = "scaffoldxd1"
+		c.OIDCClientID = "mobile-downloader-testboi1-client"
+		c.PROJECT_NAME = "testboi1"
 		ts2, _, _ := newAuthTestServer(t, c)
 		client2 := ts2.Client()
 		client2.CheckRedirect = func(req *http.Request, via []*http.Request) error {
@@ -219,8 +219,8 @@ func TestRegisterLoginGoogle(t *testing.T) {
 	t.Run("mounted preview login can also use direct google when configured", func(t *testing.T) {
 		c := conf
 		c.OIDCUpstreamGoogleClientID = "google-client"
-		c.OIDCClientID = "mobile-downloader-scaffoldxd1-client"
-		c.PROJECT_NAME = "scaffoldxd1"
+		c.OIDCClientID = "mobile-downloader-testboi1-client"
+		c.PROJECT_NAME = "testboi1"
 		ts2, _, _ := newAuthTestServer(t, c)
 		client2 := ts2.Client()
 		client2.CheckRedirect = func(req *http.Request, via []*http.Request) error {

@@ -3,7 +3,7 @@ package jwks
 import (
 	"testing"
 
-	"scaffoldxd1/internal/shared/configuration"
+	"testboi1/internal/shared/configuration"
 )
 
 func TestNewReturnsErrorWhenNoJWKSURLIsConfigured(t *testing.T) {

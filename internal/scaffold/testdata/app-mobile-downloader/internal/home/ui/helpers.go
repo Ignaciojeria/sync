@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	topologyapp "scaffoldxd1/internal/topology/application"
+	topologyapp "testboi1/internal/topology/application"
 )
 
 func statusBadgeClass(status string) string {

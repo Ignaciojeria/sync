@@ -191,7 +191,28 @@ func runWorkspaceMutagenSync(cfg *config.Config) error {
 	if err := ensureMutagenYAMLForWorkspace(cfg); err != nil {
 		return err
 	}
+	if err := startAndFlushMutagenProject(mutagenBin, cfg); err != nil {
+		return err
+	}
+	if err := ensureMutagenSessionHealthy(cfg); err != nil {
+		fmt.Printf("⚠️  Sesión mutagen no saludable, recreando proyecto y reintentando una vez...\n")
+		if repairErr := recreateMutagenProject(mutagenBin, cfg); repairErr != nil {
+			return fmt.Errorf("%w (además no se pudo recrear proyecto mutagen: %v)", err, repairErr)
+		}
+		if err := ensureMutagenSessionHealthy(cfg); err != nil {
+			return err
+		}
+	}
+	if err := triggerTopologyHeartbeatOnce(cfg); err != nil {
+		fmt.Printf("⚠️  No se pudo refrescar topología inmediatamente: %v\n", err)
+	}
+	if err := startTopologyHeartbeatProcess(cfg); err != nil {
+		fmt.Printf("⚠️  No se pudo iniciar heartbeat de topología: %v\n", err)
+	}
+	return nil
+}
 
+func startAndFlushMutagenProject(mutagenBin string, cfg *config.Config) error {
 	start := exec.Command(mutagenBin, "project", "start")
 	if out, err := start.CombinedOutput(); err != nil {
 		msg := strings.ToLower(strings.TrimSpace(string(out)))
@@ -215,16 +236,21 @@ func runWorkspaceMutagenSync(cfg *config.Config) error {
 		}
 		return err
 	}
-	if err := ensureMutagenSessionHealthy(cfg); err != nil {
-		return err
-	}
-	if err := triggerTopologyHeartbeatOnce(cfg); err != nil {
-		fmt.Printf("⚠️  No se pudo refrescar topología inmediatamente: %v\n", err)
-	}
-	if err := startTopologyHeartbeatProcess(cfg); err != nil {
-		fmt.Printf("⚠️  No se pudo iniciar heartbeat de topología: %v\n", err)
-	}
 	return nil
+}
+
+func recreateMutagenProject(mutagenBin string, cfg *config.Config) error {
+	terminate := exec.Command(mutagenBin, "project", "terminate")
+	if out, err := terminate.CombinedOutput(); err != nil {
+		msg := strings.ToLower(strings.TrimSpace(string(out)))
+		if !strings.Contains(msg, "no mutagen project found") && !strings.Contains(msg, "not found") {
+			if strings.TrimSpace(string(out)) != "" {
+				return fmt.Errorf("mutagen project terminate falló: %s", strings.TrimSpace(string(out)))
+			}
+			return err
+		}
+	}
+	return startAndFlushMutagenProject(mutagenBin, cfg)
 }
 
 func ensureMutagenSessionHealthy(cfg *config.Config) error {

@@ -1,8 +1,8 @@
 package design
 
 import (
-	designapp "scaffoldxd1/internal/design/application"
-	"scaffoldxd1/internal/shared/server"
+	designapp "testboi1/internal/design/application"
+	"testboi1/internal/shared/server"
 )
 
 // Register wires design-system runtime routes onto the shared server.

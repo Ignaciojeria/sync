@@ -1,8 +1,8 @@
 package dev
 
 import (
-	"scaffoldxd1/internal/quality/application/test_report"
-	"scaffoldxd1/internal/shared/server"
+	"testboi1/internal/quality/application/test_report"
+	"testboi1/internal/shared/server"
 )
 
 // Register wires quality (test report) routes onto the shared server.

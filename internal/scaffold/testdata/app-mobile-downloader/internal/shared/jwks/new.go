@@ -3,7 +3,7 @@ package jwks
 import (
 	"strings"
 
-	"scaffoldxd1/internal/shared/configuration"
+	"testboi1/internal/shared/configuration"
 
 	"github.com/MicahParks/keyfunc/v3"
 )

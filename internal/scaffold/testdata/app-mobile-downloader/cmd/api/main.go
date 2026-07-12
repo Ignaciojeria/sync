@@ -9,37 +9,37 @@ import (
 	"syscall"
 	"time"
 
-	authhttp "scaffoldxd1/internal/auth/http"
-	authpostgresql "scaffoldxd1/internal/auth/infrastructure/postgresql"
-	designapp "scaffoldxd1/internal/design/application"
-	designhttp "scaffoldxd1/internal/design/http"
-	editorhttp "scaffoldxd1/internal/editor/http"
-	gatewayapp "scaffoldxd1/internal/gateway/application"
-	gatewayhttp "scaffoldxd1/internal/gateway/http"
-	homehttp "scaffoldxd1/internal/home/http"
-	testreport "scaffoldxd1/internal/quality/application/test_report"
-	qualityhttp "scaffoldxd1/internal/quality/http"
-	schedulerhttp "scaffoldxd1/internal/scheduler/http"
-	"scaffoldxd1/internal/shared"
-	"scaffoldxd1/internal/shared/configuration"
-	"scaffoldxd1/internal/shared/infrastructure/postgresql"
-	jwks "scaffoldxd1/internal/shared/jwks"
-	server "scaffoldxd1/internal/shared/server"
-	topologyapp "scaffoldxd1/internal/topology/application"
-	topologyhttp "scaffoldxd1/internal/topology/http"
-	topologymemory "scaffoldxd1/internal/topology/infrastructure/memory"
-	topologymerged "scaffoldxd1/internal/topology/infrastructure/merged"
-	topologymutagen "scaffoldxd1/internal/topology/infrastructure/mutagen"
-	topologypostgresql "scaffoldxd1/internal/topology/infrastructure/postgresql"
-	topologyworkspacefiles "scaffoldxd1/internal/topology/infrastructure/workspacefiles"
-	agentapp "scaffoldxd1/pkg/agent/application"
-	agenthttp "scaffoldxd1/pkg/agent/http"
-	agentdisk "scaffoldxd1/pkg/agent/infrastructure/disk"
-	agentmemory "scaffoldxd1/pkg/agent/infrastructure/memory"
-	agentpirpc "scaffoldxd1/pkg/agent/infrastructure/pirpc"
-	agentpostgresql "scaffoldxd1/pkg/agent/infrastructure/postgresql"
-	agentpreview "scaffoldxd1/pkg/agent/infrastructure/preview"
-	agentworktree "scaffoldxd1/pkg/agent/infrastructure/worktree"
+	authhttp "testboi1/internal/auth/http"
+	authpostgresql "testboi1/internal/auth/infrastructure/postgresql"
+	designapp "testboi1/internal/design/application"
+	designhttp "testboi1/internal/design/http"
+	editorhttp "testboi1/internal/editor/http"
+	gatewayapp "testboi1/internal/gateway/application"
+	gatewayhttp "testboi1/internal/gateway/http"
+	homehttp "testboi1/internal/home/http"
+	testreport "testboi1/internal/quality/application/test_report"
+	qualityhttp "testboi1/internal/quality/http"
+	schedulerhttp "testboi1/internal/scheduler/http"
+	"testboi1/internal/shared"
+	"testboi1/internal/shared/configuration"
+	"testboi1/internal/shared/infrastructure/postgresql"
+	jwks "testboi1/internal/shared/jwks"
+	server "testboi1/internal/shared/server"
+	topologyapp "testboi1/internal/topology/application"
+	topologyhttp "testboi1/internal/topology/http"
+	topologymemory "testboi1/internal/topology/infrastructure/memory"
+	topologymerged "testboi1/internal/topology/infrastructure/merged"
+	topologymutagen "testboi1/internal/topology/infrastructure/mutagen"
+	topologypostgresql "testboi1/internal/topology/infrastructure/postgresql"
+	topologyworkspacefiles "testboi1/internal/topology/infrastructure/workspacefiles"
+	agentapp "testboi1/pkg/agent/application"
+	agenthttp "testboi1/pkg/agent/http"
+	agentdisk "testboi1/pkg/agent/infrastructure/disk"
+	agentmemory "testboi1/pkg/agent/infrastructure/memory"
+	agentpirpc "testboi1/pkg/agent/infrastructure/pirpc"
+	agentpostgresql "testboi1/pkg/agent/infrastructure/postgresql"
+	agentpreview "testboi1/pkg/agent/infrastructure/preview"
+	agentworktree "testboi1/pkg/agent/infrastructure/worktree"
 )
 
 func main() {
@@ -118,7 +118,19 @@ func main() {
 		if err := previewLauncher.Destroy(ctx, session); err != nil {
 			log.Printf("agent preview destroy: %v", err)
 		}
+		// Matar watchers/procesos cuyo CWD esté dentro del workspace
+		// de la sesión antes de borrarlo. Best-effort: si falla o
+		// devuelve 0, no bloqueamos la destrucción.
+		if killed, err := agentapp.KillProcessesInWorkspace(ctx, session.WorkspacePath); err != nil {
+			log.Printf("agent workspace cleanup (%s): %v", session.ID, err)
+		} else if killed > 0 {
+			log.Printf("agent workspace cleanup (%s): killed %d process(es)", session.ID, killed)
+		}
 		return workspaceManager.Destroy(ctx, session)
+	}).WithSessionApplier(func(ctx context.Context, session agentapp.Session) (agentapp.ApplyResult, error) {
+		return workspaceManager.ApplyPreview(ctx, session)
+	}).WithSessionMerger(func(ctx context.Context, session agentapp.Session) (agentapp.MergeResult, error) {
+		return workspaceManager.MergePreview(ctx, session)
 	})
 	hooks.RegisterShutdown(manager.Close)
 	runtimeEventsStore := agentpostgresql.NewRuntimeEventsStore(db)

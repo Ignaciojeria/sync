@@ -1,7 +1,7 @@
 package dev
 
 import (
-	"scaffoldxd1/internal/quality/ui"
+	"testboi1/internal/quality/ui"
 	"github.com/go-fuego/fuego"
 )
 

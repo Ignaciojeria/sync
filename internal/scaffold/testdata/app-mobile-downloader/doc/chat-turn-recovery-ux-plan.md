@@ -59,7 +59,7 @@ Resumen:
 
 ### Proyecto consumidor
 
-- Repo local: `C:\_git\einarc\scaffoldxd1`
+- Repo local: `C:\_git\einarc\testboi1`
 - UI del chat: `pkg/agent/ui/page.templ`
 - Prompt HTTP: `pkg/agent/http/prompt.go`
 - Orquestación del turno: `pkg/agent/application/manager.go`
@@ -332,12 +332,12 @@ innecesarios.
 
 | Problema | Repo | Archivo | Cambio mínimo |
 |---|---|---|---|
-| UI parece idle mientras el runtime sigue ocupado | `scaffoldxd1` | `pkg/agent/ui/page.templ` | banner visible + estado real del turno |
-| el input no cambia de modo ante un turno recuperable | `scaffoldxd1` | `pkg/agent/ui/page.templ` | modo recovery-aware |
-| error `already processing` llega crudo al usuario | `scaffoldxd1` | `manager.go` / `page.templ` | cola mínima o recover automático |
-| falta CTA cuando la respuesta queda parcial | `scaffoldxd1` | `page.templ` | badge + botón `Retomar respuesta` |
-| la UI no diferencia recovery vs continuation | `scaffoldxd1` | `page.templ` | copy y estado semántico |
-| fallback textual domina demasiado el diseño | `scaffoldxd1` | `page.templ` / `prompt.go` / `manager.go` | bajar keywords a fallback secundario |
+| UI parece idle mientras el runtime sigue ocupado | `testboi1` | `pkg/agent/ui/page.templ` | banner visible + estado real del turno |
+| el input no cambia de modo ante un turno recuperable | `testboi1` | `pkg/agent/ui/page.templ` | modo recovery-aware |
+| error `already processing` llega crudo al usuario | `testboi1` | `manager.go` / `page.templ` | cola mínima o recover automático |
+| falta CTA cuando la respuesta queda parcial | `testboi1` | `page.templ` | badge + botón `Retomar respuesta` |
+| la UI no diferencia recovery vs continuation | `testboi1` | `page.templ` | copy y estado semántico |
+| fallback textual domina demasiado el diseño | `testboi1` | `page.templ` / `prompt.go` / `manager.go` | bajar keywords a fallback secundario |
 
 ---
 

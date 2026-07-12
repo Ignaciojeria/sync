@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strings"
 
-	gatewayapp "scaffoldxd1/internal/gateway/application"
-	gatewayui "scaffoldxd1/internal/gateway/ui"
-	"scaffoldxd1/internal/shared/server"
+	gatewayapp "testboi1/internal/gateway/application"
+	gatewayui "testboi1/internal/gateway/ui"
+	"testboi1/internal/shared/server"
 	"github.com/a-h/templ"
 
 	"github.com/go-fuego/fuego"

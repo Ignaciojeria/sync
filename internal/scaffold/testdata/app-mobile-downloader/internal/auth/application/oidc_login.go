@@ -6,8 +6,8 @@ import (
 	"net/url"
 	"strings"
 
-	"scaffoldxd1/internal/shared"
-	"scaffoldxd1/internal/shared/configuration"
+	"testboi1/internal/shared"
+	"testboi1/internal/shared/configuration"
 )
 
 func BuildLoginURL(conf configuration.Conf, state string, preferGoogle bool) (string, error) {

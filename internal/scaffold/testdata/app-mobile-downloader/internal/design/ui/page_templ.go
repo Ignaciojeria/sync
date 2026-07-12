@@ -10,7 +10,7 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import (
 	"strings"
-	designapp "scaffoldxd1/internal/design/application"
+	designapp "testboi1/internal/design/application"
 )
 
 func Page(themes []designapp.ResolvedTheme, active designapp.ResolvedTheme, previewPrefix string) templ.Component {

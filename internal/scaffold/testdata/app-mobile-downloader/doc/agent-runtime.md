@@ -1,4 +1,4 @@
-# Runtime del agente pi en `scaffoldxd1`
+# Runtime del agente pi en `testboi1`
 
 > Documento vivo para entender qué partes del módulo `internal/agent`
 > sobreviven a un fork del repo sin intervención y qué partes requieren
@@ -81,12 +81,12 @@ claude-sonnet` desde una VM con `air` activo:
 ### 3.1. Renombre de módulo Go (obligatorio)
 
 Todos los archivos `.go` tienen el module path
-`scaffoldxd1/<paquete>`. Al forkear a un proyecto nuevo hay que:
+`testboi1/<paquete>`. Al forkear a un proyecto nuevo hay que:
 
 ```sh
 # desde la raíz del fork
 go mod edit -module github.com/mi-org/mi-proyecto
-rg -l "scaffoldxd1" | xargs sed -i 's|scaffoldxd1|mi-proyecto|g'
+rg -l "testboi1" | xargs sed -i 's|testboi1|mi-proyecto|g'
 go mod tidy
 ```
 
@@ -194,7 +194,7 @@ Variables que NO existen (deberían):
 ```sh
 # 1. Renombrar el módulo y los imports
 go mod edit -module <nuevo-path>
-rg -l "scaffoldxd1" | xargs sed -i 's|scaffoldxd1|<nuevo-path>|g'
+rg -l "testboi1" | xargs sed -i 's|testboi1|<nuevo-path>|g'
 go mod tidy
 
 # 2. Asegurar que el hot-reload ignore tmp/

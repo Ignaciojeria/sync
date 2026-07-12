@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	agentapp "scaffoldxd1/pkg/agent/application"
+	agentapp "testboi1/pkg/agent/application"
 )
 
 // fakeBinary escribe un script en un tempdir y devuelve su path absoluto.

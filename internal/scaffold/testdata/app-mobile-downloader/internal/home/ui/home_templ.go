@@ -10,7 +10,7 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import (
 	"strings"
-	topologyapp "scaffoldxd1/internal/topology/application"
+	topologyapp "testboi1/internal/topology/application"
 )
 
 func HomePage(snapshot topologyapp.Snapshot, previewPrefix string) templ.Component {

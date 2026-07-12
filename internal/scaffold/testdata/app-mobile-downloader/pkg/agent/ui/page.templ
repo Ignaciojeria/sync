@@ -1,10 +1,10 @@
 package ui
 
 templ Page(state PageState) {
-	<div id="agent-app" class="drawer h-screen overflow-hidden text-base-content xl:drawer-open" data-active-session-id={ activeSessionID(state) } data-user-jwt={ state.UserJWT } data-chat-state="empty">
+	<div id="agent-app" class="drawer h-dvh overflow-hidden text-base-content xl:drawer-open" data-active-session-id={ activeSessionID(state) } data-mount-prefix={ state.MountPrefix } data-user-jwt={ state.UserJWT } data-chat-state="empty">
 		<input id="agent-sidebar" type="checkbox" class="drawer-toggle"/>
 
-		<div class="drawer-content flex h-screen min-w-0 flex-col overflow-hidden">
+		<div class="drawer-content flex h-dvh min-w-0 flex-col overflow-hidden">
 			<section class="flex min-h-0 flex-1 flex-col">
 				<header class="agent-glass-panel agent-shell-shadow relative z-10 flex items-center justify-between border-b agent-shell-border px-3 py-2 sm:px-5 sm:py-3">
 					<div class="flex min-w-0 items-center gap-2.5">
@@ -29,6 +29,14 @@ templ Page(state PageState) {
 				</header>
 
 				<div id="agent-feed" class="agent-thin-scroll min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5 sm:py-5">
+					if isMountedPreview(state) {
+						<div class="mx-auto mb-3 w-full max-w-5xl">
+							<div role="alert" class="alert border border-info/30 bg-info/10 text-sm text-base-content sm:alert-horizontal">
+								<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+								<span>Este agente solo prueba la preview actual. Las solicitudes aquí no cambian el merge final.</span>
+							</div>
+						</div>
+					}
 					<div id="agent-error-banner" class="mx-auto mb-3 hidden w-full max-w-5xl">
 						<div id="agent-error-alert" role="alert" class="alert alert-error alert-soft border border-error/35 text-sm text-error-content sm:alert-horizontal">
 							<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86l-7.1 12.3A2 2 0 0 0 4.92 19h14.16a2 2 0 0 0 1.73-2.84l-7.1-12.3a2 2 0 0 0-3.46 0Z"/></svg>
@@ -117,11 +125,15 @@ templ Page(state PageState) {
 								<div class="flex items-center gap-3 text-sm text-base-content/84" style="font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);">
 									<span>Preview:</span>
 									<div class="agent-glass-panel-soft agent-raised input w-full min-w-[24rem] max-w-[48rem] border agent-shell-border bg-transparent text-base-content">
-										<input id="session-preview-url" type="text" class="grow" value={ shellPreviewPath(state) } readonly/>
+										<input id="session-preview-url" type="text" class="grow" value={ shellPreviewPath(state) } readonly if isMountedPreview(state) { placeholder="Nested previews are not supported" }/>
 									</div>
 								</div>
 								<div class="flex items-center justify-end gap-2">
-									<a id="session-preview-open" class="btn btn-sm btn-primary" href={ shellPreviewPath(state) } target="_blank" rel="noopener noreferrer" if shellPreviewPath(state) == "" { hidden }>Open preview</a>
+									if isMountedPreview(state) {
+										<button id="session-preview-open" class="btn btn-sm btn-primary btn-disabled" type="button" disabled title="Nested previews are not supported">Open preview</button>
+									} else {
+										<a id="session-preview-open" class="btn btn-sm btn-primary" href={ shellPreviewPath(state) } target="_blank" rel="noopener noreferrer" if shellPreviewPath(state) == "" { hidden }>Open preview</a>
+									}
 								</div>
 							</div>
 						</div>
@@ -201,8 +213,30 @@ templ Page(state PageState) {
 	(() => {
 		const root = document.getElementById("agent-app");
 		if (!root) return;
+		// ponytail: en Android el teclado virtual y la barra de gestos no
+		// siempre reducen el layout viewport, así que aunque usemos
+		// h-dvh (que sí lo hace en Chrome 108+ / iOS 15.4+) dejamos un
+		// fallback explícito con visualViewport que mide el alto real
+		// visible y lo aplica al contenedor raíz. Así el toolbar sube
+		// junto con el teclado y el chat queda siempre sobre el área
+		// visible, sin quedar tapado por chrome del browser.
+		function applyVisualViewport() {
+			const vv = window.visualViewport;
+			if (!vv) return;
+			const offsetTop = Math.max(0, Math.round(vv.offsetTop || 0));
+			root.style.height = `${Math.round(vv.height)}px`;
+			root.style.transform = offsetTop > 0 ? `translateY(${offsetTop}px)` : "";
+		}
+		if (window.visualViewport) {
+			applyVisualViewport();
+			window.visualViewport.addEventListener("resize", applyVisualViewport);
+			window.visualViewport.addEventListener("scroll", applyVisualViewport);
+			window.addEventListener("orientationchange", applyVisualViewport);
+		}
 
 		let activeSessionId = root.dataset.activeSessionId || "";
+		const mountPrefix = (root.dataset.mountPrefix || "").trim().replace(/\/+$/, "");
+		const isMountedPreview = !!mountPrefix;
 		const fallbackJwt = (root.dataset.userJwt || "").trim();
 		// Cache del JWT (IDToken de Casdoor). La fuente primaria es
 		// GET /agent/auth en el web-server, que acepta cookie y refresca
@@ -212,13 +246,21 @@ templ Page(state PageState) {
 		// — útil sólo para el primer pintado, hasta que el usuario
 		// vuelva a loguearse.
 		const authCache = { token: fallbackJwt, exp: 0 };
+		function appPath(path) {
+			path = String(path || "").trim() || "/";
+			if (!path.startsWith("/")) path = "/" + path;
+			if (!mountPrefix) return path;
+			if (path === "/") return mountPrefix + "/";
+			return mountPrefix + path;
+		}
+
 		async function getAuthToken(forceRefresh) {
 			const nowSec = Date.now() / 1000;
 			if (!forceRefresh && authCache.token && authCache.exp && authCache.exp > nowSec + 30) {
 				return authCache.token;
 			}
 			try {
-				const r = await fetch("/agent/auth", {
+				const r = await fetch(appPath("/agent/auth"), {
 					method: "GET",
 					headers: { "Accept": "application/json" },
 					credentials: "same-origin",
@@ -356,7 +398,7 @@ templ Page(state PageState) {
 					row.className += " border-base-300/70 bg-base-100/72";
 				}
 				const a = document.createElement("a");
-				a.href = `/agent?session=${encodeURIComponent(session.id)}`;
+				a.href = appPath(`/agent?session=${encodeURIComponent(session.id)}`);
 				a.className = "min-w-0 flex-1";
 				a.innerHTML = `<div class=\"flex items-start justify-between gap-3\"><div class=\"min-w-0 flex-1\"><div class=\"truncate text-[0.82rem] font-semibold text-base-content\" style=\"font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);\">${escapeHTML(session.title || "Nueva sesión")}</div><div class=\"mt-1 flex items-center gap-1 text-[0.68rem] text-base-content/62\"><span>${escapeHTML(formatSessionDate(session.updatedAt))}</span><span class=\"truncate\">${escapeHTML(session.cwd || "cwd pendiente")}</span></div><div class=\"mt-1 truncate text-[0.7rem] text-base-content/72\" style=\"font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);\">${escapeHTML(session.model || "default")}</div></div><span class=\"${statusBadgeClass(session.status)} badge-sm shrink-0\">${escapeHTML(session.status || "idle")}</span></div>`;
 				const remove = document.createElement("button");
@@ -388,7 +430,7 @@ templ Page(state PageState) {
 		function previewPathForSession(sessionId) {
 			sessionId = String(sessionId || "").trim();
 			if (!sessionId) return "";
-			return `/agent/sessions/${encodeURIComponent(sessionId)}/preview/`;
+			return appPath(`/agent/sessions/${encodeURIComponent(sessionId)}/preview/`);
 		}
 
 		function previewURLForSession(sessionId) {
@@ -398,9 +440,9 @@ templ Page(state PageState) {
 		}
 
 		function syncPreviewURL(sessionId) {
-			const href = previewURLForSession(sessionId);
+			const href = isMountedPreview ? "" : previewURLForSession(sessionId);
 			if (sessionPreviewURL) sessionPreviewURL.value = href;
-			if (sessionPreviewOpen) {
+			if (sessionPreviewOpen && sessionPreviewOpen.tagName === "A") {
 				sessionPreviewOpen.href = href || "#";
 				sessionPreviewOpen.hidden = !href;
 			}
@@ -502,7 +544,7 @@ templ Page(state PageState) {
 		async function refreshSessionCost() {
 			if (!activeSessionId) return;
 			try {
-				const response = await fetch(`/gateway/session-cost?session_id=${encodeURIComponent(activeSessionId)}`, {
+				const response = await fetch(appPath(`/gateway/session-cost?session_id=${encodeURIComponent(activeSessionId)}`), {
 					method: "GET",
 					headers: { "Accept": "application/json" },
 					credentials: "same-origin",
@@ -517,7 +559,7 @@ templ Page(state PageState) {
 
 		async function refreshBalance() {
 			try {
-				const response = await fetch(`/gateway/balance?format=json`, {
+				const response = await fetch(appPath(`/gateway/balance?format=json`), {
 					method: "GET",
 					headers: { "Accept": "application/json" },
 					credentials: "same-origin",
@@ -578,7 +620,7 @@ templ Page(state PageState) {
 		}
 
 		async function fetchSessions() {
-			const response = await workerFetch("/agent/sessions", { method: "GET" });
+			const response = await workerFetch(appPath("/agent/sessions"), { method: "GET" });
 			if (!response.ok) throw new Error(`sessions ${response.status}`);
 			const data = await response.json();
 			return Array.isArray(data && data.sessions) ? data.sessions : [];
@@ -586,7 +628,7 @@ templ Page(state PageState) {
 
 		async function fetchSession(id) {
 			if (!id) return null;
-			const response = await workerFetch(`/agent/sessions/${id}`, { method: "GET" });
+			const response = await workerFetch(appPath(`/agent/sessions/${id}`), { method: "GET" });
 			if (!response.ok) return null;
 			const data = await response.json();
 			return data && data.session ? data.session : null;
@@ -595,7 +637,7 @@ templ Page(state PageState) {
 		async function deleteSessionByID(sessionId) {
 			if (!sessionId) return;
 			clearVisibleError();
-			const response = await workerFetch(`/agent/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+			const response = await workerFetch(appPath(`/agent/sessions/${encodeURIComponent(sessionId)}`), { method: "DELETE" });
 			if (!response.ok) {
 				showVisibleError(await readErrorDetail(response));
 				return;
@@ -604,17 +646,17 @@ templ Page(state PageState) {
 			renderSessions(sessions);
 			if (sessionId !== activeSessionId) return;
 			if (sessions.length > 0) {
-				window.location.href = `/agent?session=${encodeURIComponent(sessions[0].id)}`;
+				window.location.href = appPath(`/agent?session=${encodeURIComponent(sessions[0].id)}`);
 				return;
 			}
-			window.location.href = "/agent";
+			window.location.href = appPath("/agent");
 		}
 
 		async function fetchHistory(sessionId, before, limit) {
 			if (!sessionId) return { items: [], hasMore: false, nextBefore: 0, lastSeq: 0 };
 			const qs = new URLSearchParams({ limit: String(limit || 10) });
 			if (before) qs.set("before", String(before));
-			const response = await workerFetch(`/agent/sessions/${sessionId}/history?${qs.toString()}`, { method: "GET" });
+			const response = await workerFetch(appPath(`/agent/sessions/${sessionId}/history?${qs.toString()}`), { method: "GET" });
 			if (!response.ok) throw new Error(`history ${response.status}`);
 			return response.json();
 		}
@@ -634,7 +676,7 @@ templ Page(state PageState) {
 				console.warn("agent: no pude listar sesiones", err);
 			}
 			if (!activeSessionId && sessions.length > 0) {
-				window.location.replace(`/agent?session=${encodeURIComponent(sessions[0].id)}`);
+				window.location.replace(appPath(`/agent?session=${encodeURIComponent(sessions[0].id)}`));
 				return false;
 			}
 			renderSessions(sessions);
@@ -645,7 +687,7 @@ templ Page(state PageState) {
 			const active = await fetchSession(activeSessionId);
 			if (!active) {
 				if (sessions.length > 0) {
-					window.location.replace(`/agent?session=${encodeURIComponent(sessions[0].id)}`);
+					window.location.replace(appPath(`/agent?session=${encodeURIComponent(sessions[0].id)}`));
 					return false;
 				}
 				if (createForm) createForm.requestSubmit();
@@ -1228,7 +1270,7 @@ templ Page(state PageState) {
 					// las dudas). Si todavía no tenemos un lastId,
 					// arrancamos en `live` para NO replayear backlog:
 					// el historial visible lo carga /history.
-					let url = `/agent/sessions/${sessionId}/events`;
+					let url = appPath(`/agent/sessions/${sessionId}/events`);
 					if (lastId) {
 						url += `?resume=${encodeURIComponent(String(lastId))}`;
 					} else {
@@ -1472,7 +1514,7 @@ templ Page(state PageState) {
 			let historyError = "";
 			if (sessionId) {
 				try {
-					const response = await workerFetch(`/agent/sessions/${sessionId}/history?limit=10`, { method: "GET" });
+					const response = await workerFetch(appPath(`/agent/sessions/${sessionId}/history?limit=10`), { method: "GET" });
 					if (!response.ok) throw new Error(`history ${response.status}`);
 					history = await response.json();
 				} catch (err) {
@@ -1582,7 +1624,7 @@ templ Page(state PageState) {
 			const headers = await authHeaders();
 			const body = { message };
 			if (action) body.action = action;
-			return fetch(`/agent/sessions/${activeSessionId}/prompt`, {
+			return fetch(appPath(`/agent/sessions/${activeSessionId}/prompt`), {
 				method: "POST",
 				headers,
 				body: JSON.stringify(body),
@@ -1593,7 +1635,7 @@ templ Page(state PageState) {
 			if (!createForm) return;
 			clearVisibleError();
 			const body = Object.fromEntries(new FormData(createForm).entries());
-			const response = await workerFetch("/agent/sessions", {
+			const response = await workerFetch(appPath("/agent/sessions"), {
 				method: "POST",
 				body: JSON.stringify(body),
 			});
@@ -1604,7 +1646,7 @@ templ Page(state PageState) {
 			const data = await response.json();
 			if (data.session && data.session.id) {
 				closeSidebarOnMobile();
-				window.location.href = `/agent?session=${data.session.id}`;
+				window.location.href = appPath(`/agent?session=${data.session.id}`);
 				return;
 			}
 			showVisibleError("No se pudo crear la sesión.");
@@ -1770,7 +1812,7 @@ templ Page(state PageState) {
 		if (abortButton) {
 			abortButton.addEventListener("click", async () => {
 				if (!activeSessionId) return;
-				await workerFetch(`/agent/sessions/${activeSessionId}/abort`, {
+				await workerFetch(appPath(`/agent/sessions/${activeSessionId}/abort`), {
 					method: "POST",
 					body: JSON.stringify({})
 				});

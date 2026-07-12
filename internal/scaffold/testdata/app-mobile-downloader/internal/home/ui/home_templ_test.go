@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	topologyapp "scaffoldxd1/internal/topology/application"
+	topologyapp "testboi1/internal/topology/application"
 )
 
 func TestHomePageRendersContent(t *testing.T) {

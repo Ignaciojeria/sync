@@ -3,8 +3,9 @@ package agent
 import (
 	"net/http"
 
-	"scaffoldxd1/internal/shared/server"
-	agentapp "scaffoldxd1/pkg/agent/application"
+	"testboi1/internal/shared/mounted"
+	"testboi1/internal/shared/server"
+	agentapp "testboi1/pkg/agent/application"
 
 	"github.com/go-fuego/fuego"
 )
@@ -24,6 +25,16 @@ func listSessions(manager agentapp.AgentService) func(fuego.ContextNoBody) (any,
 		if err != nil {
 			return nil, mapSessionError(err)
 		}
+		if ownerID := previewOwnerSessionIDFromRequest(c.Request()); ownerID != "" {
+			filtered := sessions[:0]
+			for _, session := range sessions {
+				if session.ID == ownerID {
+					continue
+				}
+				filtered = append(filtered, session)
+			}
+			sessions = filtered
+		}
 		return map[string]any{"sessions": sessions}, nil
 	}
 }
@@ -42,7 +53,7 @@ func createSession(manager agentapp.AgentService) func(fuego.ContextNoBody) (any
 		if err != nil {
 			return nil, mapSessionError(err)
 		}
-		c.Response().Header().Set("Location", "/agent?session="+session.ID)
+		c.Response().Header().Set("Location", mounted.App(mounted.Prefix(c.Request()), "/agent?session="+session.ID))
 		return map[string]any{"session": session}, nil
 	}
 }

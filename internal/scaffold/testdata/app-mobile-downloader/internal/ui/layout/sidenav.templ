@@ -1,7 +1,7 @@
 package layout
 
 import (
-	designui "scaffoldxd1/internal/design/ui"
+	designui "testboi1/internal/design/ui"
 	"strings"
 )
 
@@ -24,7 +24,7 @@ templ SideNav(nav NavigationContext) {
 				</a>
 			</li>
 			<li>
-				<a class={ navItemBaseClass() + " " + navItemToneClass("/agent", nav.CurrentPath) + " " + navItemClass("/agent", nav.CurrentPath) } href={ nav.HostPath("/agent") }>
+				<a class={ navItemBaseClass() + " " + navItemToneClass("/agent", nav.CurrentPath) + " " + navItemClass("/agent", nav.CurrentPath) } href={ nav.AppPath("/agent") }>
 					<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3v2.25M14.25 3v2.25M4.5 9h15M5.25 19.5h13.5A2.25 2.25 0 0 0 21 17.25V8.25A2.25 2.25 0 0 0 18.75 6H5.25A2.25 2.25 0 0 0 3 8.25v9A2.25 2.25 0 0 0 5.25 19.5ZM9 14.25h.008v.008H9v-.008Zm3 0h.008v.008H12v-.008Zm3 0h.008v.008H15v-.008Z"/></svg>
 					<span class="group-has-checked:hidden">Agent</span>
 				</a>

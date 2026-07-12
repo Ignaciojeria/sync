@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"scaffoldxd1/internal/shared/configuration"
+	"testboi1/internal/shared/configuration"
 )
 
 func TestExchangeAuthorizationCode(t *testing.T) {

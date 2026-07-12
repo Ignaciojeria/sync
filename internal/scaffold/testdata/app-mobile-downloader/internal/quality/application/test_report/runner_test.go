@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"scaffoldxd1/internal/quality/ui"
+	"testboi1/internal/quality/ui"
 )
 
 func baseDeps() RunnerDeps {

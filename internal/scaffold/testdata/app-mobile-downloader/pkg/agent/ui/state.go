@@ -5,12 +5,13 @@ import (
 	"strings"
 	"time"
 
-	agentapp "scaffoldxd1/pkg/agent/application"
+	agentapp "testboi1/pkg/agent/application"
 )
 
 type PageState struct {
 	Sessions      []agentapp.Session
 	ActiveSession *agentapp.Session
+	MountPrefix   string
 	// ActiveSessionID permite renderizar la shell del chat sin depender
 	// del runtime local del agente en el web-server. La UI se hidrata
 	// después pegándole al worker vía BFF.
@@ -121,16 +122,42 @@ func shellDir(state PageState) string {
 	return "."
 }
 
-func previewPathForSessionID(id string) string {
+func appPath(state PageState, path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		path = "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	prefix := strings.TrimSpace(state.MountPrefix)
+	if prefix == "" {
+		return path
+	}
+	prefix = strings.TrimRight(prefix, "/")
+	if path == "/" {
+		return prefix + "/"
+	}
+	return prefix + path
+}
+
+func previewPathForSessionID(state PageState, id string) string {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return ""
 	}
-	return "/agent/sessions/" + id + "/preview/"
+	return appPath(state, "/agent/sessions/"+id+"/preview/")
 }
 
 func shellPreviewPath(state PageState) string {
-	return previewPathForSessionID(activeSessionID(state))
+	if isMountedPreview(state) {
+		return ""
+	}
+	return previewPathForSessionID(state, activeSessionID(state))
+}
+
+func isMountedPreview(state PageState) bool {
+	return strings.TrimSpace(state.MountPrefix) != ""
 }
 
 func currentView(state PageState) string {

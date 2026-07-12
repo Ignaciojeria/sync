@@ -1,10 +1,10 @@
 package home
 
 import (
-	homeui "scaffoldxd1/internal/home/ui"
-	"scaffoldxd1/internal/shared/server"
-	topologyapp "scaffoldxd1/internal/topology/application"
-	"scaffoldxd1/internal/ui/layout"
+	homeui "testboi1/internal/home/ui"
+	"testboi1/internal/shared/server"
+	topologyapp "testboi1/internal/topology/application"
+	"testboi1/internal/ui/layout"
 
 	"github.com/go-fuego/fuego"
 )

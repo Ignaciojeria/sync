@@ -13,7 +13,7 @@ import (
 	"strings"
 	"sync"
 
-	agentapp "scaffoldxd1/pkg/agent/application"
+	agentapp "testboi1/pkg/agent/application"
 )
 
 // SessionStore implementa application.SessionStore con persistencia en disco.

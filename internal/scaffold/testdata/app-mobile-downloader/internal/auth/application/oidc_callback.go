@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"scaffoldxd1/internal/shared/configuration"
+	"testboi1/internal/shared/configuration"
 )
 
 const PostLoginRedirectPath = "/agent"

@@ -15,10 +15,10 @@ import (
 	"net/http"
 	"time"
 
-	authapp "scaffoldxd1/internal/auth/application"
-	authmiddleware "scaffoldxd1/internal/auth/middleware"
-	"scaffoldxd1/internal/shared/server"
-	agentapp "scaffoldxd1/pkg/agent/application"
+	authapp "testboi1/internal/auth/application"
+	authmiddleware "testboi1/internal/auth/middleware"
+	"testboi1/internal/shared/server"
+	agentapp "testboi1/pkg/agent/application"
 )
 
 // SessionLookup expone lo mínimo del session store para que la UI del
@@ -43,7 +43,7 @@ type OIDCRefreshConfig struct {
 // endpoints de datos. Útil solo para embedders que separen UI y runtime.
 func Register(s *server.Server, lookup SessionLookup, oidcCfg OIDCRefreshConfig) {
 	requireEditor := authmiddleware.RequireEditor()
-	pageHandler(s, requireEditor, lookup, oidcCfg)
+	pageHandler(s, nil, requireEditor, lookup, oidcCfg)
 	authHandler(s, lookup, oidcCfg)
 }
 
@@ -53,9 +53,13 @@ func Register(s *server.Server, lookup SessionLookup, oidcCfg OIDCRefreshConfig)
 // proyecto en modo app única (`cmd/api`).
 func RegisterAllLegacy(s *server.Server, manager agentapp.AgentService, lookup SessionLookup, oidcCfg OIDCRefreshConfig) {
 	requireEditor := authmiddleware.RequireEditor()
-	pageHandler(s, requireEditor, lookup, oidcCfg)
+	pageHandler(s, manager, requireEditor, lookup, oidcCfg)
 	authHandler(s, lookup, oidcCfg)
 	sessionsHandler(s, manager, requireEditor)
+	applyHandler(s, manager, requireEditor)
+	mergeHandler(s, manager, requireEditor)
+	previewContextHandler(s, manager, requireEditor)
+	previewContextUIHandler(s, manager, requireEditor)
 	previewControlHandler(s, manager, requireEditor)
 	previewProxyHandler(s, manager, requireEditor)
 	promptHandler(s, manager, requireEditor)

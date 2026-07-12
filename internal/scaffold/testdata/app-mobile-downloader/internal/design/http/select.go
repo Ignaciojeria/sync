@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	designapp "scaffoldxd1/internal/design/application"
-	"scaffoldxd1/internal/shared/server"
+	designapp "testboi1/internal/design/application"
+	"testboi1/internal/shared/server"
 
 	"github.com/go-fuego/fuego"
 )

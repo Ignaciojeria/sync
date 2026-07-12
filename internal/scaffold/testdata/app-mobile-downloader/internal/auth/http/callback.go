@@ -4,12 +4,12 @@ import (
 	"net/http"
 	"strings"
 
-	authapp "scaffoldxd1/internal/auth/application"
-	authpostgresql "scaffoldxd1/internal/auth/infrastructure/postgresql"
-	"scaffoldxd1/internal/shared"
-	"scaffoldxd1/internal/shared/configuration"
-	mounted "scaffoldxd1/internal/shared/mounted"
-	"scaffoldxd1/internal/shared/server"
+	authapp "testboi1/internal/auth/application"
+	authpostgresql "testboi1/internal/auth/infrastructure/postgresql"
+	"testboi1/internal/shared"
+	"testboi1/internal/shared/configuration"
+	mounted "testboi1/internal/shared/mounted"
+	"testboi1/internal/shared/server"
 
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/go-fuego/fuego"

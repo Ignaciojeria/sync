@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"scaffoldxd1/internal/shared"
-	infratest "scaffoldxd1/internal/shared/infrastructure/test"
-	"scaffoldxd1/internal/quality/ui"
+	"testboi1/internal/shared"
+	infratest "testboi1/internal/shared/infrastructure/test"
+	"testboi1/internal/quality/ui"
 )
 
 type RunnerDeps struct {

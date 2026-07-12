@@ -1,8 +1,8 @@
 package home
 
 import (
-	"scaffoldxd1/internal/shared/server"
-	topologyapp "scaffoldxd1/internal/topology/application"
+	"testboi1/internal/shared/server"
+	topologyapp "testboi1/internal/topology/application"
 )
 
 // Register wires home routes onto the shared server.

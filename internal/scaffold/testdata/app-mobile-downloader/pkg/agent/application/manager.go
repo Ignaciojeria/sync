@@ -30,6 +30,11 @@ var errPromptTerminated = fmt.Errorf("agent runtime terminated by timeout")
 var ErrResumeUnavailable = errors.New("agent resume unavailable")
 var ErrPreviewUnavailable = errors.New("agent preview unavailable")
 var ErrPreviewLoopback = errors.New("agent preview cannot point to host itself")
+var ErrPreviewNotApplicable = errors.New("agent preview is not applicable")
+var ErrPreviewNotMergeable = errors.New("agent preview is not mergeable")
+var ErrPreviewAlreadyMerged = errors.New("agent preview already merged")
+var ErrPreviewMergeConflict = errors.New("agent preview merge conflict")
+var ErrPreviewMergeBlocked = errors.New("agent preview merge blocked")
 
 // RegisterPreviewInput define el upstream local que una sesión puede exponer.
 type RegisterPreviewInput struct {
@@ -70,6 +75,8 @@ type AgentService interface {
 	// RegisterPreview/ClearPreview administran el preview HTTP asociado a la sesión.
 	RegisterPreview(ctx context.Context, id string, input RegisterPreviewInput) (Session, error)
 	ClearPreview(ctx context.Context, id string) (Session, error)
+	ApplyPreview(ctx context.Context, id string) (ApplyResult, error)
+	MergePreview(ctx context.Context, id string) (MergeResult, error)
 
 	// Delete destruye la sesión y libera sus recursos.
 	Delete(ctx context.Context, id string) error
@@ -124,6 +131,8 @@ type Manager struct {
 	poolSize       int
 	prepareSession func(context.Context, Session) (Session, error)
 	destroySession func(context.Context, Session) error
+	applySession   func(context.Context, Session) (ApplyResult, error)
+	mergeSession   func(context.Context, Session) (MergeResult, error)
 
 	mu               sync.Mutex
 	runtimes         map[string]*runtimeSlot
@@ -184,6 +193,16 @@ func (m *Manager) WithSessionPreparer(fn func(context.Context, Session) (Session
 
 func (m *Manager) WithSessionDestroyer(fn func(context.Context, Session) error) *Manager {
 	m.destroySession = fn
+	return m
+}
+
+func (m *Manager) WithSessionApplier(fn func(context.Context, Session) (ApplyResult, error)) *Manager {
+	m.applySession = fn
+	return m
+}
+
+func (m *Manager) WithSessionMerger(fn func(context.Context, Session) (MergeResult, error)) *Manager {
+	m.mergeSession = fn
 	return m
 }
 
@@ -268,6 +287,63 @@ func (m *Manager) ClearPreview(ctx context.Context, id string) (Session, error) 
 		return Session{}, err
 	}
 	return session, nil
+}
+
+func (m *Manager) ApplyPreview(ctx context.Context, id string) (ApplyResult, error) {
+	session, err := m.store.Get(ctx, id)
+	if err != nil {
+		return ApplyResult{}, err
+	}
+	if m.applySession == nil {
+		return ApplyResult{}, ErrPreviewNotApplicable
+	}
+	if strings.TrimSpace(session.WorkspacePath) == "" || strings.TrimSpace(session.SourcePath) == "" {
+		return ApplyResult{}, ErrPreviewNotApplicable
+	}
+	return m.applySession(ctx, session)
+}
+
+func (m *Manager) MergePreview(ctx context.Context, id string) (MergeResult, error) {
+	session, err := m.store.Get(ctx, id)
+	if err != nil {
+		return MergeResult{}, err
+	}
+	if m.mergeSession == nil {
+		return MergeResult{}, ErrPreviewNotMergeable
+	}
+	if strings.TrimSpace(session.Branch) == "" || strings.TrimSpace(session.BaseBranch) == "" {
+		return MergeResult{}, ErrPreviewNotMergeable
+	}
+	if session.MergedAt != nil || strings.TrimSpace(session.MergedCommit) != "" {
+		return MergeResult{}, ErrPreviewAlreadyMerged
+	}
+	result, err := m.mergeSession(ctx, session)
+	if err != nil {
+		text := strings.ToLower(strings.TrimSpace(err.Error()))
+		switch {
+		case strings.Contains(text, "already merged"):
+			return MergeResult{}, ErrPreviewAlreadyMerged
+		case strings.Contains(text, "uncommitted changes"), strings.Contains(text, "not mergeable"):
+			return MergeResult{}, fmt.Errorf("%w: %v", ErrPreviewMergeBlocked, err)
+		case strings.Contains(text, "merge"):
+			return MergeResult{}, fmt.Errorf("%w: %v", ErrPreviewMergeConflict, err)
+		default:
+			return MergeResult{}, err
+		}
+	}
+	session.MergedAt = ptrTime(m.now())
+	session.MergedCommit = strings.TrimSpace(result.Commit)
+	if strings.TrimSpace(result.BaseBranch) != "" {
+		session.BaseBranch = strings.TrimSpace(result.BaseBranch)
+	}
+	if strings.TrimSpace(result.PreviewBranch) != "" {
+		session.Branch = strings.TrimSpace(result.PreviewBranch)
+	}
+	session.UpdatedAt = m.now()
+	if err := m.store.Update(ctx, session); err != nil {
+		return MergeResult{}, err
+	}
+	return result, nil
 }
 
 // Prompt envía un mensaje al runtime asociado a la sesión. Aplica un timeout
@@ -863,6 +939,13 @@ func HealthcheckPreview(port int, healthPath string) (int, error) {
 		return resp.StatusCode, fmt.Errorf("healthcheck returned %d", resp.StatusCode)
 	}
 	return resp.StatusCode, nil
+}
+
+func ptrTime(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
 }
 
 func (m *Manager) markSessionIdleAndFlushPending(ctx context.Context, id string) {

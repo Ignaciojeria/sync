@@ -1,11 +1,11 @@
 package dev
 
 import (
-	authmiddleware "scaffoldxd1/internal/auth/middleware"
-	"scaffoldxd1/internal/quality/ui"
-	"scaffoldxd1/internal/shared/infrastructure/test"
-	"scaffoldxd1/internal/shared/server"
-	"scaffoldxd1/internal/ui/layout"
+	authmiddleware "testboi1/internal/auth/middleware"
+	"testboi1/internal/quality/ui"
+	"testboi1/internal/shared/infrastructure/test"
+	"testboi1/internal/shared/server"
+	"testboi1/internal/ui/layout"
 
 	"github.com/go-fuego/fuego"
 )

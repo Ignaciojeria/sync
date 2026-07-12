@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	authmiddleware "scaffoldxd1/internal/auth/middleware"
-	authpostgresql "scaffoldxd1/internal/auth/infrastructure/postgresql"
-	"scaffoldxd1/internal/shared"
-	"scaffoldxd1/internal/shared/configuration"
+	authmiddleware "testboi1/internal/auth/middleware"
+	authpostgresql "testboi1/internal/auth/infrastructure/postgresql"
+	"testboi1/internal/shared"
+	"testboi1/internal/shared/configuration"
 
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/go-fuego/fuego"

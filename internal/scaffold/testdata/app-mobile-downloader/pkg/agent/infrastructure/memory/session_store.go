@@ -5,7 +5,7 @@ import (
 	"sort"
 	"sync"
 
-	agentapp "scaffoldxd1/pkg/agent/application"
+	agentapp "testboi1/pkg/agent/application"
 )
 
 // SessionStore persiste metadata de sesiones en memoria para el MVP.

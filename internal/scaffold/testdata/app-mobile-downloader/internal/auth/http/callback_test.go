@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	authapp "scaffoldxd1/internal/auth/application"
-	"scaffoldxd1/internal/auth/infrastructure/postgresql"
-	"scaffoldxd1/internal/shared/configuration"
-	sharedpostgresql "scaffoldxd1/internal/shared/infrastructure/postgresql"
-	"scaffoldxd1/internal/shared/server"
+	authapp "testboi1/internal/auth/application"
+	"testboi1/internal/auth/infrastructure/postgresql"
+	"testboi1/internal/shared/configuration"
+	sharedpostgresql "testboi1/internal/shared/infrastructure/postgresql"
+	"testboi1/internal/shared/server"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/MicahParks/jwkset"

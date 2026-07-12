@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	schedulerapp "scaffoldxd1/internal/scheduler/application"
+	schedulerapp "testboi1/internal/scheduler/application"
 )
 
 type failingTemplWriter struct{ err error }

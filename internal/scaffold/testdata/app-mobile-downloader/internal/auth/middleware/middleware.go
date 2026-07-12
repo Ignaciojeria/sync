@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	authapp "scaffoldxd1/internal/auth/application"
-	"scaffoldxd1/internal/shared"
-	"scaffoldxd1/internal/shared/configuration"
-	mounted "scaffoldxd1/internal/shared/mounted"
+	authapp "testboi1/internal/auth/application"
+	"testboi1/internal/shared"
+	"testboi1/internal/shared/configuration"
+	mounted "testboi1/internal/shared/mounted"
 
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"

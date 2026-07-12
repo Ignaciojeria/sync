@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 
-	agentapp "scaffoldxd1/pkg/agent/application"
+	"testboi1/internal/shared/mounted"
+	agentapp "testboi1/pkg/agent/application"
 
 	"github.com/go-fuego/fuego"
 )
@@ -52,7 +54,74 @@ func pathSessionID(c fuego.ContextNoBody) (string, error) {
 	if id == "" {
 		return "", fuego.HTTPError{Status: http.StatusBadRequest, Detail: "missing session id"}
 	}
+	if ownerID := previewOwnerSessionIDFromRequest(c.Request()); ownerID != "" && id == ownerID {
+		return "", fuego.HTTPError{Status: http.StatusNotFound, Detail: agentapp.ErrSessionNotFound.Error()}
+	}
 	return id, nil
+}
+
+func previewOwnerSessionIDFromRequest(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	return previewOwnerSessionIDFromMountPrefix(mounted.Prefix(r))
+}
+
+func currentPreviewPrefixFromRequest(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if prefix := strings.TrimSpace(mounted.Prefix(r)); prefix != "" {
+		return prefix
+	}
+	for _, raw := range []string{r.Header.Get("HX-Current-URL"), r.Referer()} {
+		if prefix := previewPrefixFromRawURL(raw); prefix != "" {
+			return prefix
+		}
+	}
+	return ""
+}
+
+func previewPrefixFromRawURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return previewPrefixFromPath(u.Path)
+}
+
+func previewPrefixFromPath(path string) string {
+	path = mounted.NormalizePath(path)
+	const marker = "/preview"
+	idx := strings.Index(path, marker)
+	if idx < 0 {
+		return ""
+	}
+	prefix := path[:idx+len(marker)]
+	if !strings.HasPrefix(prefix, "/agent/sessions/") {
+		return ""
+	}
+	return strings.TrimRight(mounted.NormalizePath(prefix), "/") + "/"
+}
+
+func previewOwnerSessionIDFromMountPrefix(prefix string) string {
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return ""
+	}
+	prefix = strings.Trim(prefix, "/")
+	parts := strings.Split(prefix, "/")
+	if len(parts) < 4 {
+		return ""
+	}
+	if parts[0] != "agent" || parts[1] != "sessions" || parts[3] != "preview" {
+		return ""
+	}
+	return strings.TrimSpace(parts[2])
 }
 
 func mapSessionError(err error) error {
@@ -62,8 +131,14 @@ func mapSessionError(err error) error {
 	if errors.Is(err, agentapp.ErrResumeUnavailable) {
 		return fuego.HTTPError{Status: http.StatusBadRequest, Detail: err.Error()}
 	}
-	if errors.Is(err, agentapp.ErrPreviewUnavailable) || errors.Is(err, agentapp.ErrPreviewLoopback) {
+	if errors.Is(err, agentapp.ErrPreviewUnavailable) || errors.Is(err, agentapp.ErrPreviewLoopback) || errors.Is(err, agentapp.ErrPreviewNotApplicable) || errors.Is(err, agentapp.ErrPreviewNotMergeable) {
 		return fuego.HTTPError{Status: http.StatusBadRequest, Detail: err.Error()}
+	}
+	if errors.Is(err, agentapp.ErrPreviewAlreadyMerged) {
+		return fuego.HTTPError{Status: http.StatusBadRequest, Detail: err.Error()}
+	}
+	if errors.Is(err, agentapp.ErrPreviewMergeConflict) || errors.Is(err, agentapp.ErrPreviewMergeBlocked) {
+		return fuego.HTTPError{Status: http.StatusConflict, Detail: err.Error()}
 	}
 	if status, detail, ok := providerHTTPError(err); ok {
 		return fuego.HTTPError{Status: status, Detail: detail}

@@ -1,9 +1,9 @@
 package scheduler
 
 import (
-	"scaffoldxd1/internal/shared"
-	sharedpostgresql "scaffoldxd1/internal/shared/infrastructure/postgresql"
-	"scaffoldxd1/internal/shared/server"
+	"testboi1/internal/shared"
+	sharedpostgresql "testboi1/internal/shared/infrastructure/postgresql"
+	"testboi1/internal/shared/server"
 )
 
 // Register wires scheduler HTTP routes and starts the cron runner.

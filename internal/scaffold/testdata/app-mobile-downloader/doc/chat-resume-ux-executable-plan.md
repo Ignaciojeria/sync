@@ -27,7 +27,7 @@ Objetivo práctico:
 
 ### Proyecto consumidor
 
-- Repo local: `C:\_git\einarc\scaffoldxd1`
+- Repo local: `C:\_git\einarc\testboi1`
 - Entrada HTTP actual del chat: `POST /agent/sessions/{id}/prompt`
 - UI del chat: `pkg/agent/ui/page.templ`
 - Handler HTTP del prompt: `pkg/agent/http/prompt.go`
@@ -212,9 +212,9 @@ previsto para depender menos de heurísticas a futuro.
 
 Este plan cubre:
 
-1. cambios UX en `scaffoldxd1`;
-2. cambios HTTP mínimos en `scaffoldxd1`;
-3. lógica explícita de recover → replay o continuation en `scaffoldxd1`;
+1. cambios UX en `testboi1`;
+2. cambios HTTP mínimos en `testboi1`;
+3. lógica explícita de recover → replay o continuation en `testboi1`;
 4. validación puntual en `sync-ai-gateway`.
 
 ## No cubre en v1
@@ -492,13 +492,13 @@ Determinar si el corte original viene del gateway, del runtime o del lado SSE.
 
 | Responsabilidad | Repo | Archivo | Cambio mínimo |
 |---|---|---|---|
-| Soportar payload de resume semántico | `scaffoldxd1` | `pkg/agent/http/prompt.go` | aceptar `action` y opcional `turnId` |
-| Formalizar estado de turno | `scaffoldxd1` | `pkg/agent/application/manager.go` + `pkg/agent/ui/page.templ` | backend como estado canónico, UI como representación |
-| Decidir recover → replay o continuation | `scaffoldxd1` | `pkg/agent/application/manager.go` | inspección del turno antes de llamar runtime |
-| Continuation real cuando falta generación | `scaffoldxd1` | `pkg/agent/application/manager.go` | rewrite del prompt como fallback |
-| Introducir `finish_reason` inicial | `scaffoldxd1` | `application` / metadata de turno | simplificar decisión y observabilidad |
-| Mostrar estado interrumpido y CTA | `scaffoldxd1` | `pkg/agent/ui/page.templ` | banner/copy + botón que mande `action="resume"` |
-| Fallback para `continua` manual | `scaffoldxd1` | `prompt.go` / `manager.go` | mapear a resume cuando aplique |
+| Soportar payload de resume semántico | `testboi1` | `pkg/agent/http/prompt.go` | aceptar `action` y opcional `turnId` |
+| Formalizar estado de turno | `testboi1` | `pkg/agent/application/manager.go` + `pkg/agent/ui/page.templ` | backend como estado canónico, UI como representación |
+| Decidir recover → replay o continuation | `testboi1` | `pkg/agent/application/manager.go` | inspección del turno antes de llamar runtime |
+| Continuation real cuando falta generación | `testboi1` | `pkg/agent/application/manager.go` | rewrite del prompt como fallback |
+| Introducir `finish_reason` inicial | `testboi1` | `application` / metadata de turno | simplificar decisión y observabilidad |
+| Mostrar estado interrumpido y CTA | `testboi1` | `pkg/agent/ui/page.templ` | banner/copy + botón que mande `action="resume"` |
+| Fallback para `continua` manual | `testboi1` | `prompt.go` / `manager.go` | mapear a resume cuando aplique |
 | Aislar origen del corte inicial | `sync-ai-gateway` | `internal/gateway/http/chat_completions.go` y related | validar cierre de stream, timeout y logs |
 
 ---

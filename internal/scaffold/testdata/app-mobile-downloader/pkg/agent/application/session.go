@@ -33,7 +33,12 @@ type Session struct {
 	Title           string        `json:"title"`
 	CWD             string        `json:"cwd"`
 	WorkspacePath   string        `json:"workspacePath,omitempty"`
+	SourcePath      string        `json:"sourcePath,omitempty"`
 	Branch          string        `json:"branch,omitempty"`
+	BaseBranch      string        `json:"baseBranch,omitempty"`
+	BaseCommit      string        `json:"baseCommit,omitempty"`
+	MergedAt        *time.Time    `json:"mergedAt,omitempty"`
+	MergedCommit    string        `json:"mergedCommit,omitempty"`
 	PreviewURL      string        `json:"previewURL,omitempty"`
 	PreviewPort     int           `json:"previewPort,omitempty"`
 	PreviewStatus   PreviewStatus `json:"previewStatus,omitempty"`
@@ -52,6 +57,17 @@ type CreateSessionInput struct {
 	Title string `json:"title"`
 	CWD   string `json:"cwd"`
 	Model string `json:"model"`
+}
+
+type MergeResult struct {
+	BaseBranch    string `json:"baseBranch"`
+	PreviewBranch string `json:"previewBranch"`
+	Commit        string `json:"commit"`
+}
+
+type ApplyResult struct {
+	SourcePath  string `json:"sourcePath"`
+	PreviewPath string `json:"previewPath"`
 }
 
 type SessionStore interface {

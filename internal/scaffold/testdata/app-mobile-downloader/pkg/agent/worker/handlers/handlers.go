@@ -17,7 +17,7 @@ import (
 	"net/http"
 	"strings"
 
-	agentapp "scaffoldxd1/pkg/agent/application"
+	agentapp "testboi1/pkg/agent/application"
 )
 
 // sessionIDFromPath extrae el session id de paths como

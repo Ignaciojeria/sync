@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	authmiddleware "scaffoldxd1/internal/auth/middleware"
-	testreport "scaffoldxd1/internal/quality/application/test_report"
-	"scaffoldxd1/internal/quality/ui"
-	"scaffoldxd1/internal/shared/configuration"
-	"scaffoldxd1/internal/shared/server"
+	authmiddleware "testboi1/internal/auth/middleware"
+	testreport "testboi1/internal/quality/application/test_report"
+	"testboi1/internal/quality/ui"
+	"testboi1/internal/shared/configuration"
+	"testboi1/internal/shared/server"
 
 	"github.com/go-fuego/fuego"
 )

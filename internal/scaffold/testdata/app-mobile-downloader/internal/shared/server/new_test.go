@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"scaffoldxd1/internal/shared"
-	"scaffoldxd1/internal/shared/configuration"
+	"testboi1/internal/shared"
+	"testboi1/internal/shared/configuration"
 
 	"github.com/go-fuego/fuego"
 )

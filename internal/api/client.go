@@ -91,6 +91,7 @@ type CreateProjectResponse struct {
 	Identity           *ProjectAuth               `json:"identity,omitempty"`
 	IdentityExtensions *ProjectIdentityExtensions `json:"identityExtensions,omitempty"`
 	MachineAuth        *ProjectMachineAuth        `json:"machineAuth,omitempty"`
+	AIGateway          *ProjectAIGateway          `json:"aiGateway,omitempty"`
 	Metadata           *ProjectMetadata           `json:"metadata,omitempty"`
 }
 
@@ -107,6 +108,8 @@ type ProjectSecrets struct {
 	MachineClientSecretRef      string `json:"machineClientSecretRef,omitempty"`
 	CasdoorAdminClientSecret    string `json:"casdoorAdminClientSecret,omitempty"`
 	CasdoorAdminClientSecretRef string `json:"casdoorAdminClientSecretRef,omitempty"`
+	AIGWAPIKey                  string `json:"aigwApiKey,omitempty"`
+	AIGWAPIKeyRef               string `json:"aigwApiKeyRef,omitempty"`
 }
 
 type ProjectIdentityExtensions struct {
@@ -141,6 +144,22 @@ type ProjectMachineAuth struct {
 	ClientSecretRef string   `json:"clientSecretRef,omitempty"`
 	Audience        string   `json:"audience,omitempty"`
 	Scopes          []string `json:"scopes,omitempty"`
+}
+
+// ProjectAIGateway describe el cliente + key del sync-ai-gateway provisionados
+// al crear el proyecto. `apiKey` se retorna una sola vez (inline, one-shot);
+// `apiKeyRef` apunta al archivo persistente en la VM para lecturas posteriores.
+type ProjectAIGateway struct {
+	Provider   string `json:"provider,omitempty"`
+	APIBaseURL string `json:"apiBaseUrl,omitempty"`
+	ClientID   string `json:"clientId,omitempty"`
+	ClientName string `json:"clientName,omitempty"`
+	ClientEmail string `json:"clientEmail,omitempty"`
+	KeyLabel   string `json:"keyLabel,omitempty"`
+	KeyID      string `json:"keyId,omitempty"`
+	KeyPrefix  string `json:"keyPrefix,omitempty"`
+	APIKey     string `json:"apiKey,omitempty"`     // one-shot
+	APIKeyRef  string `json:"apiKeyRef,omitempty"` // path en la VM
 }
 
 type ProjectAuth struct {

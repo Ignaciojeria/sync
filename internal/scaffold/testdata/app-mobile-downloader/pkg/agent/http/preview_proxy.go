@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"scaffoldxd1/internal/shared/server"
-	agentapp "scaffoldxd1/pkg/agent/application"
+	"testboi1/internal/shared/server"
+	agentapp "testboi1/pkg/agent/application"
 
 	"github.com/go-fuego/fuego"
 )
@@ -81,6 +81,9 @@ func previewProxy(manager agentapp.AgentService) func(http.ResponseWriter, *http
 		proxy.ModifyResponse = func(resp *http.Response) error {
 			location := strings.TrimSpace(resp.Header.Get("Location"))
 			if location == "" || !strings.HasPrefix(location, "/") || strings.HasPrefix(location, "//") {
+				return nil
+			}
+			if strings.HasPrefix(location, prefix) {
 				return nil
 			}
 			resp.Header.Set("Location", strings.TrimRight(prefix, "/")+location)

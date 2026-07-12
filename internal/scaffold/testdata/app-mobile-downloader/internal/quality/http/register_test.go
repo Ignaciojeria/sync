@@ -5,9 +5,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	testreport "scaffoldxd1/internal/quality/application/test_report"
-	"scaffoldxd1/internal/quality/ui"
-	"scaffoldxd1/internal/shared/server"
+	testreport "testboi1/internal/quality/application/test_report"
+	"testboi1/internal/quality/ui"
+	"testboi1/internal/shared/server"
 
 	"github.com/go-fuego/fuego"
 )

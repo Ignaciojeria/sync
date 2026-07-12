@@ -5,8 +5,8 @@ import (
 	"hash/fnv"
 	"time"
 
-	schedulerapp "scaffoldxd1/internal/scheduler/application"
-	sharedpostgresql "scaffoldxd1/internal/shared/infrastructure/postgresql"
+	schedulerapp "testboi1/internal/scheduler/application"
+	sharedpostgresql "testboi1/internal/shared/infrastructure/postgresql"
 )
 
 type JobRepository struct {

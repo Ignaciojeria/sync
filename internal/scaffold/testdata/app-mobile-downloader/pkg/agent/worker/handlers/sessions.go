@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	agentapp "scaffoldxd1/pkg/agent/application"
+	agentapp "testboi1/pkg/agent/application"
 )
 
 // Register cuelga TODOS los endpoints de datos del agente en mux.

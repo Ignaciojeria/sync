@@ -8,7 +8,7 @@ package ui
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import agentapp "scaffoldxd1/pkg/agent/application"
+import agentapp "testboi1/pkg/agent/application"
 
 func SessionsList(state PageState) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
@@ -31,7 +31,7 @@ func SessionsList(state PageState) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"flex h-full min-h-0 flex-col\"><div class=\"flex items-center justify-between px-3 py-3\"><div class=\"flex items-center gap-2\"><h2 class=\"text-[1.02rem] font-semibold leading-none tracking-tight text-base-content\" style=\"font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);\">Chats</h2></div><form id=\"new-session-form\" class=\"contents\"><input type=\"hidden\" name=\"title\" value=\"Nueva sesión\"> <input type=\"hidden\" name=\"cwd\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"flex h-full min-h-0 flex-col\"><div class=\"flex items-center justify-between px-3 py-3\"><div class=\"flex items-center gap-2\"><h2 class=\"text-[1.02rem] font-semibold leading-none tracking-tight text-base-content\" style=\"font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);\">Sessions</h2></div><form id=\"new-session-form\" class=\"contents\"><input type=\"hidden\" name=\"title\" value=\"Nueva sesión\"> <input type=\"hidden\" name=\"cwd\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

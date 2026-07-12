@@ -1,6 +1,6 @@
 package ui
 
-import designapp "scaffoldxd1/internal/design/application"
+import designapp "testboi1/internal/design/application"
 
 func colorValue(theme designapp.ResolvedTheme, key string) string {
 	if value := theme.DaisyUI[key]; value != "" {

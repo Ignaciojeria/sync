@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	authmiddleware "scaffoldxd1/internal/auth/middleware"
-	"scaffoldxd1/internal/shared"
-	"scaffoldxd1/internal/shared/configuration"
-	sharedpostgresql "scaffoldxd1/internal/shared/infrastructure/postgresql"
-	"scaffoldxd1/internal/shared/server"
+	authmiddleware "testboi1/internal/auth/middleware"
+	"testboi1/internal/shared"
+	"testboi1/internal/shared/configuration"
+	sharedpostgresql "testboi1/internal/shared/infrastructure/postgresql"
+	"testboi1/internal/shared/server"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-fuego/fuego"

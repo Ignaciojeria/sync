@@ -1,0 +1,100 @@
+package layout
+
+import "strings"
+
+type PreviewMergeBarState struct {
+	Active        bool
+	SessionID     string
+	BaseBranch    string
+	PreviewBranch string
+	Applicable    bool
+	ActionPath    string
+	ErrorMessage  string
+	Success       bool
+}
+
+templ PreviewMergeBar(state PreviewMergeBarState) {
+	if !state.Active {
+		<div id="global-preview-merge-bar"></div>
+	} else {
+		<div id="global-preview-merge-bar" class="pointer-events-none fixed inset-x-3 bottom-3 z-40 md:left-auto md:right-4 md:w-full md:max-w-md">
+			<div class={ "pointer-events-auto alert border shadow-xl " + previewMergeBarTone(state) }>
+				<div class="min-w-0 flex-1">
+					<div class="mb-1 flex items-center gap-2">
+						<span class={ previewMergeBarBadgeClass(state) }>{ previewMergeBarBadge(state) }</span>
+						if strings.TrimSpace(state.BaseBranch) != "" {
+							<span class="text-xs text-base-content/60">to { state.BaseBranch }</span>
+						}
+					</div>
+					<div class="text-sm text-base-content/88">{ previewMergeBarMessage(state) }</div>
+				</div>
+				<div class="shrink-0">
+					if state.Success && strings.TrimSpace(state.ErrorMessage) == "" {
+						<a class="btn btn-sm btn-success btn-outline" href="/">Volver al inicio</a>
+					} else if state.Applicable {
+						<button
+							class="btn btn-sm btn-primary"
+							hx-post={ state.ActionPath }
+							hx-target="#global-preview-merge-bar"
+							hx-swap="outerHTML"
+							hx-confirm={ previewApplyConfirm(state) }>
+							Apply preview
+						</button>
+					} else {
+						<button class="btn btn-sm btn-disabled" type="button" disabled>Apply unavailable</button>
+					}
+				</div>
+			</div>
+		</div>
+	}
+}
+
+func previewMergeBarTone(state PreviewMergeBarState) string {
+	if strings.TrimSpace(state.ErrorMessage) != "" {
+		return "alert-error bg-error/12 border-error/30 text-base-content"
+	}
+	if state.Success {
+		return "alert-success bg-success/12 border-success/30 text-base-content"
+	}
+	return "alert-info bg-info/12 border-info/30 text-base-content"
+}
+
+func previewMergeBarBadgeClass(state PreviewMergeBarState) string {
+	if strings.TrimSpace(state.ErrorMessage) != "" {
+		return "badge badge-error badge-sm"
+	}
+	if state.Success {
+		return "badge badge-success badge-sm"
+	}
+	return "badge badge-info badge-sm"
+}
+
+func previewMergeBarBadge(state PreviewMergeBarState) string {
+	if strings.TrimSpace(state.ErrorMessage) != "" {
+		return "Blocked"
+	}
+	if state.Success {
+		return "Applied"
+	}
+	return "Preview"
+}
+
+func previewMergeBarMessage(state PreviewMergeBarState) string {
+	if msg := strings.TrimSpace(state.ErrorMessage); msg != "" {
+		return msg
+	}
+	if state.Success {
+		if strings.TrimSpace(state.BaseBranch) != "" {
+			return "Cambios aplicados a " + state.BaseBranch + "."
+		}
+		return "Cambios aplicados."
+	}
+	return "Esto aplicará el contenido actual de esta preview sobre el workspace base."
+}
+
+func previewApplyConfirm(state PreviewMergeBarState) string {
+	if strings.TrimSpace(state.BaseBranch) != "" {
+		return "Esto aplicará el contenido actual de esta preview sobre el workspace base (branch " + state.BaseBranch + ")."
+	}
+	return "Esto aplicará el contenido actual de esta preview sobre el workspace base."
+}

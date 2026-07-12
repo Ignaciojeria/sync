@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"scaffoldxd1/internal/quality/ui"
+	"testboi1/internal/quality/ui"
 )
 
 func TestFilterCoverageFile(t *testing.T) {

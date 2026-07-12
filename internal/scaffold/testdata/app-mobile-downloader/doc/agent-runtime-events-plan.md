@@ -294,7 +294,7 @@ La evidencia observada apunta más a:
 
 - persistencia local inconsistente,
 - materialización parcial,
-- rehidratación defectuosa en `scaffoldxd1`.
+- rehidratación defectuosa en `testboi1`.
 
 ### No meter ElectricSQL todavía
 

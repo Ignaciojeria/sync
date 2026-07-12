@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	schedulerapp "scaffoldxd1/internal/scheduler/application"
+	schedulerapp "testboi1/internal/scheduler/application"
 )
 
 func TestFormatTime(t *testing.T) {

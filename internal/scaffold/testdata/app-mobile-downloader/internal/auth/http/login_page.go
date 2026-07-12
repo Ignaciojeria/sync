@@ -1,10 +1,10 @@
 package auth
 
 import (
-	authui "scaffoldxd1/internal/auth/ui"
-	mounted "scaffoldxd1/internal/shared/mounted"
-	"scaffoldxd1/internal/shared/server"
-	"scaffoldxd1/internal/ui/layout"
+	authui "testboi1/internal/auth/ui"
+	mounted "testboi1/internal/shared/mounted"
+	"testboi1/internal/shared/server"
+	"testboi1/internal/ui/layout"
 
 	"github.com/go-fuego/fuego"
 )

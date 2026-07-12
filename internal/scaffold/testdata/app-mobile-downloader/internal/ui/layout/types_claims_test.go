@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	authmiddleware "scaffoldxd1/internal/auth/middleware"
-	"scaffoldxd1/internal/shared/configuration"
+	authmiddleware "testboi1/internal/auth/middleware"
+	"testboi1/internal/shared/configuration"
 )
 
 // TestFromRequestWithClaimsUsesEditorEmail wires the JWT middleware in

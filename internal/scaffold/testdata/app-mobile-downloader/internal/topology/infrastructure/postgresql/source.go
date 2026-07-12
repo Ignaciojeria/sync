@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	topologyapp "scaffoldxd1/internal/topology/application"
+	topologyapp "testboi1/internal/topology/application"
 )
 
 type pinger interface {

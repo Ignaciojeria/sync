@@ -3,10 +3,10 @@ package layout
 import (
 	"net/http"
 
-	authmiddleware "scaffoldxd1/internal/auth/middleware"
-	designapp "scaffoldxd1/internal/design/application"
-	"scaffoldxd1/internal/shared"
-	mounted "scaffoldxd1/internal/shared/mounted"
+	authmiddleware "testboi1/internal/auth/middleware"
+	designapp "testboi1/internal/design/application"
+	"testboi1/internal/shared"
+	mounted "testboi1/internal/shared/mounted"
 )
 
 // NavigationContext contiene todo el contexto necesario para renderizar navegacion.

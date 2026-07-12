@@ -10,7 +10,7 @@ templ ProvidersPage(state PageState) {
 						<h1 class="text-2xl font-semibold tracking-tight text-base-content sm:text-[2rem]" style="font-family: var(--pi-font-label-family, var(--pi-font-body-family, Inter, system-ui, sans-serif));">Login</h1>
 						<p class="max-w-2xl text-sm leading-6 text-base-content/72 sm:text-[0.95rem]">Por ahora dejamos una sola superficie para proveedores externos. La recomendación sigue siendo usar tu gateway o una API key de proyecto, no login humano desde la VM.</p>
 					</div>
-					<a class="btn btn-ghost btn-sm sm:btn-md" href="/agent">Volver al dashboard</a>
+					<a class="btn btn-ghost btn-sm sm:btn-md" href={ appPath(state, "/agent") }>Volver al dashboard</a>
 				</div>
 			</header>
 
@@ -30,7 +30,7 @@ templ ProvidersPage(state PageState) {
 									<div class="text-[0.72rem] uppercase tracking-[0.22em] text-base-content/54">Estado</div>
 									<div class="mt-1 text-sm text-base-content/80">Balance detectado desde el gateway configurado</div>
 								</div>
-								<div id="providers-balance" hx-get="/gateway/balance" hx-trigger="load, every 60s" hx-swap="innerHTML">
+								<div id="providers-balance" hx-get={ appPath(state, "/gateway/balance") } hx-trigger="load, every 60s" hx-swap="innerHTML">
 									<div class="badge badge-ghost badge-sm border-base-300/60 text-base-content/54">…</div>
 								</div>
 							</div>
@@ -46,8 +46,8 @@ templ ProvidersPage(state PageState) {
 							</div>
 						</div>
 						<div class="card-actions justify-start">
-							<a class="btn btn-primary" href="/agent">Abrir chat</a>
-							<a class="btn btn-ghost" href="/">Ver dashboard general</a>
+							<a class="btn btn-primary" href={ appPath(state, "/agent") }>Abrir chat</a>
+							<a class="btn btn-ghost" href={ appPath(state, "/") }>Ver dashboard general</a>
 						</div>
 					</div>
 				</section>

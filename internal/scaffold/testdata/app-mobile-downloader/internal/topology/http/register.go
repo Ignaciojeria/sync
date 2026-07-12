@@ -1,8 +1,8 @@
 package topology
 
 import (
-	"scaffoldxd1/internal/shared/server"
-	topologyapp "scaffoldxd1/internal/topology/application"
+	"testboi1/internal/shared/server"
+	topologyapp "testboi1/internal/topology/application"
 )
 
 func Register(s *server.Server, service *topologyapp.Service) {

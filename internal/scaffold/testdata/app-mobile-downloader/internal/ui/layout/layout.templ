@@ -54,6 +54,7 @@ templ Layout(title string, themeID string, themeCSSHref string) {
 			<main class="container mx-auto p-4">
 				{ children... }
 			</main>
+			<div id="global-preview-merge-bar" hx-get="/agent/preview-context/ui" hx-trigger="load, preview-merge-refresh from:body" hx-swap="outerHTML"></div>
 		</body>
 	</html>
 }

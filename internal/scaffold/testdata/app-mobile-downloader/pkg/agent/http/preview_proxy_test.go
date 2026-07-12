@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	agentapp "scaffoldxd1/pkg/agent/application"
+	agentapp "testboi1/pkg/agent/application"
 )
 
 type previewServiceStub struct {
@@ -39,6 +39,12 @@ func (s previewServiceStub) RegisterPreview(context.Context, string, agentapp.Re
 }
 func (s previewServiceStub) ClearPreview(context.Context, string) (agentapp.Session, error) {
 	return agentapp.Session{}, nil
+}
+func (s previewServiceStub) ApplyPreview(context.Context, string) (agentapp.ApplyResult, error) {
+	return agentapp.ApplyResult{}, nil
+}
+func (s previewServiceStub) MergePreview(context.Context, string) (agentapp.MergeResult, error) {
+	return agentapp.MergeResult{}, nil
 }
 func (s previewServiceStub) Delete(context.Context, string) error { return nil }
 func (s previewServiceStub) Close() error                         { return nil }
@@ -115,6 +121,34 @@ func TestPreviewProxy_RewritesRelativeLocationHeaderToMountedPrefix(t *testing.T
 		t.Fatalf("status = %d, want %d", got, want)
 	}
 	if got, want := rec.Header().Get("Location"), "/agent/sessions/s1/preview/auth/login"; got != want {
+		t.Fatalf("location = %q, want %q", got, want)
+	}
+}
+
+func TestPreviewProxy_DoesNotDoublePrefixMountedLocationHeader(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "/agent/sessions/s1/preview/agent?session=s1")
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer upstream.Close()
+
+	port := upstreamPort(t, upstream.Listener.Addr())
+	handler := http.HandlerFunc(previewProxy(previewServiceStub{session: agentapp.Session{
+		ID:            "s1",
+		PreviewPort:   port,
+		PreviewStatus: agentapp.PreviewStatusLive,
+	}}))
+
+	req := httptest.NewRequest(http.MethodGet, "/agent/sessions/s1/preview/agent", nil)
+	req.SetPathValue("id", "s1")
+	req.SetPathValue("rest", "agent")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+	if got, want := rec.Code, http.StatusFound; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+	if got, want := rec.Header().Get("Location"), "/agent/sessions/s1/preview/agent?session=s1"; got != want {
 		t.Fatalf("location = %q, want %q", got, want)
 	}
 }

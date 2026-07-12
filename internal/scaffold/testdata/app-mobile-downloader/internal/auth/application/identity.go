@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"scaffoldxd1/internal/shared"
-	"scaffoldxd1/internal/shared/configuration"
+	"testboi1/internal/shared"
+	"testboi1/internal/shared/configuration"
 
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"

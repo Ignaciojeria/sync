@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"scaffoldxd1/internal/quality/ui"
+	"testboi1/internal/quality/ui"
 )
 
 // TestNewRunner wires the production Runner with the real dependencies from

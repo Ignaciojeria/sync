@@ -1,9 +1,9 @@
 package auth
 
 import (
-	authpostgresql "scaffoldxd1/internal/auth/infrastructure/postgresql"
-	"scaffoldxd1/internal/shared/configuration"
-	"scaffoldxd1/internal/shared/server"
+	authpostgresql "testboi1/internal/auth/infrastructure/postgresql"
+	"testboi1/internal/shared/configuration"
+	"testboi1/internal/shared/server"
 
 	"github.com/MicahParks/keyfunc/v3"
 )

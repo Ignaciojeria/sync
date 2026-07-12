@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	designapp "scaffoldxd1/internal/design/application"
+	designapp "testboi1/internal/design/application"
 
 	"github.com/a-h/templ"
 )

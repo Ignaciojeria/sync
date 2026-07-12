@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	agentapp "scaffoldxd1/pkg/agent/application"
+	agentapp "testboi1/pkg/agent/application"
 )
 
 // Launcher levanta una preview HTTP por sesión usando el workspace aislado.
@@ -99,7 +99,11 @@ func startWorkspaceProcess(workspace string, port int) (*processEntry, error) {
 		return nil, err
 	}
 	cmd.Dir = workspace
-	cmd.Env = append(os.Environ(), fmt.Sprintf("PORT=%d", port))
+	cmd.Env = append(
+		os.Environ(),
+		fmt.Sprintf("PORT=%d", port),
+		"AGENT_SESSION_DIR="+filepath.Join(workspace, "tmp", "agent-sessions"),
+	)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	if err := cmd.Start(); err != nil {
@@ -129,11 +133,43 @@ func buildWorkspaceBinary(ctx context.Context, workspace string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if err := generateTempl(ctx, workspace); err != nil {
+		return err
+	}
 	cmd := exec.CommandContext(ctx, "go", "build", "-o", previewBinaryPath(workspace), "./cmd/api")
 	cmd.Dir = workspace
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func generateTempl(ctx context.Context, workspace string) error {
+	if templPath, err := exec.LookPath("templ"); err == nil {
+		cmd := exec.CommandContext(ctx, templPath, "generate")
+		cmd.Dir = workspace
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("templ generate: %w: %s", err, strings.TrimSpace(string(out)))
+		}
+		return nil
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		templPath := filepath.Join(home, "go", "bin", "templ")
+		if info, err := os.Stat(templPath); err == nil && !info.IsDir() {
+			cmd := exec.CommandContext(ctx, templPath, "generate")
+			cmd.Dir = workspace
+			if out, err := cmd.CombinedOutput(); err != nil {
+				return fmt.Errorf("templ generate: %w: %s", err, strings.TrimSpace(string(out)))
+			}
+			return nil
+		}
+	}
+	cmd := exec.CommandContext(ctx, "go", "run", "github.com/a-h/templ/cmd/templ@v0.3.1020", "generate")
+	cmd.Dir = workspace
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("templ generate: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }

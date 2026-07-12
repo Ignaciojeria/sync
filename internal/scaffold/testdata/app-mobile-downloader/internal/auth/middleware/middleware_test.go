@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	authapp "scaffoldxd1/internal/auth/application"
-	"scaffoldxd1/internal/shared"
-	"scaffoldxd1/internal/shared/configuration"
+	authapp "testboi1/internal/auth/application"
+	"testboi1/internal/shared"
+	"testboi1/internal/shared/configuration"
 
 	"github.com/MicahParks/jwkset"
 	"github.com/golang-jwt/jwt/v5"

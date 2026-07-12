@@ -255,6 +255,22 @@ var initCmd = &cobra.Command{
 				fmt.Printf("⚠️  Casdoor admin secret no vino inline; secretRef=%s\n", cfg.CasdoorAdminClientSecretRef)
 			}
 		}
+		normalizedAIGateway := normalizeProjectAIGateway(resp)
+		if normalizedAIGateway != nil {
+			cfg.AIGatewayProvider = strings.TrimSpace(normalizedAIGateway.Provider)
+			cfg.AIGatewayAPIBaseURL = strings.TrimSpace(normalizedAIGateway.APIBaseURL)
+			cfg.AIGatewayClientID = strings.TrimSpace(normalizedAIGateway.ClientID)
+			cfg.AIGatewayClientName = strings.TrimSpace(normalizedAIGateway.ClientName)
+			cfg.AIGatewayClientEmail = strings.TrimSpace(normalizedAIGateway.ClientEmail)
+			cfg.AIGatewayKeyLabel = strings.TrimSpace(normalizedAIGateway.KeyLabel)
+			cfg.AIGatewayKeyID = strings.TrimSpace(normalizedAIGateway.KeyID)
+			cfg.AIGatewayKeyPrefix = strings.TrimSpace(normalizedAIGateway.KeyPrefix)
+			cfg.AIGatewayAPIKey = strings.TrimSpace(normalizedAIGateway.APIKey)
+			cfg.AIGatewayAPIKeyRef = strings.TrimSpace(normalizedAIGateway.APIKeyRef)
+			if cfg.AIGatewayAPIKey == "" && cfg.AIGatewayAPIKeyRef != "" {
+				fmt.Printf("⚠️  AI gateway apiKey no vino inline; apiKeyRef=%s\n", cfg.AIGatewayAPIKeyRef)
+			}
+		}
 		if sshPrivateKey != "" {
 			fmt.Println("✅ Clave SSH de VM recibida inline desde backend")
 			if err := writeSSHPrivateKey(slug, cfg.MutagenDestination, sshPrivateKey); err != nil {
@@ -263,7 +279,7 @@ var initCmd = &cobra.Command{
 		} else {
 			fmt.Println("ℹ️  Backend no devolvió sshPrivateKey inline; se usará flujo SSH legacy (puede requerir onboarding exe.dev)")
 		}
-		if err := writeProjectSecretsBundle(slug, sshPrivateKey, projectAPIToken, dbPassword, cfg.MachineAuthClientID, cfg.MachineAuthClientSecret, cfg.CasdoorAdminClientSecret); err != nil {
+		if err := writeProjectSecretsBundle(slug, sshPrivateKey, projectAPIToken, dbPassword, cfg.MachineAuthClientID, cfg.MachineAuthClientSecret, cfg.CasdoorAdminClientSecret, cfg.AIGatewayAPIKey); err != nil {
 			return fmt.Errorf("no se pudieron guardar secretos locales del proyecto: %w", err)
 		}
 		if strings.TrimSpace(cfg.MutagenDestination) == "" {
@@ -322,6 +338,11 @@ var initCmd = &cobra.Command{
 				m.ClientSecret = ""
 				safeResp.MachineAuth = &m
 			}
+			if safeResp.AIGateway != nil {
+				gw := *safeResp.AIGateway
+				gw.APIKey = ""
+				safeResp.AIGateway = &gw
+			}
 			if safeResp.IdentityExtensions != nil && safeResp.IdentityExtensions.CasdoorAdmin != nil {
 				ca := *safeResp.IdentityExtensions.CasdoorAdmin
 				ca.ClientSecret = ""
@@ -335,6 +356,7 @@ var initCmd = &cobra.Command{
 				s.OIDCClientSecret = ""
 				s.MachineClientSecret = ""
 				s.CasdoorAdminClientSecret = ""
+				s.AIGWAPIKey = ""
 				safeResp.Secrets = &s
 			}
 			enc := json.NewEncoder(os.Stdout)
@@ -382,14 +404,12 @@ var initCmd = &cobra.Command{
 		}
 
 		airStarted := false
-		sidecarsStarted := false
 		mutagenReady := false
 		wedeReady := false
 		httpChecked := false
 		httpReady := false
 		httpCode := 0
 		var airErr error
-		var sidecarsErr error
 
 		if !skipMutagenCheck {
 			if err := ensureMutagenOnWindows(); err != nil {
@@ -427,16 +447,6 @@ var initCmd = &cobra.Command{
 						if !airStarted {
 							fmt.Println("❌ No se pudo iniciar Air automáticamente tras varios intentos")
 							fmt.Println("   Revisa logs con: einarc dev logs -f")
-						} else {
-							fmt.Println("🧩 Instalando sidecars del agente (systemd --user)...")
-							if err := setupAndStartRemoteAgentSidecars(&cfg); err != nil {
-								sidecarsErr = err
-								fmt.Printf("⚠️  Sidecars no listos: %v\n", err)
-								fmt.Println("   Revisa logs con: einarc dev logs -f")
-							} else {
-								sidecarsStarted = true
-								fmt.Println("✅ Sidecars del agente activos")
-							}
 						}
 					}
 				}
@@ -484,11 +494,7 @@ var initCmd = &cobra.Command{
 		} else {
 			fmt.Println("   - Air: ⚠️")
 		}
-		if sidecarsStarted {
-			fmt.Println("   - Agent sidecars: ✅")
-		} else {
-			fmt.Println("   - Agent sidecars: ⚠️")
-		}
+		fmt.Println("   - Runtime del agente: ✅ dentro de cmd/api (sin sidecars)")
 		if wedeReady {
 			fmt.Println("   - Wede: ✅")
 		} else {
@@ -514,12 +520,6 @@ var initCmd = &cobra.Command{
 				return fmt.Errorf("init incompleto: Air es mandatorio y no inició (%v)", airErr)
 			}
 			return fmt.Errorf("init incompleto: Air es mandatorio y no inició")
-		}
-		if airStarted && !sidecarsStarted {
-			if sidecarsErr != nil {
-				return fmt.Errorf("init incompleto: sidecars del agente no iniciaron (%v)", sidecarsErr)
-			}
-			return fmt.Errorf("init incompleto: sidecars del agente no iniciaron")
 		}
 		return nil
 	},
@@ -2484,7 +2484,7 @@ func setupAndStartRemoteAir(cfg *config.Config) error {
 		return fmt.Errorf("falló preparación remota de .air.toml: %w", err)
 	}
 
-	startCmd := fmt.Sprintf(`cd %q && mkdir -p tmp && AIR_BIN="$(command -v air || echo $HOME/go/bin/air)" && if [ ! -f .air.toml ]; then echo "missing .air.toml"; exit 12; fi && if [ -f .air.pid ] && kill -0 "$(cat .air.pid)" 2>/dev/null; then kill "$(cat .air.pid)" 2>/dev/null || true; rm -f .air.pid; fi && nohup "$AIR_BIN" -c .air.toml > .air.log 2>&1 & echo $! > .air.pid && sleep 1 && if [ -f .air.pid ] && kill -0 "$(cat .air.pid)" 2>/dev/null; then echo "air started pid=$(cat .air.pid)"; else echo "air exited"; tail -n 120 .air.log 2>/dev/null || true; exit 13; fi`, remotePath)
+	startCmd := fmt.Sprintf(`cd %q && mkdir -p tmp && AIR_BIN="$(command -v air || echo $HOME/go/bin/air)" && if [ ! -f .air.toml ]; then echo "missing .air.toml"; exit 12; fi && if [ -f .air.pid ] && kill -0 "$(cat .air.pid)" 2>/dev/null; then kill "$(cat .air.pid)" 2>/dev/null || true; rm -f .air.pid; fi && nohup env PORT=8000 "$AIR_BIN" -c .air.toml > .air.log 2>&1 & echo $! > .air.pid && sleep 1 && if [ -f .air.pid ] && kill -0 "$(cat .air.pid)" 2>/dev/null; then echo "air started pid=$(cat .air.pid)"; else echo "air exited"; tail -n 120 .air.log 2>/dev/null || true; exit 13; fi`, remotePath)
 	msg, err = runSSHScriptWithTimeout(target, startCmd, 60*time.Second)
 	if err != nil {
 		low := strings.ToLower(msg)
@@ -2840,7 +2840,7 @@ func writeSSHPrivateKey(projectSlug, destination, key string) error {
 	return nil
 }
 
-func writeProjectSecretsBundle(slug, sshPrivateKey, projectAPIToken, dbPassword, machineClientID, machineClientSecret, casdoorAdminClientSecret string) error {
+func writeProjectSecretsBundle(slug, sshPrivateKey, projectAPIToken, dbPassword, machineClientID, machineClientSecret, casdoorAdminClientSecret, aigwAPIKey string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
@@ -2872,6 +2872,9 @@ func writeProjectSecretsBundle(slug, sshPrivateKey, projectAPIToken, dbPassword,
 		return err
 	}
 	if err := writeIf("casdoor-admin-client-secret", casdoorAdminClientSecret); err != nil {
+		return err
+	}
+	if err := writeIf("aigw-api-key", aigwAPIKey); err != nil {
 		return err
 	}
 	return nil
@@ -3049,6 +3052,38 @@ func normalizeProjectMachineAuth(resp *api.CreateProjectResponse) *api.ProjectMa
 	}
 }
 
+func normalizeProjectAIGateway(resp *api.CreateProjectResponse) *api.ProjectAIGateway {
+	if resp == nil || resp.AIGateway == nil {
+		return nil
+	}
+	gw := resp.AIGateway
+	clientID := strings.TrimSpace(gw.ClientID)
+	apiBaseURL := strings.TrimSpace(gw.APIBaseURL)
+	if clientID == "" && apiBaseURL == "" {
+		return nil
+	}
+	apiKey := strings.TrimSpace(gw.APIKey)
+	if apiKey == "" && resp.Secrets != nil {
+		apiKey = strings.TrimSpace(resp.Secrets.AIGWAPIKey)
+	}
+	apiKeyRef := strings.TrimSpace(gw.APIKeyRef)
+	if apiKeyRef == "" && resp.Secrets != nil {
+		apiKeyRef = strings.TrimSpace(resp.Secrets.AIGWAPIKeyRef)
+	}
+	return &api.ProjectAIGateway{
+		Provider:    firstNonEmptyTrimmed(strings.TrimSpace(gw.Provider), "aigateway"),
+		APIBaseURL:  apiBaseURL,
+		ClientID:    clientID,
+		ClientName:  strings.TrimSpace(gw.ClientName),
+		ClientEmail: strings.TrimSpace(gw.ClientEmail),
+		KeyLabel:    strings.TrimSpace(gw.KeyLabel),
+		KeyID:       strings.TrimSpace(gw.KeyID),
+		KeyPrefix:   strings.TrimSpace(gw.KeyPrefix),
+		APIKey:      apiKey,
+		APIKeyRef:   apiKeyRef,
+	}
+}
+
 func buildOIDCLoginURL(authorizationEndpoint, clientID, redirectURI string, scopes []string) string {
 	if strings.TrimSpace(authorizationEndpoint) == "" || strings.TrimSpace(clientID) == "" || strings.TrimSpace(redirectURI) == "" {
 		return ""
@@ -3129,6 +3164,8 @@ func materializeProjectEnv(cfg config.Config) error {
 		"MACHINE_AUTH_CLIENT_SECRET_REF":   strings.TrimSpace(cfg.MachineAuthClientSecretRef),
 		"MACHINE_AUTH_AUDIENCE":            strings.TrimSpace(cfg.MachineAuthAudience),
 		"MACHINE_AUTH_SCOPES":              strings.TrimSpace(cfg.MachineAuthScopes),
+		"SYNC_AI_GATEWAY_BASE_URL":         strings.TrimSpace(cfg.AIGatewayAPIBaseURL),
+		"SYNC_AI_GATEWAY_API_KEY":          strings.TrimSpace(cfg.AIGatewayAPIKey),
 	}
 
 	if entries["OIDC_UPSTREAM_GOOGLE_CLIENT_ID"] == "" && strings.Contains(strings.ToLower(entries["OIDC_GOOGLE_LOGIN_URL"]), "accounts.google.com/signin/oauth") {
@@ -3178,7 +3215,7 @@ func materializeProjectEnv(cfg config.Config) error {
 		return err
 	}
 
-	for _, key := range []string{"PROJECT_NAME", "DATABASE_URL", "OIDC_TYPE", "OIDC_PROVIDER", "OIDC_ISSUER", "OIDC_DISCOVERY_URL", "OIDC_JWKS_URI", "OIDC_AUTHORIZATION_ENDPOINT", "OIDC_TOKEN_ENDPOINT", "OIDC_USERINFO_ENDPOINT", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_CLIENT_SECRET_REF", "OIDC_REDIRECT_URI", "OIDC_LOGOUT_URI", "OIDC_POST_LOGOUT_REDIRECT_URI", "OIDC_SCOPES", "OIDC_LOGIN_URL", "OIDC_GOOGLE_LOGIN_URL", "OIDC_UPSTREAM_GOOGLE_CLIENT_ID", "CASDOOR_ADMIN_API_BASE_URL", "CASDOOR_ADMIN_GATEWAY_URL", "CASDOOR_ADMIN_ORGANIZATION", "CASDOOR_ADMIN_APPLICATION", "CASDOOR_ADMIN_CLIENT_ID", "CASDOOR_ADMIN_CLIENT_SECRET", "CASDOOR_ADMIN_CLIENT_SECRET_REF", "CASDOOR_ADMIN_TOKEN_ENDPOINT", "CASDOOR_ADMIN_SCOPES", "CASDOOR_ADMIN_TENANT_SCOPED_ONLY", "MACHINE_AUTH_GRANT_TYPE", "MACHINE_AUTH_TOKEN_ENDPOINT", "MACHINE_AUTH_CLIENT_ID", "MACHINE_AUTH_CLIENT_SECRET", "MACHINE_AUTH_CLIENT_SECRET_REF", "MACHINE_AUTH_AUDIENCE", "MACHINE_AUTH_SCOPES"} {
+	for _, key := range []string{"PROJECT_NAME", "DATABASE_URL", "OIDC_TYPE", "OIDC_PROVIDER", "OIDC_ISSUER", "OIDC_DISCOVERY_URL", "OIDC_JWKS_URI", "OIDC_AUTHORIZATION_ENDPOINT", "OIDC_TOKEN_ENDPOINT", "OIDC_USERINFO_ENDPOINT", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_CLIENT_SECRET_REF", "OIDC_REDIRECT_URI", "OIDC_LOGOUT_URI", "OIDC_POST_LOGOUT_REDIRECT_URI", "OIDC_SCOPES", "OIDC_LOGIN_URL", "OIDC_GOOGLE_LOGIN_URL", "OIDC_UPSTREAM_GOOGLE_CLIENT_ID", "CASDOOR_ADMIN_API_BASE_URL", "CASDOOR_ADMIN_GATEWAY_URL", "CASDOOR_ADMIN_ORGANIZATION", "CASDOOR_ADMIN_APPLICATION", "CASDOOR_ADMIN_CLIENT_ID", "CASDOOR_ADMIN_CLIENT_SECRET", "CASDOOR_ADMIN_CLIENT_SECRET_REF", "CASDOOR_ADMIN_TOKEN_ENDPOINT", "CASDOOR_ADMIN_SCOPES", "CASDOOR_ADMIN_TENANT_SCOPED_ONLY", "MACHINE_AUTH_GRANT_TYPE", "MACHINE_AUTH_TOKEN_ENDPOINT", "MACHINE_AUTH_CLIENT_ID", "MACHINE_AUTH_CLIENT_SECRET", "MACHINE_AUTH_CLIENT_SECRET_REF", "MACHINE_AUTH_AUDIENCE", "MACHINE_AUTH_SCOPES", "SYNC_AI_GATEWAY_BASE_URL", "SYNC_AI_GATEWAY_API_KEY"} {
 		if value := strings.TrimSpace(entries[key]); value != "" {
 			lines = append(lines, key+"="+value)
 		}

@@ -87,18 +87,11 @@ var devLogsCmd = &cobra.Command{
 }
 
 var devRepairSidecarsCmd = &cobra.Command{
-	Use:   "repair-sidecars",
-	Short: "Reinstala y reinicia los sidecars del agente en la VM",
+	Use:    "repair-sidecars",
+	Hidden: true,
+	Short:  "Comando legacy sin efecto (topología vieja de sidecars)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, _, target, remotePath, err := resolveDevRemote()
-		if err != nil {
-			return err
-		}
-		if err := setupAndStartRemoteAgentSidecars(&cfg); err != nil {
-			return err
-		}
-		fmt.Printf("✅ Sidecars reparados en %s:%s\n", target, remotePath)
-		return nil
+		return fmt.Errorf("repair-sidecars quedó obsoleto: el boilerplate actual corre una sola app en cmd/api")
 	},
 }
 

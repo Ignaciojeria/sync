@@ -4,13 +4,13 @@ import (
 	"net/http"
 	"strings"
 
-	schedulerapp "scaffoldxd1/internal/scheduler/application"
-	schedulerpostgresql "scaffoldxd1/internal/scheduler/infrastructure/postgresql"
-	schedulerui "scaffoldxd1/internal/scheduler/ui"
-	authmiddleware "scaffoldxd1/internal/auth/middleware"
-	sharedpostgresql "scaffoldxd1/internal/shared/infrastructure/postgresql"
-	"scaffoldxd1/internal/shared/server"
-	"scaffoldxd1/internal/ui/layout"
+	schedulerapp "testboi1/internal/scheduler/application"
+	schedulerpostgresql "testboi1/internal/scheduler/infrastructure/postgresql"
+	schedulerui "testboi1/internal/scheduler/ui"
+	authmiddleware "testboi1/internal/auth/middleware"
+	sharedpostgresql "testboi1/internal/shared/infrastructure/postgresql"
+	"testboi1/internal/shared/server"
+	"testboi1/internal/ui/layout"
 
 	"github.com/go-fuego/fuego"
 )

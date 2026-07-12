@@ -3,8 +3,8 @@ package topology
 import (
 	"net/http"
 
-	"scaffoldxd1/internal/shared/server"
-	topologyapp "scaffoldxd1/internal/topology/application"
+	"testboi1/internal/shared/server"
+	topologyapp "testboi1/internal/topology/application"
 
 	"github.com/go-fuego/fuego"
 )

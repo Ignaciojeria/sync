@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	agentapp "scaffoldxd1/pkg/agent/application"
+	agentapp "testboi1/pkg/agent/application"
 )
 
 // Tamaño del buffer de cada subscriber. Suficiente para amortiguar picos de

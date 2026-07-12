@@ -5,9 +5,11 @@ import (
 	"net/http"
 	"strings"
 
-	agentui "scaffoldxd1/pkg/agent/ui"
-	"scaffoldxd1/internal/shared/server"
-	"scaffoldxd1/internal/ui/layout"
+	"testboi1/internal/shared/mounted"
+	"testboi1/internal/shared/server"
+	"testboi1/internal/ui/layout"
+	agentapp "testboi1/pkg/agent/application"
+	agentui "testboi1/pkg/agent/ui"
 
 	"github.com/go-fuego/fuego"
 )
@@ -36,31 +38,95 @@ func resolveUserJWT(ctx context.Context, r *http.Request, lookup SessionLookup, 
 	return strings.TrimSpace(rec.IDToken)
 }
 
-func pageHandler(s *server.Server, requireEditor func(http.Handler) http.Handler, lookup SessionLookup, oidcCfg OIDCRefreshConfig) {
+func pageHandler(s *server.Server, manager agentapp.AgentService, requireEditor func(http.Handler) http.Handler, lookup SessionLookup, oidcCfg OIDCRefreshConfig) {
 	mw := fuego.OptionMiddleware(requireEditor)
-	fuego.Get(s.Server, "/agent", dashboardPage(lookup, oidcCfg), mw)
+	fuego.Get(s.Server, "/agent", dashboardPage(manager, lookup, oidcCfg), mw)
+	fuego.Get(s.Server, "/agent/home", sessionsPage(lookup, oidcCfg), mw)
 	fuego.Get(s.Server, "/agent/providers", providersPage(lookup, oidcCfg), mw)
 	fuego.Get(s.Server, "/agent/login", providersPage(lookup, oidcCfg), mw)
 }
 
-func dashboardPage(lookup SessionLookup, oidcCfg OIDCRefreshConfig) func(fuego.ContextNoBody) (any, error) {
+func dashboardPage(manager agentapp.AgentService, lookup SessionLookup, oidcCfg OIDCRefreshConfig) func(fuego.ContextNoBody) (any, error) {
 	return func(c fuego.ContextNoBody) (any, error) {
 		state := agentui.PageState{
 			ActiveSessionID: strings.TrimSpace(c.QueryParam("session")),
+			MountPrefix:     mounted.Prefix(c.Request()),
 			DefaultCWD:      ".",
 			DefaultModel:    "",
 			CurrentView:     "dashboard",
 			UserJWT:         resolveUserJWT(c.Context(), c.Request(), lookup, oidcCfg),
 		}
-		nav := layout.FromRequest(c.Request())
-		c.SetHeader("Content-Type", "text/html; charset=utf-8")
-		return nil, agentui.StandalonePage(state, nav.ActiveThemeID, nav.ThemeCSSHref).Render(c.Context(), c.Response())
+		if redirectTo := resolveAgentEntryRedirect(c.Context(), manager, state); redirectTo != "" {
+			http.Redirect(c.Response(), c.Request(), redirectTo, http.StatusFound)
+			return nil, nil
+		}
+		return renderDashboardPage(c, state)
 	}
+}
+
+func sessionsPage(lookup SessionLookup, oidcCfg OIDCRefreshConfig) func(fuego.ContextNoBody) (any, error) {
+	return func(c fuego.ContextNoBody) (any, error) {
+		state := agentui.PageState{
+			MountPrefix:  mounted.Prefix(c.Request()),
+			DefaultCWD:   ".",
+			DefaultModel: "",
+			CurrentView:  "dashboard",
+			UserJWT:      resolveUserJWT(c.Context(), c.Request(), lookup, oidcCfg),
+		}
+		return renderDashboardPage(c, state)
+	}
+}
+
+func renderDashboardPage(c fuego.ContextNoBody, state agentui.PageState) (any, error) {
+	nav := layout.FromRequest(c.Request())
+	c.SetHeader("Content-Type", "text/html; charset=utf-8")
+	return nil, agentui.StandalonePage(state, nav.ActiveThemeID, nav.ThemeCSSHref).Render(c.Context(), c.Response())
+}
+
+func resolveAgentEntryRedirect(ctx context.Context, manager agentapp.AgentService, state agentui.PageState) string {
+	if manager == nil {
+		return ""
+	}
+	ownerSessionID := previewOwnerSessionIDFromMountPrefix(state.MountPrefix)
+	requestedSessionID := strings.TrimSpace(state.ActiveSessionID)
+	if requestedSessionID != "" {
+		if ownerSessionID != "" && requestedSessionID == ownerSessionID {
+			requestedSessionID = ""
+		} else if _, err := manager.Get(ctx, requestedSessionID); err == nil {
+			return ""
+		} else {
+			requestedSessionID = ""
+		}
+	}
+	if requestedSessionID != "" {
+		return ""
+	}
+	sessions, err := manager.List(ctx)
+	if err != nil || len(sessions) == 0 {
+		return agentuiAppPath(state, "/agent/home")
+	}
+	for _, session := range sessions {
+		id := strings.TrimSpace(session.ID)
+		if id == "" || (ownerSessionID != "" && id == ownerSessionID) {
+			continue
+		}
+		return agentuiAppPath(state, "/agent?session="+id)
+	}
+	return agentuiAppPath(state, "/agent/home")
+}
+
+func agentuiAppPath(state agentui.PageState, path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		path = "/"
+	}
+	return mounted.App(state.MountPrefix, path)
 }
 
 func providersPage(lookup SessionLookup, oidcCfg OIDCRefreshConfig) func(fuego.ContextNoBody) (any, error) {
 	return func(c fuego.ContextNoBody) (any, error) {
 		state := agentui.PageState{
+			MountPrefix:  mounted.Prefix(c.Request()),
 			DefaultCWD:   ".",
 			DefaultModel: "",
 			CurrentView:  "providers",

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	schedulerapp "scaffoldxd1/internal/scheduler/application"
+	schedulerapp "testboi1/internal/scheduler/application"
 )
 
 func formatTime(t *time.Time) string {

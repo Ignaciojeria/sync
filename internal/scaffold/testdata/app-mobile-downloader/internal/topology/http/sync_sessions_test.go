@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"scaffoldxd1/internal/shared/server"
-	topologyapp "scaffoldxd1/internal/topology/application"
-	memory "scaffoldxd1/internal/topology/infrastructure/memory"
+	"testboi1/internal/shared/server"
+	topologyapp "testboi1/internal/topology/application"
+	memory "testboi1/internal/topology/infrastructure/memory"
 
 	"github.com/go-fuego/fuego"
 )

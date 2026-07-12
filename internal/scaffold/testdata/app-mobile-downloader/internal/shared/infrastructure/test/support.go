@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"scaffoldxd1/internal/quality/ui"
+	"testboi1/internal/quality/ui"
 )
 
 const CoverageDir = "tmp/coverage"

@@ -11,6 +11,6 @@ sync:
         - ".air.log"
         - "bin"
 
-  scaffoldxd1:
+  testboi1:
     alpha: "."
-    beta: "exedev@scaffoldxd1.exe.xyz:/home/exedev/workspace/scaffoldxd1"
+    beta: "exedev@testboi1.exe.xyz:/home/exedev/workspace/testboi1"

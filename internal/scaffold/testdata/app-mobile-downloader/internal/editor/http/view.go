@@ -1,9 +1,9 @@
 package editor
 
 import (
-	editorui "scaffoldxd1/internal/editor/ui"
-	"scaffoldxd1/internal/shared/server"
-	"scaffoldxd1/internal/ui/layout"
+	editorui "testboi1/internal/editor/ui"
+	"testboi1/internal/shared/server"
+	"testboi1/internal/ui/layout"
 
 	"github.com/go-fuego/fuego"
 )

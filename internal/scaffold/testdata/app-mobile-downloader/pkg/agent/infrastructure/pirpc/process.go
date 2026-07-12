@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	agentapp "scaffoldxd1/pkg/agent/application"
+	agentapp "testboi1/pkg/agent/application"
 )
 
 func startProcess(ctx context.Context, binary string, spec agentapp.StartSpec) (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
