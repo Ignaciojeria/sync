@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"testboi1/internal/shared"
-	"testboi1/internal/shared/configuration"
+	"fixtests1/internal/shared"
+	"fixtests1/internal/shared/configuration"
 
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"

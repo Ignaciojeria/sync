@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	schedulerapp "testboi1/internal/scheduler/application"
+	schedulerapp "fixtests1/internal/scheduler/application"
 )
 
 func TestFormatTime(t *testing.T) {
@@ -59,6 +59,23 @@ func TestJobFormRendersForm(t *testing.T) {
 	body := buf.String()
 	if !strings.Contains(body, `name="name"`) || !strings.Contains(body, `name="schedule"`) {
 		t.Fatalf("expected form inputs in rendered output, got %q", body)
+	}
+}
+
+func TestSchedulerAppPath(t *testing.T) {
+	cases := []struct {
+		prefix, path, want string
+	}{
+		{"", "/foo", "/foo"},
+		{"", "foo", "/foo"},
+		{"/agent", "/foo", "/agent/foo"},
+		{"/agent", "/", "/agent/"},
+		{"  ", "/x", "/x"},
+	}
+	for _, c := range cases {
+		if got := appPath(c.prefix, c.path); got != c.want {
+			t.Errorf("appPath(%q, %q) = %q, want %q", c.prefix, c.path, got, c.want)
+		}
 	}
 }
 

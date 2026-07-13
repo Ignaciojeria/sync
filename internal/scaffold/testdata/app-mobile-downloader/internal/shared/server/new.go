@@ -7,27 +7,66 @@ import (
 	"strings"
 	"time"
 
-	authmiddleware "testboi1/internal/auth/middleware"
-	authpostgresql "testboi1/internal/auth/infrastructure/postgresql"
-	"testboi1/internal/shared"
-	"testboi1/internal/shared/configuration"
+	authpostgresql "fixtests1/internal/auth/infrastructure/postgresql"
+	authmiddleware "fixtests1/internal/auth/middleware"
+	"fixtests1/internal/shared"
+	"fixtests1/internal/shared/configuration"
 
 	"github.com/MicahParks/keyfunc/v3"
-	"github.com/go-fuego/fuego"
 )
 
 type Server struct {
-	*fuego.Server
+	Mux        http.Handler
+	rawMux     *http.ServeMux
+	httpServer *http.Server
+	middleware []func(http.Handler) http.Handler
+	addr       string
+}
+
+type ServerOption func(*Server)
+
+func WithAddr(addr string) ServerOption {
+	return func(s *Server) { s.addr = addr }
+}
+
+func NewServer(opts ...ServerOption) *Server {
+	raw := http.NewServeMux()
+	s := &Server{rawMux: raw, addr: ":8080"}
+	s.Mux = http.HandlerFunc(s.serveHTTP)
+	for _, opt := range opts {
+		if opt != nil {
+			opt(s)
+		}
+	}
+	s.httpServer = &http.Server{Addr: s.addr, Handler: http.HandlerFunc(s.serveHTTP)}
+	return s
+}
+
+func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
+	var h http.Handler = s.rawMux
+	for i := len(s.middleware) - 1; i >= 0; i-- {
+		h = s.middleware[i](h)
+	}
+	h.ServeHTTP(w, r)
+}
+
+func (s *Server) Run() error                         { return s.httpServer.ListenAndServe() }
+func (s *Server) Shutdown(ctx context.Context) error { return s.httpServer.Shutdown(ctx) }
+func Use(s *Server, mw func(http.Handler) http.Handler) {
+	if s == nil || mw == nil {
+		return
+	}
+	s.middleware = append(s.middleware, mw)
 }
 
 func New(conf configuration.Conf, jwks keyfunc.Keyfunc, store *authpostgresql.SessionRepository) *Server {
-	server := fuego.NewServer(fuego.WithAddr(":" + strings.TrimSpace(conf.PORT)))
-	fuego.Use(server, authmiddleware.JWTMiddleware(
+	server := NewServer(WithAddr(":" + strings.TrimSpace(conf.PORT)))
+	Use(server, authmiddleware.JWTMiddleware(
 		jwks,
 		store,
 		conf,
 	))
-	return &Server{Server: server}
+	return server
 }
 
 func Start(server *Server, hooks *shared.Hooks) error {

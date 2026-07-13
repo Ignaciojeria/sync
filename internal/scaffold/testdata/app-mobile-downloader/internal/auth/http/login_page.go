@@ -1,16 +1,14 @@
 package auth
 
 import (
-	authui "testboi1/internal/auth/ui"
-	mounted "testboi1/internal/shared/mounted"
-	"testboi1/internal/shared/server"
-	"testboi1/internal/ui/layout"
-
-	"github.com/go-fuego/fuego"
+	authui "fixtests1/internal/auth/ui"
+	mounted "fixtests1/internal/shared/mounted"
+	"fixtests1/internal/shared/server"
+	"fixtests1/internal/ui/layout"
 )
 
 func registerAuthLoginPage(s *server.Server) {
-	fuego.Get(s.Server, "/auth/login", func(c fuego.ContextNoBody) (any, error) {
+	server.Get(s, "/auth/login", func(c server.ContextNoBody) (any, error) {
 		c.SetHeader("Content-Type", "text/html; charset=utf-8")
 		page, err := layout.RenderPublicPage(c, "Sync 4 Run Login", authui.LoginPage(mounted.Prefix(c.Request())))
 		if err != nil {

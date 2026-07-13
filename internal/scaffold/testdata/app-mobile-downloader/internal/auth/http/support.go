@@ -1,20 +1,18 @@
 package auth
 
 import (
+	authapp "fixtests1/internal/auth/application"
+	"fixtests1/internal/shared/configuration"
+	mounted "fixtests1/internal/shared/mounted"
+	"fixtests1/internal/shared/server"
 	"net/http"
 	"strings"
-
-	authapp "testboi1/internal/auth/application"
-	"testboi1/internal/shared/configuration"
-	mounted "testboi1/internal/shared/mounted"
-
-	"github.com/go-fuego/fuego"
 )
 
-func startGoogleLogin(c fuego.ContextNoBody, conf configuration.Conf, preferGoogle bool) (any, error) {
+func startGoogleLogin(c server.ContextNoBody, conf configuration.Conf, preferGoogle bool) (any, error) {
 	state, err := authapp.NewRandomState()
 	if err != nil {
-		return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: "cannot generate oauth state"}
+		return nil, server.HTTPError{Status: http.StatusInternalServerError, Detail: "cannot generate oauth state"}
 	}
 
 	secure := authapp.IsHTTPS(conf.OIDCRedirectURI)
@@ -36,7 +34,7 @@ func startGoogleLogin(c fuego.ContextNoBody, conf configuration.Conf, preferGoog
 	if preferGoogle && conf.OIDCUpstreamGoogleClientID != "" {
 		googleURL, err := authapp.BuildDirectGoogleLoginURL(conf, state)
 		if err != nil {
-			return nil, fuego.HTTPError{Status: http.StatusBadGateway, Title: "could not build direct google redirect", Detail: err.Error()}
+			return nil, server.HTTPError{Status: http.StatusBadGateway, Title: "could not build direct google redirect", Detail: err.Error()}
 		}
 		http.Redirect(c.Response(), c.Request(), googleURL, http.StatusFound)
 		return nil, nil
@@ -44,15 +42,15 @@ func startGoogleLogin(c fuego.ContextNoBody, conf configuration.Conf, preferGoog
 
 	loginURL, err := authapp.BuildLoginURL(conf, state, preferGoogle)
 	if err != nil {
-		return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
+		return nil, server.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
 	}
 
 	http.Redirect(c.Response(), c.Request(), loginURL, http.StatusFound)
 	return nil, nil
 }
 
-func serveStaticFile(path string) func(c fuego.ContextNoBody) (any, error) {
-	return func(c fuego.ContextNoBody) (any, error) {
+func serveStaticFile(path string) func(c server.ContextNoBody) (any, error) {
+	return func(c server.ContextNoBody) (any, error) {
 		http.ServeFile(c.Response(), c.Request(), path)
 		return nil, nil
 	}

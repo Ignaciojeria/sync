@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"testboi1/internal/quality/ui"
+	"fixtests1/internal/quality/ui"
 )
 
 func baseDeps() RunnerDeps {

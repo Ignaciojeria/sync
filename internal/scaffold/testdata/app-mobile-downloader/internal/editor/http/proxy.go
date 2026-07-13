@@ -1,19 +1,14 @@
 package editor
 
 import (
+	"fixtests1/internal/shared/server"
 	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
 	"strings"
-
-	"testboi1/internal/shared/server"
-
-	"github.com/go-fuego/fuego"
 )
-
-
 
 func editorHandler(s *server.Server) {
 	upstream := editorUpstreamURL()
@@ -46,7 +41,7 @@ func editorHandler(s *server.Server) {
 		"/icon.svg",
 		"/icon-180.png",
 	} {
-		fuego.Handle(s.Server, path, proxy)
+		server.Handle(s, path, proxy)
 	}
 }
 

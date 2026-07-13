@@ -1,9 +1,9 @@
 package scheduler
 
 import (
-	"testboi1/internal/shared"
-	sharedpostgresql "testboi1/internal/shared/infrastructure/postgresql"
-	"testboi1/internal/shared/server"
+	"fixtests1/internal/shared"
+	sharedpostgresql "fixtests1/internal/shared/infrastructure/postgresql"
+	"fixtests1/internal/shared/server"
 )
 
 // Register wires scheduler HTTP routes and starts the cron runner.

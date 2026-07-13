@@ -20,3 +20,20 @@ func TestEditorViewRendersIframe(t *testing.T) {
 		t.Fatalf("expected iframe to declare sandbox, got %q", body)
 	}
 }
+
+func TestEditorAppPath(t *testing.T) {
+	cases := []struct {
+		prefix, path, want string
+	}{
+		{"", "/foo", "/foo"},
+		{"", "foo", "/foo"},
+		{"/agent", "/foo", "/agent/foo"},
+		{"/agent", "/", "/agent/"},
+		{"  ", "/x", "/x"},
+	}
+	for _, c := range cases {
+		if got := appPath(c.prefix, c.path); got != c.want {
+			t.Errorf("appPath(%q, %q) = %q, want %q", c.prefix, c.path, got, c.want)
+		}
+	}
+}

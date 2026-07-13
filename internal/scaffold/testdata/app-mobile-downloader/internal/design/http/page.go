@@ -1,20 +1,18 @@
 package design
 
 import (
-	designapp "testboi1/internal/design/application"
-	designui "testboi1/internal/design/ui"
-	"testboi1/internal/shared/server"
-	"testboi1/internal/ui/layout"
-
-	"github.com/go-fuego/fuego"
+	designapp "fixtests1/internal/design/application"
+	designui "fixtests1/internal/design/ui"
+	"fixtests1/internal/shared/server"
+	"fixtests1/internal/ui/layout"
 )
 
 func registerPageHandler(s *server.Server, catalog designapp.Catalog) {
-	fuego.Get(s.Server, "/design", designPageHandler(catalog))
+	server.Get(s, "/design", designPageHandler(catalog))
 }
 
-func designPageHandler(catalog designapp.Catalog) func(c fuego.ContextNoBody) (any, error) {
-	return func(c fuego.ContextNoBody) (any, error) {
+func designPageHandler(catalog designapp.Catalog) func(c server.ContextNoBody) (any, error) {
+	return func(c server.ContextNoBody) (any, error) {
 		nav := layout.FromRequest(c.Request())
 		activeThemeID := catalog.ActiveThemeIDFromRequest(c.Request())
 		activeTheme, _ := catalog.ThemeByID(activeThemeID)

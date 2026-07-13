@@ -7,43 +7,64 @@ import (
 	"testing"
 )
 
-func TestPreviewMergeBar_DefaultShowsApplyButton(t *testing.T) {
+func TestPreviewMergeBar_ActiveShowsBadgeMessageAndBothButtons(t *testing.T) {
 	state := PreviewMergeBarState{
 		Active:        true,
 		SessionID:     "agent-x",
+		BackURL:       "/agent?session=agent-x",
 		BaseBranch:    "main",
 		PreviewBranch: "agent/agent-x",
 		Applicable:    true,
 		ActionPath:    "/agent/sessions/agent-x/apply/ui",
 	}
 	body := renderPreviewMergeBar(t, state)
+	mustContain(t, body, "badge-info")
+	mustContain(t, body, "Preview")
+	mustContain(t, body, "Preview aislada")
+	mustContain(t, body, `href="/agent?session=agent-x"`)
+	mustContain(t, body, "Back to agent")
 	mustContain(t, body, "Apply preview")
-	mustContain(t, body, "alert-info")
 	mustContain(t, body, `hx-post="/agent/sessions/agent-x/apply/ui"`)
-	if strings.Contains(body, "Volver al inicio") {
-		t.Fatalf("did not expect success link in default state, got: %s", body)
+	if strings.Contains(body, "Apply unavailable") {
+		t.Fatalf("did not expect disabled apply button when applicable, got: %s", body)
 	}
-	if strings.Contains(body, "alert-success") {
-		t.Fatalf("did not expect success tone in default state, got: %s", body)
+	if strings.Contains(body, "Volver al inicio") {
+		t.Fatalf("did not expect home link, got: %s", body)
 	}
 }
 
-func TestPreviewMergeBar_SuccessShowsAppliedBadgeAndHomeLink(t *testing.T) {
+func TestPreviewMergeBar_NotApplicableHidesApplyButton(t *testing.T) {
+	state := PreviewMergeBarState{
+		Active:     true,
+		SessionID:  "agent-x",
+		BackURL:    "/agent?session=agent-x",
+		Applicable: false,
+	}
+	body := renderPreviewMergeBar(t, state)
+	mustContain(t, body, "Back to agent")
+	if strings.Contains(body, "Apply preview") {
+		t.Fatalf("did not expect apply button when not applicable, got: %s", body)
+	}
+	if strings.Contains(body, `hx-post`) {
+		t.Fatalf("did not expect hx-post when not applicable, got: %s", body)
+	}
+}
+
+func TestPreviewMergeBar_SuccessHidesApplyButtonKeepsBack(t *testing.T) {
 	state := PreviewMergeBarState{
 		Active:        true,
 		SessionID:     "agent-x",
+		BackURL:       "/agent?session=agent-x",
 		BaseBranch:    "main",
 		PreviewBranch: "agent/agent-x",
 		Applicable:    true,
-		ActionPath:    "/agent/sessions/agent-x/apply/ui",
 		Success:       true,
 	}
 	body := renderPreviewMergeBar(t, state)
-	mustContain(t, body, "Volver al inicio")
-	mustContain(t, body, "alert-success")
-	mustContain(t, body, "badge-success")
 	mustContain(t, body, "Applied")
+	mustContain(t, body, "badge-success")
 	mustContain(t, body, "Cambios aplicados a main.")
+	mustContain(t, body, "Back to agent")
 	if strings.Contains(body, "Apply preview") {
 		t.Fatalf("did not expect apply button in success state, got: %s", body)
 	}
@@ -52,47 +73,43 @@ func TestPreviewMergeBar_SuccessShowsAppliedBadgeAndHomeLink(t *testing.T) {
 	}
 }
 
-func TestPreviewMergeBar_ErrorTakesPrecedenceOverSuccess(t *testing.T) {
+func TestPreviewMergeBar_ErrorHidesApplyButtonKeepsBack(t *testing.T) {
 	state := PreviewMergeBarState{
-		Active:        true,
-		SessionID:     "agent-x",
-		BaseBranch:    "main",
-		Applicable:    true,
-		ActionPath:    "/agent/sessions/agent-x/apply/ui",
-		Success:       true,
-		ErrorMessage:  "No se pudo aplicar esta preview.",
+		Active:       true,
+		SessionID:    "agent-x",
+		BackURL:      "/agent?session=agent-x",
+		BaseBranch:   "main",
+		Applicable:   true,
+		Success:      true,
+		ErrorMessage: "No se pudo aplicar esta preview.",
 	}
 	body := renderPreviewMergeBar(t, state)
-	mustContain(t, body, "alert-error")
+	mustContain(t, body, "badge-error")
 	mustContain(t, body, "No se pudo aplicar esta preview.")
-	mustContain(t, body, "Apply preview")
-	if strings.Contains(body, "alert-success") {
-		t.Fatalf("did not expect success tone when error present, got: %s", body)
+	mustContain(t, body, "Back to agent")
+	if strings.Contains(body, "Apply preview") {
+		t.Fatalf("did not expect apply button on error, got: %s", body)
 	}
-	if strings.Contains(body, "Volver al inicio") {
-		t.Fatalf("did not expect home link when error present, got: %s", body)
+	if strings.Contains(body, "badge-success") {
+		t.Fatalf("did not expect success badge when error present, got: %s", body)
 	}
 }
 
-func TestPreviewMergeBar_NotApplicableShowsDisabledButton(t *testing.T) {
+func TestPreviewMergeBar_StripAnchoredAtViewportBottom(t *testing.T) {
 	state := PreviewMergeBarState{
-		Active:     true,
-		SessionID:  "agent-x",
-		Applicable: false,
+		Active:    true,
+		SessionID: "agent-x",
+		BackURL:   "/agent?session=agent-x",
 	}
 	body := renderPreviewMergeBar(t, state)
-	mustContain(t, body, "Apply unavailable")
-	mustContain(t, body, "btn-disabled")
-	if strings.Contains(body, "Volver al inicio") {
-		t.Fatalf("did not expect home link when not applicable, got: %s", body)
-	}
+	mustContain(t, body, "fixed inset-x-0 bottom-0")
 }
 
 func TestPreviewMergeBar_InactiveEmptiesContainer(t *testing.T) {
 	state := PreviewMergeBarState{Active: false}
 	body := renderPreviewMergeBar(t, state)
 	mustContain(t, body, `<div id="global-preview-merge-bar"></div>`)
-	if strings.Contains(body, "Apply preview") || strings.Contains(body, "Volver al inicio") {
+	if strings.Contains(body, "Back to agent") || strings.Contains(body, "Apply preview") {
 		t.Fatalf("inactive bar should be empty, got: %s", body)
 	}
 }

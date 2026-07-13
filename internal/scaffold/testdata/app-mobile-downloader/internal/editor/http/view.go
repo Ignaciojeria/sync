@@ -1,15 +1,13 @@
 package editor
 
 import (
-	editorui "testboi1/internal/editor/ui"
-	"testboi1/internal/shared/server"
-	"testboi1/internal/ui/layout"
-
-	"github.com/go-fuego/fuego"
+	editorui "fixtests1/internal/editor/ui"
+	"fixtests1/internal/shared/server"
+	"fixtests1/internal/ui/layout"
 )
 
 func editorViewHandler(s *server.Server) {
-	fuego.Get(s.Server, "/editor-view", func(c fuego.ContextNoBody) (any, error) {
+	server.Get(s, "/editor-view", func(c server.ContextNoBody) (any, error) {
 		nav := layout.FromRequest(c.Request())
 		c.SetHeader("Content-Type", "text/html; charset=utf-8")
 		page, err := layout.RenderPage(c, "Console", editorui.EditorView(nav.PreviewPrefix))

@@ -3,25 +3,21 @@ package auth
 import (
 	"context"
 	"database/sql"
+	authapp "fixtests1/internal/auth/application"
+	authpostgresql "fixtests1/internal/auth/infrastructure/postgresql"
+	"fixtests1/internal/shared/configuration"
+	sharedpostgresql "fixtests1/internal/shared/infrastructure/postgresql"
+	"fixtests1/internal/shared/server"
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/MicahParks/jwkset"
+	"github.com/MicahParks/keyfunc/v3"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/jmoiron/sqlx"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	authapp "testboi1/internal/auth/application"
-	authpostgresql "testboi1/internal/auth/infrastructure/postgresql"
-	"testboi1/internal/shared/configuration"
-	sharedpostgresql "testboi1/internal/shared/infrastructure/postgresql"
-	"testboi1/internal/shared/server"
-
-	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/go-fuego/fuego"
-	"github.com/jmoiron/sqlx"
-
-	"github.com/MicahParks/jwkset"
-	"github.com/MicahParks/keyfunc/v3"
-	"github.com/golang-jwt/jwt/v5"
 )
 
 var _ = sql.ErrNoRows
@@ -47,8 +43,8 @@ func newAuthTestServer(t *testing.T, conf configuration.Conf) (*httptest.Server,
 
 	store := authpostgresql.NewSessionRepository(&sharedpostgresql.Connection{DB: sqlx.NewDb(db, "sqlmock")})
 
-	fs := fuego.NewServer()
-	s := &server.Server{Server: fs}
+	fs := server.NewServer()
+	s := fs
 	Register(s, conf, store, fakeJWKS{})
 	ts := httptest.NewServer(fs.Mux)
 	t.Cleanup(ts.Close)
@@ -101,7 +97,7 @@ func TestRegisterLoginGoogle(t *testing.T) {
 		OIDCTokenEndpoint:         "https://issuer.example/token",
 		OIDCAuthorizationEndpoint: "https://issuer.example/auth",
 		OIDCLoginURL:              "https://issuer.example/login",
-		OIDCClientID:              "built-in-testboi1-client",
+		OIDCClientID:              "built-in-fixtests1-client",
 		PROJECT_NAME:              "mobile-downloader",
 	}
 
@@ -181,8 +177,8 @@ func TestRegisterLoginGoogle(t *testing.T) {
 	t.Run("host login can still use direct google when configured", func(t *testing.T) {
 		c := conf
 		c.OIDCUpstreamGoogleClientID = "google-client"
-		c.OIDCClientID = "mobile-downloader-testboi1-client"
-		c.PROJECT_NAME = "testboi1"
+		c.OIDCClientID = "mobile-downloader-fixtests1-client"
+		c.PROJECT_NAME = "fixtests1"
 		ts2, _, _ := newAuthTestServer(t, c)
 		client2 := ts2.Client()
 		client2.CheckRedirect = func(req *http.Request, via []*http.Request) error {
@@ -219,8 +215,8 @@ func TestRegisterLoginGoogle(t *testing.T) {
 	t.Run("mounted preview login can also use direct google when configured", func(t *testing.T) {
 		c := conf
 		c.OIDCUpstreamGoogleClientID = "google-client"
-		c.OIDCClientID = "mobile-downloader-testboi1-client"
-		c.PROJECT_NAME = "testboi1"
+		c.OIDCClientID = "mobile-downloader-fixtests1-client"
+		c.PROJECT_NAME = "fixtests1"
 		ts2, _, _ := newAuthTestServer(t, c)
 		client2 := ts2.Client()
 		client2.CheckRedirect = func(req *http.Request, via []*http.Request) error {

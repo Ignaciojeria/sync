@@ -1,7 +1,7 @@
 version: 1
 
 project:
-  slug: testboi1
+  slug: fixtests1
 
 defaults:
   baseBranch: main

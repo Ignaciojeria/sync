@@ -48,3 +48,38 @@ func TestCompileThemeCSS(t *testing.T) {
 		t.Fatal("css.ETag is empty")
 	}
 }
+
+func TestCSSVarNameForDaisy(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"radius-box", "radius-box"},
+		{"shadow-card", "pi-shadow-card"},
+		{"border-warm", "pi-border-warm"},
+		{"surface-1", "pi-surface-1"},
+		{"primary", "color-primary"},
+		{"accent", "color-accent"},
+	}
+	for _, c := range cases {
+		if got := cssVarNameForDaisy(c.in); got != c.want {
+			t.Errorf("cssVarNameForDaisy(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestSanitizeTokenName(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"primary", "primary"},
+		{"Primary Color", "primary-color"},
+		{"font_size", "font-size"},
+		{"foo.bar", "foo-bar"},
+		{"  Mixed_INPUT  ", "mixed-input"},
+	}
+	for _, c := range cases {
+		if got := sanitizeTokenName(c.in); got != c.want {
+			t.Errorf("sanitizeTokenName(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

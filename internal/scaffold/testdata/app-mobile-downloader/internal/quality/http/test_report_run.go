@@ -1,26 +1,23 @@
 package dev
 
 import (
-	"testboi1/internal/quality/application/test_report"
-	authmiddleware "testboi1/internal/auth/middleware"
-	"testboi1/internal/shared"
-	"testboi1/internal/shared/server"
-
-	"github.com/go-fuego/fuego"
+	authmiddleware "fixtests1/internal/auth/middleware"
+	"fixtests1/internal/quality/application/test_report"
+	"fixtests1/internal/shared"
+	"fixtests1/internal/shared/server"
 )
 
 func testReportRunHandler(s *server.Server, runner *testreport.Runner) {
-	fuego.Post(s.Server, "/report/tests/run", func(c fuego.ContextNoBody) (string, error) {
+	server.Post(s, "/report/tests/run", func(c server.ContextNoBody) (string, error) {
 		claims, _ := authmiddleware.JWTClaimsFromContext(c.Context())
 		email := shared.FirstStringClaim(claims, "email")
 		state, err := runner.Run(email)
 		if err != nil {
 			if err.Error() == "forbidden" {
-				return "", fuego.HTTPError{Status: 403, Detail: "forbidden"}
+				return "", server.HTTPError{Status: 403, Detail: "forbidden"}
 			}
-			return "", fuego.HTTPError{Status: 500, Detail: err.Error()}
+			return "", server.HTTPError{Status: 500, Detail: err.Error()}
 		}
 		return renderResultAndDashboard(c, state)
-	}, fuego.OptionMiddleware(authmiddleware.RequireEditor()))
+	}, server.OptionMiddleware(authmiddleware.RequireEditor()))
 }
-

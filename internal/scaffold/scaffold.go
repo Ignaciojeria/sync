@@ -11,8 +11,8 @@ import (
 
 const (
 	templateDirName   = "app-mobile-downloader"
-	sourceModuleName  = "testboi1"
-	sourceProjectName = "testboi1"
+	sourceModuleName  = "fixtests1"
+	sourceProjectName = "fixtests1"
 )
 
 //go:embed all:testdata/app-mobile-downloader

@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"testboi1/internal/shared/configuration"
+	"fixtests1/internal/shared/configuration"
 )
 
 const PostLoginRedirectPath = "/agent"

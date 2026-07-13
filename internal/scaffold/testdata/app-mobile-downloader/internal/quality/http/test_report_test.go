@@ -3,16 +3,14 @@ package dev
 import (
 	"context"
 	"errors"
+	"fixtests1/internal/quality/ui"
+	"fixtests1/internal/shared/server"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
-
-	"testboi1/internal/quality/ui"
-
-	"github.com/go-fuego/fuego"
 )
 
 type fakeContextNoBody struct {
@@ -27,8 +25,8 @@ type errResponseWriter struct {
 	err    error
 }
 
-func (e errResponseWriter) Header() http.Header       { return e.header }
-func (e errResponseWriter) WriteHeader(statusCode int) {}
+func (e errResponseWriter) Header() http.Header         { return e.header }
+func (e errResponseWriter) WriteHeader(statusCode int)  {}
 func (e errResponseWriter) Write(p []byte) (int, error) { return 0, e.err }
 
 type errResponseWriterAfter1 struct {
@@ -37,7 +35,7 @@ type errResponseWriterAfter1 struct {
 	wrote  bool
 }
 
-func (e *errResponseWriterAfter1) Header() http.Header       { return e.header }
+func (e *errResponseWriterAfter1) Header() http.Header        { return e.header }
 func (e *errResponseWriterAfter1) WriteHeader(statusCode int) {}
 func (e *errResponseWriterAfter1) Write(p []byte) (int, error) {
 	if e.wrote {
@@ -55,27 +53,27 @@ func newFakeContextNoBody() fakeContextNoBody {
 	}
 }
 
-func (f fakeContextNoBody) Deadline() (time.Time, bool)               { return time.Time{}, false }
-func (f fakeContextNoBody) Done() <-chan struct{}                     { return nil }
-func (f fakeContextNoBody) Err() error                                { return nil }
-func (f fakeContextNoBody) Value(key any) any                         { return f.ctx.Value(key) }
-func (f fakeContextNoBody) Body() (any, error)                        { return nil, nil }
-func (f fakeContextNoBody) MustBody() any                             { return nil }
-func (f fakeContextNoBody) Params() (any, error)                      { return nil, nil }
-func (f fakeContextNoBody) MustParams() any                           { return nil }
-func (f fakeContextNoBody) PathParam(name string) string              { return "" }
-func (f fakeContextNoBody) PathParamInt(name string) int              { return 0 }
-func (f fakeContextNoBody) PathParamIntErr(name string) (int, error)  { return 0, nil }
-func (f fakeContextNoBody) QueryParam(name string) string             { return "" }
-func (f fakeContextNoBody) QueryParamArr(name string) []string        { return nil }
-func (f fakeContextNoBody) QueryParamInt(name string) int             { return 0 }
-func (f fakeContextNoBody) QueryParamIntErr(name string) (int, error) { return 0, nil }
-func (f fakeContextNoBody) QueryParamBool(name string) bool           { return false }
+func (f fakeContextNoBody) Deadline() (time.Time, bool)                 { return time.Time{}, false }
+func (f fakeContextNoBody) Done() <-chan struct{}                       { return nil }
+func (f fakeContextNoBody) Err() error                                  { return nil }
+func (f fakeContextNoBody) Value(key any) any                           { return f.ctx.Value(key) }
+func (f fakeContextNoBody) Body() (any, error)                          { return nil, nil }
+func (f fakeContextNoBody) MustBody() any                               { return nil }
+func (f fakeContextNoBody) Params() (any, error)                        { return nil, nil }
+func (f fakeContextNoBody) MustParams() any                             { return nil }
+func (f fakeContextNoBody) PathParam(name string) string                { return "" }
+func (f fakeContextNoBody) PathParamInt(name string) int                { return 0 }
+func (f fakeContextNoBody) PathParamIntErr(name string) (int, error)    { return 0, nil }
+func (f fakeContextNoBody) QueryParam(name string) string               { return "" }
+func (f fakeContextNoBody) QueryParamArr(name string) []string          { return nil }
+func (f fakeContextNoBody) QueryParamInt(name string) int               { return 0 }
+func (f fakeContextNoBody) QueryParamIntErr(name string) (int, error)   { return 0, nil }
+func (f fakeContextNoBody) QueryParamBool(name string) bool             { return false }
 func (f fakeContextNoBody) QueryParamBoolErr(name string) (bool, error) { return false, nil }
-func (f fakeContextNoBody) QueryParams() url.Values                   { return url.Values{} }
-func (f fakeContextNoBody) MainLang() string                          { return "" }
-func (f fakeContextNoBody) MainLocale() string                        { return "" }
-func (f fakeContextNoBody) Render(templateToExecute string, data any, templateGlobsToOverride ...string) (fuego.CtxRenderer, error) {
+func (f fakeContextNoBody) QueryParams() url.Values                     { return url.Values{} }
+func (f fakeContextNoBody) MainLang() string                            { return "" }
+func (f fakeContextNoBody) MainLocale() string                          { return "" }
+func (f fakeContextNoBody) Render(templateToExecute string, data any, templateGlobsToOverride ...string) (server.CtxRenderer, error) {
 	return nil, nil
 }
 func (f fakeContextNoBody) Cookie(name string) (*http.Cookie, error) { return f.req.Cookie(name) }
@@ -90,12 +88,12 @@ func (f fakeContextNoBody) Response() http.ResponseWriter {
 	}
 	return f.rr
 }
-func (f fakeContextNoBody) SetStatus(code int)                       { f.rr.WriteHeader(code) }
+func (f fakeContextNoBody) SetStatus(code int) { f.rr.WriteHeader(code) }
 func (f fakeContextNoBody) Redirect(code int, target string) (any, error) {
 	http.Redirect(f.rr, f.req, target, code)
 	return nil, nil
 }
-func (f fakeContextNoBody) GetOpenAPIParams() map[string]fuego.OpenAPIParam { return nil }
+func (f fakeContextNoBody) GetOpenAPIParams() map[string]server.OpenAPIParam { return nil }
 func (f fakeContextNoBody) HasQueryParam(key string) bool                    { return false }
 func (f fakeContextNoBody) HasHeader(key string) bool                        { return f.req.Header.Get(key) != "" }
 func (f fakeContextNoBody) HasCookie(key string) bool {
@@ -147,5 +145,3 @@ func TestRenderResultAndDashboardSecondTemplateError(t *testing.T) {
 		t.Fatal("expected render error when writer fails on second template")
 	}
 }
-
-

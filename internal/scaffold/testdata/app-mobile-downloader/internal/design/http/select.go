@@ -1,23 +1,20 @@
 package design
 
 import (
+	designapp "fixtests1/internal/design/application"
+	"fixtests1/internal/shared/server"
 	"net/http"
 	"strings"
-
-	designapp "testboi1/internal/design/application"
-	"testboi1/internal/shared/server"
-
-	"github.com/go-fuego/fuego"
 )
 
 func registerSelectThemeHandler(s *server.Server, catalog designapp.Catalog) {
-	fuego.Post(s.Server, "/design/select", selectThemeHandler(catalog))
+	server.Post(s, "/design/select", selectThemeHandler(catalog))
 }
 
-func selectThemeHandler(catalog designapp.Catalog) func(c fuego.ContextNoBody) (any, error) {
-	return func(c fuego.ContextNoBody) (any, error) {
+func selectThemeHandler(catalog designapp.Catalog) func(c server.ContextNoBody) (any, error) {
+	return func(c server.ContextNoBody) (any, error) {
 		if err := c.Request().ParseForm(); err != nil {
-			return nil, fuego.HTTPError{Status: http.StatusBadRequest, Detail: err.Error()}
+			return nil, server.HTTPError{Status: http.StatusBadRequest, Detail: err.Error()}
 		}
 
 		themeID := catalog.ResolveThemeID(strings.TrimSpace(c.Request().FormValue("theme_id")))

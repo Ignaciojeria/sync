@@ -1,12 +1,10 @@
 package topology
 
 import (
+	"encoding/json"
+	"fixtests1/internal/shared/server"
+	topologyapp "fixtests1/internal/topology/application"
 	"net/http"
-
-	"testboi1/internal/shared/server"
-	topologyapp "testboi1/internal/topology/application"
-
-	"github.com/go-fuego/fuego"
 )
 
 type upsertSyncSessionResponse struct {
@@ -14,13 +12,13 @@ type upsertSyncSessionResponse struct {
 }
 
 func upsertSyncSessionHandler(s *server.Server, service *topologyapp.Service) {
-	fuego.Post(s.Server, "/api/topology/sync-sessions", func(c fuego.ContextWithBody[topologyapp.UpsertSyncSessionInput]) (*upsertSyncSessionResponse, error) {
-		body, err := c.Body()
-		if err != nil {
-			return nil, fuego.HTTPError{Status: http.StatusBadRequest, Detail: err.Error()}
+	server.Post(s, "/api/topology/sync-sessions", func(c server.ContextNoBody) (any, error) {
+		var body topologyapp.UpsertSyncSessionInput
+		if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
+			return nil, server.HTTPError{Status: http.StatusBadRequest, Detail: err.Error()}
 		}
 		if err := service.UpsertSyncSession(c.Context(), body); err != nil {
-			return nil, fuego.HTTPError{Status: http.StatusBadRequest, Detail: err.Error()}
+			return nil, server.HTTPError{Status: http.StatusBadRequest, Detail: err.Error()}
 		}
 		return &upsertSyncSessionResponse{OK: true}, nil
 	})

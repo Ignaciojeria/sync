@@ -1,33 +1,30 @@
 package http
 
 import (
+	gatewayapp "fixtests1/internal/gateway/application"
+	gatewayui "fixtests1/internal/gateway/ui"
+	"fixtests1/internal/shared/server"
 	"fmt"
+	"github.com/a-h/templ"
 	"net/http"
 	"strings"
-
-	gatewayapp "testboi1/internal/gateway/application"
-	gatewayui "testboi1/internal/gateway/ui"
-	"testboi1/internal/shared/server"
-	"github.com/a-h/templ"
-
-	"github.com/go-fuego/fuego"
 )
 
 func Register(s *server.Server, balanceSvc *gatewayapp.BalanceService, sessionCostSvc *gatewayapp.SessionCostService) {
-	fuego.Get(s.Server, "/gateway/balance", balanceHandler(balanceSvc))
-	fuego.Get(s.Server, "/gateway/session-cost", sessionCostHandler(sessionCostSvc))
+	server.Get(s, "/gateway/balance", balanceHandler(balanceSvc))
+	server.Get(s, "/gateway/session-cost", sessionCostHandler(sessionCostSvc))
 }
 
-func balanceHandler(svc *gatewayapp.BalanceService) func(fuego.ContextNoBody) (any, error) {
-	return func(c fuego.ContextNoBody) (any, error) {
+func balanceHandler(svc *gatewayapp.BalanceService) func(server.ContextNoBody) (any, error) {
+	return func(c server.ContextNoBody) (any, error) {
 		bal, err := svc.Fetch(c.Context())
 		variant := c.Request().URL.Query().Get("variant")
 		// ?format=json: lo consume la barra de presupuesto del chat
-		// (pkg/agent/ui/page.templ) sin re-renderizar HTML. El resto
+		// (internal/agent/ui/page.templ) sin re-renderizar HTML. El resto
 		// de la UI sigue usando el badge HTMX como hasta ahora.
 		if c.Request().URL.Query().Get("format") == "json" {
 			if err != nil {
-				return nil, fuego.HTTPError{Status: http.StatusBadGateway, Detail: err.Error()}
+				return nil, server.HTTPError{Status: http.StatusBadGateway, Detail: err.Error()}
 			}
 			return bal, nil
 		}
@@ -48,15 +45,15 @@ func balanceHandler(svc *gatewayapp.BalanceService) func(fuego.ContextNoBody) (a
 	}
 }
 
-func sessionCostHandler(svc *gatewayapp.SessionCostService) func(fuego.ContextNoBody) (any, error) {
-	return func(c fuego.ContextNoBody) (any, error) {
+func sessionCostHandler(svc *gatewayapp.SessionCostService) func(server.ContextNoBody) (any, error) {
+	return func(c server.ContextNoBody) (any, error) {
 		sessionID := strings.TrimSpace(c.Request().URL.Query().Get("session_id"))
 		if sessionID == "" {
-			return nil, fuego.HTTPError{Status: http.StatusBadRequest, Detail: "session_id is required"}
+			return nil, server.HTTPError{Status: http.StatusBadRequest, Detail: "session_id is required"}
 		}
 		cost, err := svc.Fetch(c.Context(), sessionID)
 		if err != nil {
-			return nil, fuego.HTTPError{Status: http.StatusBadGateway, Detail: err.Error()}
+			return nil, server.HTTPError{Status: http.StatusBadGateway, Detail: err.Error()}
 		}
 		return cost, nil
 	}

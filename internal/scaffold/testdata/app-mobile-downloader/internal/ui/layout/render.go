@@ -2,15 +2,14 @@ package layout
 
 import (
 	"context"
-	"io"
-
+	"fixtests1/internal/shared/server"
 	"github.com/a-h/templ"
-	"github.com/go-fuego/fuego"
+	"io"
 )
 
 // RenderPage renderiza una pagina completa con el layout autenticado.
 // Extrae el contexto de navegacion desde el request (path, permisos, etc.).
-func RenderPage(c fuego.ContextNoBody, title string, content templ.Component) (templ.Component, error) {
+func RenderPage(c server.ContextNoBody, title string, content templ.Component) (templ.Component, error) {
 	nav := FromRequest(c.Request())
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		ctx = templ.WithChildren(ctx, content)
@@ -19,7 +18,7 @@ func RenderPage(c fuego.ContextNoBody, title string, content templ.Component) (t
 }
 
 // RenderPublicPage renderiza una página pública usando el tema activo, sin sidenav.
-func RenderPublicPage(c fuego.ContextNoBody, title string, content templ.Component) (templ.Component, error) {
+func RenderPublicPage(c server.ContextNoBody, title string, content templ.Component) (templ.Component, error) {
 	nav := FromRequest(c.Request())
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		ctx = templ.WithChildren(ctx, content)

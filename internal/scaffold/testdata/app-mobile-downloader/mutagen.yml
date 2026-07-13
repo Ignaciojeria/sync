@@ -11,6 +11,6 @@ sync:
         - ".air.log"
         - "bin"
 
-  testboi1:
+  fixtests1:
     alpha: "."
-    beta: "exedev@testboi1.exe.xyz:/home/exedev/workspace/testboi1"
+    beta: "exedev@fixtests1.exe.xyz:/home/exedev/workspace/fixtests1"

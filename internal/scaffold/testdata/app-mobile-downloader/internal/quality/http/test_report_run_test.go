@@ -2,29 +2,26 @@ package dev
 
 import (
 	"errors"
+	authmiddleware "fixtests1/internal/auth/middleware"
+	testreport "fixtests1/internal/quality/application/test_report"
+	"fixtests1/internal/quality/ui"
+	"fixtests1/internal/shared/configuration"
+	"fixtests1/internal/shared/server"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
-
-	authmiddleware "testboi1/internal/auth/middleware"
-	testreport "testboi1/internal/quality/application/test_report"
-	"testboi1/internal/quality/ui"
-	"testboi1/internal/shared/configuration"
-	"testboi1/internal/shared/server"
-
-	"github.com/go-fuego/fuego"
 )
 
 func newRunTestServer(t *testing.T, runner *testreport.Runner, withJWTMiddleware bool) *httptest.Server {
 	t.Helper()
-	fs := fuego.NewServer()
+	fs := server.NewServer()
 	if withJWTMiddleware {
-		fuego.Use(fs, authmiddleware.JWTMiddleware(nil, nil, configuration.Conf{}))
+		server.Use(fs, authmiddleware.JWTMiddleware(nil, nil, configuration.Conf{}))
 	}
-	s := &server.Server{Server: fs}
+	s := fs
 	testReportRunHandler(s, runner)
 	return httptest.NewServer(fs.Mux)
 }

@@ -3,6 +3,13 @@ package scheduler
 import (
 	"context"
 	"database/sql"
+	authmiddleware "fixtests1/internal/auth/middleware"
+	"fixtests1/internal/shared"
+	"fixtests1/internal/shared/configuration"
+	sharedpostgresql "fixtests1/internal/shared/infrastructure/postgresql"
+	"fixtests1/internal/shared/server"
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/jmoiron/sqlx"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,16 +17,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	authmiddleware "testboi1/internal/auth/middleware"
-	"testboi1/internal/shared"
-	"testboi1/internal/shared/configuration"
-	sharedpostgresql "testboi1/internal/shared/infrastructure/postgresql"
-	"testboi1/internal/shared/server"
-
-	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/go-fuego/fuego"
-	"github.com/jmoiron/sqlx"
 )
 
 // newSchedulerMockBoot creates a sqlmock-backed connection and a fuego server
@@ -35,9 +32,9 @@ func newSchedulerMockBoot(t *testing.T) (*httptest.Server, sqlmock.Sqlmock) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	fs := fuego.NewServer()
-	fuego.Use(fs, authmiddleware.JWTMiddleware(nil, nil, configuration.Conf{}))
-	s := &server.Server{Server: fs}
+	fs := server.NewServer()
+	server.Use(fs, authmiddleware.JWTMiddleware(nil, nil, configuration.Conf{}))
+	s := fs
 	conn := &sharedpostgresql.Connection{DB: sqlx.NewDb(db, "sqlmock")}
 	jobConfigPageHandler(s, conn)
 	jobConfigAPIHandler(s, conn)
@@ -369,9 +366,9 @@ func TestRegister(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 
 	hooks := &shared.Hooks{}
-	fs := fuego.NewServer()
-	fuego.Use(fs, authmiddleware.JWTMiddleware(nil, nil, configuration.Conf{}))
-	s := &server.Server{Server: fs}
+	fs := server.NewServer()
+	server.Use(fs, authmiddleware.JWTMiddleware(nil, nil, configuration.Conf{}))
+	s := fs
 	conn := &sharedpostgresql.Connection{DB: sqlx.NewDb(db, "sqlmock")}
 
 	// The cron tick fires at second :00 of every minute; in practice tests run

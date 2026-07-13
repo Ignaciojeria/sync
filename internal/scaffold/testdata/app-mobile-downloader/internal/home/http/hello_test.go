@@ -2,16 +2,13 @@ package home
 
 import (
 	"context"
+	"fixtests1/internal/shared/server"
+	topologyapp "fixtests1/internal/topology/application"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"testboi1/internal/shared/server"
-	topologyapp "testboi1/internal/topology/application"
-
-	"github.com/go-fuego/fuego"
 )
 
 type snapshotReaderStub struct {
@@ -23,8 +20,8 @@ func (s snapshotReaderStub) GetSnapshot(context.Context) (topologyapp.Snapshot, 
 }
 
 func TestHomeHandler(t *testing.T) {
-	fs := fuego.NewServer()
-	s := &server.Server{Server: fs}
+	fs := server.NewServer()
+	s := fs
 	homeHandler(s, snapshotReaderStub{snapshot: topologyapp.Snapshot{
 		Workspace: topologyapp.Workspace{Name: "workspace-gateway", Status: topologyapp.StatusRunning, Summary: "Runtime persistente del workspace"},
 		Services:  []topologyapp.ServiceNode{{Name: "PostgreSQL", Kind: "database", Status: topologyapp.StatusRunning, Summary: "Database connection healthy"}},
@@ -64,8 +61,8 @@ func TestHomeHandler(t *testing.T) {
 }
 
 func TestHomeRegister(t *testing.T) {
-	fs := fuego.NewServer()
-	s := &server.Server{Server: fs}
+	fs := server.NewServer()
+	s := fs
 	Register(s, snapshotReaderStub{snapshot: topologyapp.Snapshot{
 		Workspace: topologyapp.Workspace{Name: "workspace-gateway", Status: topologyapp.StatusRunning, Summary: "Runtime persistente del workspace"},
 		Services:  []topologyapp.ServiceNode{{Name: "PostgreSQL", Kind: "database", Status: topologyapp.StatusRunning, Summary: "Database connection healthy"}},

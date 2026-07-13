@@ -1,14 +1,12 @@
 package auth
 
 import (
-	"testboi1/internal/shared/server"
-
-	"github.com/go-fuego/fuego"
+	"fixtests1/internal/shared/server"
 )
 
 func registerStaticAssets(s *server.Server) {
-	fuego.Get(s.Server, "/logo.jpeg", serveStaticFile("logo.jpeg"))
-	fuego.Get(s.Server, "/logo.svg", serveStaticFile("logo.svg"))
-	fuego.Get(s.Server, "/login.jpeg", serveStaticFile("login.jpeg"))
-	fuego.Get(s.Server, "/login-bg.svg", serveStaticFile("login-bg.svg"))
+	server.Get(s, "/logo.jpeg", serveStaticFile("logo.jpeg"))
+	server.Get(s, "/logo.svg", serveStaticFile("logo.svg"))
+	server.Get(s, "/login.jpeg", serveStaticFile("login.jpeg"))
+	server.Get(s, "/login-bg.svg", serveStaticFile("login-bg.svg"))
 }

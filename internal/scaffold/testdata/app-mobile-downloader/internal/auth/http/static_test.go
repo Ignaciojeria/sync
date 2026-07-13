@@ -1,15 +1,12 @@
 package auth
 
 import (
+	"fixtests1/internal/shared/server"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"testboi1/internal/shared/server"
-
-	"github.com/go-fuego/fuego"
 )
 
 func TestServeStaticFile(t *testing.T) {
@@ -28,8 +25,8 @@ func TestServeStaticFile(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(wd) })
 
-	fs := fuego.NewServer()
-	s := &server.Server{Server: fs}
+	fs := server.NewServer()
+	s := fs
 	registerStaticAssets(s)
 	ts := httptest.NewServer(fs.Mux)
 	t.Cleanup(ts.Close)

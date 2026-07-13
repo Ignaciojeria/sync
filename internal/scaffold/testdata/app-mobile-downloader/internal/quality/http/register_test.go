@@ -1,20 +1,17 @@
 package dev
 
 import (
+	testreport "fixtests1/internal/quality/application/test_report"
+	"fixtests1/internal/quality/ui"
+	"fixtests1/internal/shared/server"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	testreport "testboi1/internal/quality/application/test_report"
-	"testboi1/internal/quality/ui"
-	"testboi1/internal/shared/server"
-
-	"github.com/go-fuego/fuego"
 )
 
 func TestQualityRegister(t *testing.T) {
-	fs := fuego.NewServer()
-	s := &server.Server{Server: fs}
+	fs := server.NewServer()
+	s := fs
 	runner := testreport.NewRunnerWithDeps(testreport.RunnerDeps{
 		IsAllowedEditorEmail: func(string) bool { return true },
 	})

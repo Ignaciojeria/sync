@@ -2,21 +2,18 @@ package topology
 
 import (
 	"bytes"
+	"fixtests1/internal/shared/server"
+	topologyapp "fixtests1/internal/topology/application"
+	memory "fixtests1/internal/topology/infrastructure/memory"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	"testboi1/internal/shared/server"
-	topologyapp "testboi1/internal/topology/application"
-	memory "testboi1/internal/topology/infrastructure/memory"
-
-	"github.com/go-fuego/fuego"
 )
 
 func TestUpsertSyncSessionHandler(t *testing.T) {
-	fs := fuego.NewServer()
-	s := &server.Server{Server: fs}
+	fs := server.NewServer()
+	s := fs
 	store := memory.NewSyncSessionsStore(time.Minute)
 	service := topologyapp.NewServiceWithDeps(topologyapp.ServiceDeps{SyncSessionsStore: store, SyncSessionsSource: store})
 	Register(s, service)
@@ -43,8 +40,8 @@ func TestUpsertSyncSessionHandler(t *testing.T) {
 }
 
 func TestUpsertSyncSessionHandlerRejectsBadRequest(t *testing.T) {
-	fs := fuego.NewServer()
-	s := &server.Server{Server: fs}
+	fs := server.NewServer()
+	s := fs
 	store := memory.NewSyncSessionsStore(time.Minute)
 	service := topologyapp.NewServiceWithDeps(topologyapp.ServiceDeps{SyncSessionsStore: store, SyncSessionsSource: store})
 	Register(s, service)

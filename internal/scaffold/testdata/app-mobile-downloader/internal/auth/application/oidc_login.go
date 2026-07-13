@@ -6,8 +6,8 @@ import (
 	"net/url"
 	"strings"
 
-	"testboi1/internal/shared"
-	"testboi1/internal/shared/configuration"
+	"fixtests1/internal/shared"
+	"fixtests1/internal/shared/configuration"
 )
 
 func BuildLoginURL(conf configuration.Conf, state string, preferGoogle bool) (string, error) {

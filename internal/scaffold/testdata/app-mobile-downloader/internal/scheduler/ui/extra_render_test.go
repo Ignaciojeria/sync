@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	schedulerapp "testboi1/internal/scheduler/application"
+	schedulerapp "fixtests1/internal/scheduler/application"
 )
 
 type failingTemplWriter struct{ err error }

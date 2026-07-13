@@ -1,0 +1,51 @@
+package ui
+
+import agentapp "fixtests1/internal/agent/application"
+
+templ SessionsList(state PageState) {
+	<div class="flex h-full min-h-0 flex-col">
+		<div class="flex items-center justify-between px-3 py-3">
+			<div class="flex items-center gap-2">
+				<h2 class="text-[1.02rem] font-semibold leading-none tracking-tight text-base-content" style="font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);">Sessions</h2>
+			</div>
+			<form id="new-session-form" class="contents">
+				<input type="hidden" name="title" value="Nueva sesión"/>
+				<input type="hidden" name="cwd" value={ state.DefaultCWD }/>
+				<input type="hidden" name="model" value={ state.DefaultModel }/>
+				<div class="flex items-center gap-2 text-base-content/58">
+					<button class="btn btn-ghost btn-sm btn-square" type="submit" title="Nueva sesión">
+						<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14m7-7H5"/></svg>
+					</button>
+				</div>
+			</form>
+		</div>
+
+		<div class="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+			<div id="sessions-empty" class="agent-glass-panel rounded-box border agent-shell-border px-3.5 py-3.5 text-[0.78rem] text-base-content/82 agent-shell-shadow hidden">
+				Todavía no hay conversaciones. Crea una sesión para empezar.
+			</div>
+			<ul id="sessions-list" class="space-y-1"></ul>
+		</div>
+
+		<div class="border-t border-base-300/50 p-2">
+			<button class="agent-glass-panel agent-raised btn btn-outline btn-sm w-full justify-center gap-2 rounded-box border agent-shell-border bg-transparent text-base-content/88 hover:bg-base-100/10">
+				<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h10"/></svg>
+				<span>View Archived</span>
+			</button>
+		</div>
+	</div>
+}
+
+templ EmptyConversation(active *agentapp.Session) {
+	<div data-empty-state class="flex min-h-full flex-col items-center justify-start pt-10 text-center">
+		<p class="max-w-4xl text-[1.5rem] font-medium leading-[1.5] text-base-content/68 sm:text-[1.8rem]" style="font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);">
+			if active != nil {
+				{ active.Title } <span class="text-base-content/42">está listo para recibir instrucciones sobre</span> <span class="text-base-content/72">{ shellSessionCWD(active.CWD) }</span>.
+			} else {
+				Pi está listo para trabajar en este proyecto. Crea o selecciona una conversación para empezar.
+			}
+		</p>
+		<p class="mt-6 text-[0.98rem] text-base-content/64" style="font-family: var(--pi-font-code-family, 'JetBrains Mono', monospace);">Send a message to start the conversation.</p>
+	</div>
+}
+

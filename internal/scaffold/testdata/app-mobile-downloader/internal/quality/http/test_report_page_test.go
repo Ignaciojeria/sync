@@ -1,24 +1,21 @@
 package dev
 
 import (
+	authmiddleware "fixtests1/internal/auth/middleware"
+	"fixtests1/internal/shared/configuration"
+	"fixtests1/internal/shared/server"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	authmiddleware "testboi1/internal/auth/middleware"
-	"testboi1/internal/shared/configuration"
-	"testboi1/internal/shared/server"
-
-	"github.com/go-fuego/fuego"
 )
 
 func newPageTestServer(withJWTMiddleware bool) *httptest.Server {
-	fs := fuego.NewServer()
+	fs := server.NewServer()
 	if withJWTMiddleware {
-		fuego.Use(fs, authmiddleware.JWTMiddleware(nil, nil, configuration.Conf{}))
+		server.Use(fs, authmiddleware.JWTMiddleware(nil, nil, configuration.Conf{}))
 	}
-	s := &server.Server{Server: fs}
+	s := fs
 	testReportPageHandler(s)
 	return httptest.NewServer(fs.Mux)
 }

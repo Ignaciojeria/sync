@@ -1,19 +1,17 @@
-# Runtime del agente pi en `testboi1`
+# Runtime del agente pi en `fixtests1`
 
 > Documento vivo para entender qué partes del módulo `internal/agent`
 > sobreviven a un fork del repo sin intervención y qué partes requieren
 > ajustes al migrar a otro proyecto (boilerplate). También cubre los
 > puntos pendientes para llegar a 12-factor compliance estricto.
 
-> **Nota 2026-07-08:** el modo activo del proyecto volvió a **app única**
-> en `cmd/api`. Las secciones sobre BFF / `cmd/agent-worker` /
-> `scripts/run-all.sh` quedan como **contexto histórico** de una etapa
-> anterior y no describen el flujo actual de dev.
+> **Nota 2026-07-08:** el modo activo del proyecto es **app única**
+> en `cmd/api`. Este doc describe únicamente el flujo actual.
 
 ## 0. Pool de runtimes (cambio del 2026-07-03 — baja RAM drástica)
 
 **Antes**: cada chat usado mantenía 1 proceso `pi` vivo
-(`map[sessionID]Runtime` en `pkg/agent/application/manager.go`).
+(`map[sessionID]Runtime` en `internal/agent/application/manager.go`).
 Con N chats: N procesos.
 
 **Ahora**: pool de runtimes con cap configurable. Default
@@ -40,7 +38,7 @@ disponible el RPC `switch_session` en pi (verificado en
 `node_modules/@mariozechner/pi-coding-agent/dist/modes/rpc/rpc-types.d.ts`).
 El approach actual (respawn) es más simple y evita el
 `cancelled: true` que devuelve pi cuando está mid-turn; upgrade
-path documentado en `pkg/agent/application/manager.go` §
+path documentado en `internal/agent/application/manager.go` §
 `maybeEvictForNewSlot`.
 
 ## 1. Lo verificado el 2026-07-02
@@ -51,12 +49,12 @@ claude-sonnet` desde una VM con `air` activo:
 - El agente pi tiene `read`/`bash`/`write`/`edit` tools y **puede editar
   archivos del repo sin pedir confirmación**: en la prueba le pedimos
   que agregara una línea al top de
-  `pkg/agent/infrastructure/pirpc/runner.go` y lo hizo en ~3 s.
-- Editar un archivo bajo `pkg/agent/` **disparó el watcher de air
+  `internal/agent/infrastructure/pirpc/runner.go` y lo hizo en ~3 s.
+- Editar un archivo bajo `internal/agent/` **disparó el watcher de air
   → rebuild → reinicio del servidor Go**, dejando el proceso `pi`
   huérfano. Esto es lo que el usuario sintió como "se cuelga y deja de
   funcionar".
-- El fix aplicado (`pkg/agent/infrastructure/pirpc/sandbox.go`)
+- El fix aplicado (`internal/agent/infrastructure/pirpc/sandbox.go`)
   redirige el CWD del proceso pi a `tmp/agent-work/<sessionID>/`,
   excluido del watcher porque `tmp/` ya está en `exclude_dir` de
   `.air.toml`. Misma prueba después del fix: las ediciones quedan en el
@@ -81,12 +79,12 @@ claude-sonnet` desde una VM con `air` activo:
 ### 3.1. Renombre de módulo Go (obligatorio)
 
 Todos los archivos `.go` tienen el module path
-`testboi1/<paquete>`. Al forkear a un proyecto nuevo hay que:
+`fixtests1/<paquete>`. Al forkear a un proyecto nuevo hay que:
 
 ```sh
 # desde la raíz del fork
 go mod edit -module github.com/mi-org/mi-proyecto
-rg -l "testboi1" | xargs sed -i 's|testboi1|mi-proyecto|g'
+rg -l "fixtests1" | xargs sed -i 's|fixtests1|mi-proyecto|g'
 go mod tidy
 ```
 
@@ -194,7 +192,7 @@ Variables que NO existen (deberían):
 ```sh
 # 1. Renombrar el módulo y los imports
 go mod edit -module <nuevo-path>
-rg -l "testboi1" | xargs sed -i 's|testboi1|<nuevo-path>|g'
+rg -l "fixtests1" | xargs sed -i 's|fixtests1|<nuevo-path>|g'
 go mod tidy
 
 # 2. Asegurar que el hot-reload ignore tmp/
@@ -260,24 +258,25 @@ curl http://localhost:8000/agent         # debe responder 401 o 200
 ## 8. Referencias
 
 - Código del fix de sandbox:
-  `pkg/agent/infrastructure/pirpc/sandbox.go`
+  `internal/agent/infrastructure/pirpc/sandbox.go`
 - Proceso afectado:
-  `pkg/agent/infrastructure/pirpc/process.go`
+  `internal/agent/infrastructure/pirpc/process.go`
 - Página que arranca el agente con CWD vacío:
-  `pkg/agent/http/page.go`
+  `internal/agent/http/page.go`
 - Configuración de air que debe sobrevivir al fork:
   `.air.toml` (línea `exclude_dir`)
 - Plan original del módulo:
   `AGENT_IMPLEMENTATION_PLAN.md`
 
-## 9. Layering módulo y opt-out (a partir del 2026-07-02)
+## 9. Layering módulo y opt-out
 
-El agente vive en `pkg/agent/` (no más `internal/agent/`) para que un
-proyecto derivado pueda tratarlo como capability removible sin tocar
-el resto del wiring. La estructura:
+El agente vive en `internal/agent/`, igual que auth, editor, home, quality
+y scheduler. Sigue las mismas capas (`application/`, `http/`,
+`infrastructure/`, `ui/`) y se enciende/apaga con la flag `AGENT_ENABLED`
+sin tocar el resto del wiring. La estructura:
 
 ```
-pkg/agent/
+internal/agent/
 ├── application/         ← contrato público: AgentService interface + Manager
 ├── http/                ← handlers HTTP (Register acepta AgentService)
 ├── infrastructure/
@@ -290,7 +289,7 @@ pkg/agent/
 ### 9.1. Contrato público
 
 `Application.AgentService` es la interfaz con la que el host habla.
-Declarada en `pkg/agent/application/manager.go`:
+Declarada en `internal/agent/application/manager.go`:
 
 ```go
 type AgentService interface {
@@ -325,256 +324,22 @@ activarse de nuevo cuando se necesite.
 
 ### 9.3. Lo que falta para full separation
 
-Hoy `pkg/agent/http` y `pkg/agent/application` todavía importan tipos
+Hoy `internal/agent/http` y `internal/agent/application` todavía importan tipos
 del host (`internal/shared/server`, `internal/ui/layout`,
 `internal/auth/middleware`). El path de imports llega via go's `internal`
-rule porque `pkg/agent` está dentro del mismo módulo.
+rule porque `internal/agent` está dentro del mismo módulo.
 
 Para llegar al "nivel 2" del análisis original (módulo Go separado
 con `go.work`, dependencias invertidas vía interfaces en lugar de
 imports directos), falta:
 1. Mover `internal/shared/server`, `internal/ui/layout`,
    `internal/auth/middleware` a paths non-`internal`.
-2. Definir en `pkg/agent` interfaces `HostRouter`, `HostMiddlewareFunc`,
+2. Definir en `internal/agent` interfaces `HostRouter`, `HostMiddlewareFunc`,
    `LayoutResolver` (análogas a `AgentService`).
-3. `pkg/agent/http` consume las interfaces, no los tipos concretos del
+3. `internal/agent/http` consume las interfaces, no los tipos concretos del
    host.
 4. `cmd/api/main.go` provee adapters (fuego → HostRouter, etc.).
 
 Esto queda como TODO; no hace falta para que el boilerplate funcione
 y se puede hacer incrementalmente sin romper llamadas existentes.
-
-## 10. Topología de tres procesos (a partir del 2026-07-02, step 1)
-
-El "se reinicia y contamina al agente" deja de existir cuando separamos
-el host web de la runtime del agente. La arquitectura mínima que lo
-logra tiene tres binarios:
-
-```
-   browser
-      │
-      ▼
-┌──────────┐   gateway estable, proxy inverso 'tonto'
-│   BFF    │   cmd/bff        listen :8000
-│ :8000    │   Hand-coded, FROZEN, NO tocado por air.
-└──┬────┬──┘
-   │    │
-   │  /agent/* → worker
-   │  /*        → web
-   │
-   ▼                              ▼
-┌──────────┐                  ┌──────────┐
-│  Web     │                  │  Agent   │
-│  Server  │                  │  Worker  │
-│ :8001    │                  │ :18080   │
-└──────────┘                  └──────────┘
-   tmp/main                      tmp/agent-worker
-   cmd/api                       cmd/agent-worker
-   hot-reload OK                 lifecycle propio
-```
-
-**Step 1 (este commit) entrega:**
-- `cmd/bff/main.go` (~50 líneas, `httputil.NewSingleHostReverseProxy`).
-- `cmd/agent-worker/main.go` (~50 líneas, sólo `/agent/healthz` hoy).
-- `scripts/run-all.sh` para arrancar/parar los 3 procesos.
-- Unit tests para el routing del BFF.
-- Unit tests para el contrato `/agent/healthz` del worker.
-- Una *verificación manual* con todos los upstreams arriba: el browser
-  recibe respuesta desde el agent-worker vía BFF sin que el hot-reload
-  del web-server lo perturbe.
-
-**Step 2 (próximo turno) migra los handlers reales de `pkg/agent/http`
-al worker:** los endpoints `/agent/sessions/.../prompt`, `/events`,
-`/abort`, etc. viven en el worker; el web-server deja de registrarlos.
-La migración debe preservar el contrato externo (paths, bodies) para
-que el browser no note diferencia.
-
-**Por qué sirve para 12-factor**: cada proceso cumple IX
-(disposability). El worker es barato de tirar y respawn; el web-server
-es stateless-meta; el BFF nunca cambia. La suma de los tres es el
-"servicio" desde la perspectiva del browser.
-
-## 11. Diseño interno del BFF
-
-El BFF tiene un solo trabajo: rutear. Sus invariantes:
-
-| Invariante                                  | Test                            |
-| -------------------------------------------- | ------------------------------- |
-| `/agent/*` (no `/agents`) va al worker      | `TestIsAgentRoute` con tabla    |
-| `/*` va al web-server                        | `TestBFFRouteWebAndAgent`       |
-| Si el upstream está caído, devuelve 502     | `TestBFFReturns502WhenAgentDown`|
-| El BFF nunca tiene lógica de negocio        | `bffHandler` es ~10 líneas      |
-| El BFF puede arrancarse sin estado           | `bffHandler` no lee state      |
-
-NOTA: en step 2, los handlers reales del agente irán al worker. El
-`bffHandler` se mantiene igual; sólo cambia el handler del worker.
-
-## 12. Diseño interno del agent-worker
-
-El agent-worker es un `http.Server` shrunk (sin middleware, sin
-templates, sin DB). Por ahora sólo expone `/agent/healthz`.
-
-| Endpoint        | Step 1                  | Step 2 (próximo turno)             |
-| --------------- | ----------------------- | ---------------------------------- |
-| `GET /agent/healthz` | 200 `{"status":"alive"}` | idem                            |
-| `* /agent/...`       | 501 Not Implemented    | handlers reales migrados           |
-| Models               | stdlib `net/http`        | stdlib + AgentService via pkg    |
-
-En step 2 el worker se construye en `pkg/agent/cmd/worker/main.go`. Este
-worker ya no necesita un `.air.toml` separado: air mira `pkg/agent/`
-por su `include_ext`, así que cubre también el cmd del worker.
-
-## 13. Cómo correr los tres procesos en dev
-
-```sh
-# 1. compilar y arrancar
-scripts/run-all.sh start
-
-# 2. verificar status (lee pidfiles y hace healthcheck)
-scripts/run-all.sh status
-
-# 3. parar limpio
-scripts/run-all.sh stop
-```
-
-Los pidfiles viven en `tmp/run/{name}.pid`. El BFF se compila como
-artefacto estático (`./bin/bff`) y se puede regenerar a mano:
-
-```sh
-go build -o ./bin/bff ./cmd/bff
-```
-
-NOTA sobre air: air NO mantiene al BFF porque no comparte módulos
-runtime con él. Si tocás `cmd/bff/main.go`, recompilás el BFF a mano
-y reiniciás sólo ese proceso. Cero hot-reload innecesario.
-
-
-
-## 14. Authentication: cada servicio valida JWT contra el IdP (Opción A)
-
-A partir de 2026-07-02, después del feedback de "boilerplate apuntando a
-producción", elegimos el modelo estándar de industria en lugar del
-"BFF como gate":
-
-- **El BFF es un proxy TONTO.** No toca el header `Authorization`;
-  preserva el JWT intacto al forwardear.
-- **Cada upstream valida el JWT contra el IdP independientemente.**
-  Web-server y agent-worker corren su propio JWTMiddleware contra
-  Casdoor (mismos env: `JWKS_URL`, `OIDC_ISSUER`, `JWT_AUDIENCE`).
-- **Sin secretos compartidos, sin internal token HMAC.** La auth es
-  puramente OIDC estándar.
-
-### Por qué Opción A y no "BFF con internal token"
-
-| Aspecto | Opción A (elegida) | BFF con internal token |
-|---|---|---|
-| Independencia de procesos | Cada servicio desplegable solo | BFF era single-point-of-failure |
-| Estándar industry | ✓ Lo que Casdoor/Keycloak/Auth0 esperan | Custom, fuera de estándar |
-| Red de confianza | Cada upstream confía en el JWT firmado por el IdP | Cada upstream confía en HMAC del BFF |
-| Latency marginal | IdP JWKS cached; cada servicio ya tenía que tenerlo | HMAC cached |
-| Código custom | Sólo el routing del BFF (50 líneas) | BFF valida + emite token, upstreams verifican |
-| Rotación secrets | No hay secretos internos | 3 lugares a actualizar si rota `BFF_INTERNAL_SECRET` |
-
-Decisión: para producción escalable, Opción A. El BFF ahora es
-muy chico. Si el BFF se cae, los upstreams siguen sirviendo con JWT
-válido.
-
-### El flujo
-
-```
-   browser
-      │
-      │ Authorization: Bearer <jwt>
-      ▼
- ┌──────────┐
- │   BFF    │  ← TONTO: copy-through reverse proxy.
- │ :8000    │     NO valida nada. NO inyecta nada.
- └──┬────┬──┘
-    │    │
-    └    │      Authorization: Bearer <jwt>  (SIN modificar)
-         │
-   /*   │
-         ▼
-      web-server     ─── valida JWT contra JWKS_URL (Casdoor).
-                      Si OK, claims = { email }.
-                      Si no, 401.
-   /agent/*
-         │
-         ▼
-      agent-worker   ─── valida JWT contra JWKS_URL (Casdoor).
-                      Si OK, extrae email y dispatchea al handler.
-                      Si no, 401.
-```
-
-### Variables de entorno
-
-Cada uno de los 3 servicios puede compartir las mismas env vars de
-JWT (JWKS_URL, OIDC_ISSUER, etc.). En la práctica los deployás
-iguales y el operador las rota junto al rotar el IdP.
-
-| Env var | Default | Propósito |
-| --- | --- | --- |
-| `JWKS_URL` | (sin default; el worker refuses boot sin esto) | URL del JWKS del IdP. Para Casdoor: `https://<casdoor>/.well-known/jwks.json`. |
-| `JWT_HMAC_SECRET` | (vacío alternativo) | Modo dev/CI: HMAC shared-secret. NO usar en prod. |
-| `OIDC_ISSUER` | (sin default) | Si está poblado, BFF/worker exige `iss == $OIDC_ISSUER`. |
-| `OIDC_CLIENT_ID` | (sin default) | Identifica al consumer del JWT (aud cuando no hay `aud` explícito). |
-| `JWT_AUDIENCE` | (sin default) | Si está poblado, exige claim `aud` matching. |
-| `AUTH_DISABLED` | "false" | Si "true", ambos servicios aceptan `X-Dev-Sub` / `X-Dev-Email` para CI/tests. NO en prod. |
-
-### Por qué el BFF no valida nada
-
-- **El BFF es de ~80 líneas, no introduce auth.** Si lo bajás o lo
-  reemplazás, los upstreams siguen funcionando idénticamente.
-- **El browser puede ir directo al worker o al web-server.** Si el
-  BFF está caído, el backend sigue prestando servicio con auth
-  estándar. En el pasado, todo dependía del BFF.
-- **No hay secretos internos que rotar.** Cero superficie de bug
-  custom en el camino crítico de auth.
-
-### Smoke test E2E
-
-```
-scripts/smoke-bff.sh test    # arranca + corre aserciones + cleanup
-```
-
-Cubre:
-
-1. healthz sin Authorization: BFF pasa, worker responde 200 con JSON.
-2. ruta protegida sin Authorization: 401 desde el worker.
-3. ruta protegida CON Authorization válido: BFF pasa tal cual, worker
-   valida JWT y claims llegan post-auth (status != 401).
-4. paths públicos (`/auth/login`, `/favicon.ico`, `/agent/healthz`):
-   no requieren auth, no devuelven 401.
-
-### Lo que cambió cuando pasamos a A
-
-Archivos borrados (~520 líneas eliminadas):
-
-- `internal/auth/internal_token/` (HMAC).
-- `cmd/bff/internal/auth/` (la JWT validation del BFF).
-- `pkg/agent/worker/auth/` (middleware internal token del worker).
-- `internal/auth/middleware/internaltoken_test.go` (tests del path X-Internal-Auth).
-
-Archivos modificados:
-
-- `cmd/bff/main.go`: de ~210 líneas (con auth) a ~80 líneas (sólo proxy).
-- `cmd/agent-worker/main.go`: usa `authmiddleware.JWTMiddleware` directo
-  con `JWKS_URL` o `JWT_HMAC_SECRET`.
-- `internal/auth/middleware/middleware.go`: borrada la rama
-  `X-Internal-Auth`; ahora `JWTMiddleware` es cookie + JWT, sin el
-  atajo de HMAC interno.
-
-### Lo que queda pendiente (cuando pivotemos a xterm + wede)
-
-- `cmd/bff`, `cmd/agent-worker`, `pkg/agent/worker/handlers/` se
-  reemplazan con un módulo standalone (`pkg/xterm`) que wede carga
-  como extensión o como proceso hermano.
-- El BFF deja de ser necesario: wede actúa como gateway + auth host
-  del browser.
-- La auth en xterm puede reusar `internal/auth/middleware.JWTMiddleware`
-  o integrarse directamente con wede.auth. Sin secretos internos que
-  coordinar.
-- Migrar `internal/auth/internal_token/` a `xterm` si se quiere un
-  service-to-service token entre wede y xterm (distinto al JWT del
-  usuario). Pero ya no es crítico.
 

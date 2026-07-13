@@ -3,7 +3,7 @@ package jwks
 import (
 	"strings"
 
-	"testboi1/internal/shared/configuration"
+	"fixtests1/internal/shared/configuration"
 
 	"github.com/MicahParks/keyfunc/v3"
 )

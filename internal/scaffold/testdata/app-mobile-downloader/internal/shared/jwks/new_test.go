@@ -3,7 +3,7 @@ package jwks
 import (
 	"testing"
 
-	"testboi1/internal/shared/configuration"
+	"fixtests1/internal/shared/configuration"
 )
 
 func TestNewReturnsErrorWhenNoJWKSURLIsConfigured(t *testing.T) {

@@ -54,6 +54,7 @@ Está organizado por **módulos de negocio** dentro de `internal/`. Cada módulo
 Código compartido: `internal/shared/` (configuración, server, infraestructura común).
 
 **Módulos actuales (bounded contexts):**
+- `internal/agent/` — Chat con pi, sesiones, preview, worktrees
 - `internal/auth/` — Autenticación OIDC, sesiones, JWT
 - `internal/editor/` — Proxy al editor upstream
 - `internal/home/` — Página de inicio
@@ -158,16 +159,18 @@ npm_config_cache="./.npm-cache" npx -y skills add <owner/repo> --skill <skill> -
 
 ---
 
-## Módulo agente (pkg/agent)
+## Módulo agente (internal/agent)
 
-Desde 2026-07-02 el agente vive fuera de `internal/` en `pkg/agent/`. La razón
-es que para un boilerplate conviene poder opt-out sin tocar el resto del
-wiring. Detalle completo en `doc/agent-runtime.md`.
+El agente es un bounded context más dentro de `internal/agent/`, igual que
+auth, editor, home, quality y scheduler. Sigue las mismas capas
+(`application/`, `http/`, `infrastructure/`, `ui/`) y se enciende/apaga con
+la flag `AGENT_ENABLED` sin tocar el resto del wiring. Detalle completo en
+`doc/agent-runtime.md`.
 
 ### Capas
 
 ```
-pkg/agent/
+internal/agent/
 ├── application/         ← AgentService (interfaz pública) + Manager (impl)
 ├── http/                ← handlers /agent/* (consumen AgentService)
 ├── infrastructure/
@@ -201,7 +204,7 @@ Y si quieren sacar el wiring del PATH:
 
 ```sh
 # eliminar el bloque "agent" en cmd/api/main.go:
-# - los imports de pkg/agent
+# - los imports de internal/agent
 # - la llamada a registerAgent(s, hooks, newAgentDeps())
 ```
 

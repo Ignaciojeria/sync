@@ -1,19 +1,16 @@
 package auth
 
 import (
+	authapp "fixtests1/internal/auth/application"
+	authpostgresql "fixtests1/internal/auth/infrastructure/postgresql"
+	"fixtests1/internal/shared/configuration"
+	mounted "fixtests1/internal/shared/mounted"
+	"fixtests1/internal/shared/server"
 	"net/http"
-
-	authapp "testboi1/internal/auth/application"
-	authpostgresql "testboi1/internal/auth/infrastructure/postgresql"
-	"testboi1/internal/shared/configuration"
-	mounted "testboi1/internal/shared/mounted"
-	"testboi1/internal/shared/server"
-
-	"github.com/go-fuego/fuego"
 )
 
 func registerAuthLogout(s *server.Server, conf configuration.Conf, store *authpostgresql.SessionRepository) {
-	fuego.Get(s.Server, "/auth/logout", func(c fuego.ContextNoBody) (any, error) {
+	server.Get(s, "/auth/logout", func(c server.ContextNoBody) (any, error) {
 		if cookie, err := c.Request().Cookie("app_session_id"); err == nil {
 			_ = store.RevokeSession(cookie.Value)
 		}

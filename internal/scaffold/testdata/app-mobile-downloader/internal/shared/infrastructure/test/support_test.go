@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"testboi1/internal/quality/ui"
+	"fixtests1/internal/quality/ui"
 )
 
 func TestFilterCoverageFile(t *testing.T) {

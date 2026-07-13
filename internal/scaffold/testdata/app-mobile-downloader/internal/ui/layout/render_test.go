@@ -3,18 +3,17 @@ package layout
 import (
 	"bytes"
 	"context"
+	"fixtests1/internal/shared/server"
+	"github.com/a-h/templ"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/a-h/templ"
-	"github.com/go-fuego/fuego"
 )
 
-// minimalCtx is a tiny stand-in for fuego.ContextNoBody that only satisfies
+// minimalCtx is a tiny stand-in for server.ContextNoBody that only satisfies
 // the methods RenderPage touches. Other fuego tests construct a fuller impl.
 type minimalCtx struct {
 	req *http.Request
@@ -43,25 +42,25 @@ func (m minimalCtx) QueryParams() url.Values {
 }
 func (m minimalCtx) MainLang() string   { return "" }
 func (m minimalCtx) MainLocale() string { return "" }
-func (m minimalCtx) Render(string, any, ...string) (fuego.CtxRenderer, error) {
+func (m minimalCtx) Render(string, any, ...string) (server.CtxRenderer, error) {
 	return nil, nil
 }
-func (m minimalCtx) Cookie(string) (*http.Cookie, error)             { return m.req.Cookie("") }
-func (m minimalCtx) SetCookie(http.Cookie)                           {}
-func (m minimalCtx) Header(string) string                            { return m.req.Header.Get("") }
-func (m minimalCtx) SetHeader(key, value string)                     {}
-func (m minimalCtx) Context() context.Context                        { return m.req.Context() }
-func (m minimalCtx) Request() *http.Request                          { return m.req }
-func (m minimalCtx) Response() http.ResponseWriter                   { return m.w }
-func (m minimalCtx) SetStatus(int)                                   {}
-func (m minimalCtx) Redirect(int, string) (any, error)               { return nil, nil }
-func (m minimalCtx) GetOpenAPIParams() map[string]fuego.OpenAPIParam { return nil }
-func (m minimalCtx) HasQueryParam(string) bool                       { return false }
-func (m minimalCtx) HasHeader(string) bool                           { return false }
-func (m minimalCtx) HasCookie(string) bool                           { return false }
+func (m minimalCtx) Cookie(string) (*http.Cookie, error)              { return m.req.Cookie("") }
+func (m minimalCtx) SetCookie(http.Cookie)                            {}
+func (m minimalCtx) Header(string) string                             { return m.req.Header.Get("") }
+func (m minimalCtx) SetHeader(key, value string)                      {}
+func (m minimalCtx) Context() context.Context                         { return m.req.Context() }
+func (m minimalCtx) Request() *http.Request                           { return m.req }
+func (m minimalCtx) Response() http.ResponseWriter                    { return m.w }
+func (m minimalCtx) SetStatus(int)                                    {}
+func (m minimalCtx) Redirect(int, string) (any, error)                { return nil, nil }
+func (m minimalCtx) GetOpenAPIParams() map[string]server.OpenAPIParam { return nil }
+func (m minimalCtx) HasQueryParam(string) bool                        { return false }
+func (m minimalCtx) HasHeader(string) bool                            { return false }
+func (m minimalCtx) HasCookie(string) bool                            { return false }
 
-// Verify minimalCtx implements fuego.ContextNoBody.
-var _ fuego.ContextNoBody = minimalCtx{}
+// Verify minimalCtx implements server.ContextNoBody.
+var _ server.ContextNoBody = minimalCtx{}
 
 func TestRenderPageInvokesLayoutAndContent(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
@@ -88,5 +87,34 @@ func TestRenderPageInvokesLayoutAndContent(t *testing.T) {
 	}
 	if !strings.Contains(body, "drawer") {
 		t.Fatalf("expected drawer layout, got %q", body)
+	}
+}
+
+func TestRenderPublicPageSkipsDrawer(t *testing.T) {
+	req := httptest.NewRequest("GET", "/auth/login", nil)
+	rec := httptest.NewRecorder()
+	c := minimalCtx{req: req, w: rec}
+
+	content := templ.Raw("public-content")
+
+	page, err := RenderPublicPage(c, "Login", content)
+	if err != nil {
+		t.Fatalf("RenderPublicPage() error = %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := page.Render(context.Background(), &buf); err != nil {
+		t.Fatalf("page.Render() error = %v", err)
+	}
+	body := buf.String()
+	if !strings.Contains(body, "Login") {
+		t.Fatalf("expected title, got %q", body)
+	}
+	if !strings.Contains(body, "public-content") {
+		t.Fatalf("expected content, got %q", body)
+	}
+	// Layout público no debe envolver con sidenav.
+	if strings.Contains(body, "drawer") {
+		t.Fatalf("public layout no debe tener drawer, got %q", body)
 	}
 }

@@ -9,8 +9,8 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import (
+	designui "fixtests1/internal/design/ui"
 	"strings"
-	designui "testboi1/internal/design/ui"
 )
 
 func SideNav(nav NavigationContext) templ.Component {

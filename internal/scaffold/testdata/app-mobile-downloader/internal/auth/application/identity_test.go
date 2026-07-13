@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"testboi1/internal/shared/configuration"
+	"fixtests1/internal/shared/configuration"
 
 	"github.com/MicahParks/jwkset"
 	"github.com/MicahParks/keyfunc/v3"

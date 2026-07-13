@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"testboi1/internal/shared/configuration"
+	"fixtests1/internal/shared/configuration"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"

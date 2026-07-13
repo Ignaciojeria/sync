@@ -1,37 +1,34 @@
 package scheduler
 
 import (
+	authmiddleware "fixtests1/internal/auth/middleware"
+	schedulerapp "fixtests1/internal/scheduler/application"
+	schedulerpostgresql "fixtests1/internal/scheduler/infrastructure/postgresql"
+	schedulerui "fixtests1/internal/scheduler/ui"
+	sharedpostgresql "fixtests1/internal/shared/infrastructure/postgresql"
+	"fixtests1/internal/shared/server"
+	"fixtests1/internal/ui/layout"
 	"net/http"
 	"strings"
-
-	schedulerapp "testboi1/internal/scheduler/application"
-	schedulerpostgresql "testboi1/internal/scheduler/infrastructure/postgresql"
-	schedulerui "testboi1/internal/scheduler/ui"
-	authmiddleware "testboi1/internal/auth/middleware"
-	sharedpostgresql "testboi1/internal/shared/infrastructure/postgresql"
-	"testboi1/internal/shared/server"
-	"testboi1/internal/ui/layout"
-
-	"github.com/go-fuego/fuego"
 )
 
 func jobConfigPageHandler(s *server.Server, db *sharedpostgresql.Connection) {
 	repo := schedulerpostgresql.NewJobRepository(db)
-	requireEditor := fuego.OptionMiddleware(authmiddleware.RequireEditor())
+	requireEditor := server.OptionMiddleware(authmiddleware.RequireEditor())
 
-	fuego.Get(s.Server, "/scheduler/jobs", listJobsPage(repo), requireEditor)
-	fuego.Get(s.Server, "/scheduler/jobs/new", newJobForm(), requireEditor)
-	fuego.Get(s.Server, "/scheduler/jobs/cancel", cancelJobForm(), requireEditor)
-	fuego.Post(s.Server, "/scheduler/jobs", createJob(repo), requireEditor)
-	fuego.Delete(s.Server, "/scheduler/jobs/{id}", deleteJob(repo), requireEditor)
-	fuego.Post(s.Server, "/scheduler/jobs/{id}/toggle", toggleJob(repo), requireEditor)
+	server.Get(s, "/scheduler/jobs", listJobsPage(repo), requireEditor)
+	server.Get(s, "/scheduler/jobs/new", newJobForm(), requireEditor)
+	server.Get(s, "/scheduler/jobs/cancel", cancelJobForm(), requireEditor)
+	server.Post(s, "/scheduler/jobs", createJob(repo), requireEditor)
+	server.Delete(s, "/scheduler/jobs/{id}", deleteJob(repo), requireEditor)
+	server.Post(s, "/scheduler/jobs/{id}/toggle", toggleJob(repo), requireEditor)
 }
 
-func listJobsPage(repo *schedulerpostgresql.JobRepository) func(fuego.ContextNoBody) (any, error) {
-	return func(c fuego.ContextNoBody) (any, error) {
+func listJobsPage(repo *schedulerpostgresql.JobRepository) func(server.ContextNoBody) (any, error) {
+	return func(c server.ContextNoBody) (any, error) {
 		configs, err := repo.FindAll()
 		if err != nil {
-			return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
+			return nil, server.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
 		}
 		nav := layout.FromRequest(c.Request())
 		c.SetHeader("Content-Type", "text/html; charset=utf-8")
@@ -43,25 +40,25 @@ func listJobsPage(repo *schedulerpostgresql.JobRepository) func(fuego.ContextNoB
 	}
 }
 
-func newJobForm() func(fuego.ContextNoBody) (any, error) {
-	return func(c fuego.ContextNoBody) (any, error) {
+func newJobForm() func(server.ContextNoBody) (any, error) {
+	return func(c server.ContextNoBody) (any, error) {
 		nav := layout.FromRequest(c.Request())
 		c.SetHeader("Content-Type", "text/html; charset=utf-8")
 		return schedulerui.JobForm(nav.PreviewPrefix), nil
 	}
 }
 
-func cancelJobForm() func(fuego.ContextNoBody) (any, error) {
-	return func(c fuego.ContextNoBody) (any, error) {
+func cancelJobForm() func(server.ContextNoBody) (any, error) {
+	return func(c server.ContextNoBody) (any, error) {
 		c.SetHeader("Content-Type", "text/html; charset=utf-8")
 		return schedulerui.EmptyForm(), nil
 	}
 }
 
-func createJob(repo *schedulerpostgresql.JobRepository) func(fuego.ContextNoBody) (any, error) {
-	return func(c fuego.ContextNoBody) (any, error) {
+func createJob(repo *schedulerpostgresql.JobRepository) func(server.ContextNoBody) (any, error) {
+	return func(c server.ContextNoBody) (any, error) {
 		if err := c.Request().ParseForm(); err != nil {
-			return nil, fuego.HTTPError{Status: http.StatusBadRequest, Detail: err.Error()}
+			return nil, server.HTTPError{Status: http.StatusBadRequest, Detail: err.Error()}
 		}
 
 		job := schedulerapp.JobConfig{
@@ -72,17 +69,17 @@ func createJob(repo *schedulerpostgresql.JobRepository) func(fuego.ContextNoBody
 			Enabled:     false,
 		}
 		if job.Name == "" || job.Schedule == "" || job.Endpoint == "" {
-			return nil, fuego.HTTPError{Status: http.StatusBadRequest, Detail: "name, schedule and endpoint are required"}
+			return nil, server.HTTPError{Status: http.StatusBadRequest, Detail: "name, schedule and endpoint are required"}
 		}
 
 		id, err := repo.Create(job)
 		if err != nil {
-			return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
+			return nil, server.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
 		}
 
 		created, err := repo.FindByID(id)
 		if err != nil {
-			return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
+			return nil, server.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
 		}
 
 		nav := layout.FromRequest(c.Request())
@@ -91,39 +88,39 @@ func createJob(repo *schedulerpostgresql.JobRepository) func(fuego.ContextNoBody
 	}
 }
 
-func deleteJob(repo *schedulerpostgresql.JobRepository) func(fuego.ContextNoBody) (any, error) {
-	return func(c fuego.ContextNoBody) (any, error) {
+func deleteJob(repo *schedulerpostgresql.JobRepository) func(server.ContextNoBody) (any, error) {
+	return func(c server.ContextNoBody) (any, error) {
 		id := c.PathParam("id")
 		if id == "" {
-			return nil, fuego.HTTPError{Status: http.StatusBadRequest, Detail: "missing job id"}
+			return nil, server.HTTPError{Status: http.StatusBadRequest, Detail: "missing job id"}
 		}
 
 		if err := repo.Delete(id); err != nil {
-			return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
+			return nil, server.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
 		}
 		return nil, nil
 	}
 }
 
-func toggleJob(repo *schedulerpostgresql.JobRepository) func(fuego.ContextNoBody) (any, error) {
-	return func(c fuego.ContextNoBody) (any, error) {
+func toggleJob(repo *schedulerpostgresql.JobRepository) func(server.ContextNoBody) (any, error) {
+	return func(c server.ContextNoBody) (any, error) {
 		id := c.PathParam("id")
 		if id == "" {
-			return nil, fuego.HTTPError{Status: http.StatusBadRequest, Detail: "missing job id"}
+			return nil, server.HTTPError{Status: http.StatusBadRequest, Detail: "missing job id"}
 		}
 
 		job, err := repo.FindByID(id)
 		if err != nil {
-			return nil, fuego.HTTPError{Status: http.StatusNotFound, Detail: "job not found"}
+			return nil, server.HTTPError{Status: http.StatusNotFound, Detail: "job not found"}
 		}
 
 		if err := repo.UpdateEnabled(id, !job.Enabled); err != nil {
-			return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
+			return nil, server.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
 		}
 
 		updated, err := repo.FindByID(id)
 		if err != nil {
-			return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
+			return nil, server.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
 		}
 
 		nav := layout.FromRequest(c.Request())
@@ -135,26 +132,26 @@ func toggleJob(repo *schedulerpostgresql.JobRepository) func(fuego.ContextNoBody
 func jobConfigAPIHandler(s *server.Server, db *sharedpostgresql.Connection) {
 	repo := schedulerpostgresql.NewJobRepository(db)
 
-	fuego.Get(s.Server, "/api/internal/jobs", func(c fuego.ContextNoBody) (any, error) {
+	server.Get(s, "/api/internal/jobs", func(c server.ContextNoBody) (any, error) {
 		configs, err := repo.FindAll()
 		if err != nil {
-			return nil, fuego.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
+			return nil, server.HTTPError{Status: http.StatusInternalServerError, Detail: err.Error()}
 		}
 		return configs, nil
 	})
 
-	fuego.Post(s.Server, "/api/internal/jobs/{id}/run", func(c fuego.ContextNoBody) (any, error) {
+	server.Post(s, "/api/internal/jobs/{id}/run", func(c server.ContextNoBody) (any, error) {
 		id := c.PathParam("id")
 		if id == "" {
-			return nil, fuego.HTTPError{Status: http.StatusBadRequest, Detail: "missing job id"}
+			return nil, server.HTTPError{Status: http.StatusBadRequest, Detail: "missing job id"}
 		}
 
 		job, err := repo.FindByID(id)
 		if err != nil {
-			return nil, fuego.HTTPError{Status: http.StatusNotFound, Detail: "job not found"}
+			return nil, server.HTTPError{Status: http.StatusNotFound, Detail: "job not found"}
 		}
 		if !job.Enabled {
-			return nil, fuego.HTTPError{Status: http.StatusBadRequest, Detail: "job is disabled"}
+			return nil, server.HTTPError{Status: http.StatusBadRequest, Detail: "job is disabled"}
 		}
 
 		return map[string]string{"status": "triggered", "job": job.Name}, nil

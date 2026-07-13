@@ -1,19 +1,16 @@
 package editor
 
 import (
+	"fixtests1/internal/shared/server"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"testboi1/internal/shared/server"
-
-	"github.com/go-fuego/fuego"
 )
 
 func TestEditorViewHandler(t *testing.T) {
-	fs := fuego.NewServer()
-	s := &server.Server{Server: fs}
+	fs := server.NewServer()
+	s := fs
 	editorViewHandler(s)
 	ts := httptest.NewServer(fs.Mux)
 	defer ts.Close()
@@ -40,8 +37,8 @@ func TestEditorViewHandler(t *testing.T) {
 }
 
 func TestEditorRegister(t *testing.T) {
-	fs := fuego.NewServer()
-	s := &server.Server{Server: fs}
+	fs := server.NewServer()
+	s := fs
 
 	// Replace upstream URL with an httptest server so editorHandler can register routes without crashing on the default address.
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

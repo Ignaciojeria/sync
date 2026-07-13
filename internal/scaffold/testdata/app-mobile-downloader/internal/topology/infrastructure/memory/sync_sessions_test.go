@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	topologyapp "testboi1/internal/topology/application"
+	topologyapp "fixtests1/internal/topology/application"
 )
 
 func TestSyncSessionsStoreUpsertAndList(t *testing.T) {

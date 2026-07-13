@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	designapp "testboi1/internal/design/application"
+	designapp "fixtests1/internal/design/application"
 
 	"github.com/a-h/templ"
 )
@@ -49,5 +49,22 @@ func TestPanelRendersWithChildrenInContext(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "Design system") {
 		t.Fatalf("expected rendered panel, got %q", buf.String())
+	}
+}
+
+func TestPanelAppPath(t *testing.T) {
+	cases := []struct {
+		prefix, path, want string
+	}{
+		{"", "/foo", "/foo"},
+		{"", "foo", "/foo"},
+		{"/agent", "/foo", "/agent/foo"},
+		{"/agent", "/", "/agent/"},
+		{"  ", "/x", "/x"},
+	}
+	for _, c := range cases {
+		if got := panelAppPath(c.prefix, c.path); got != c.want {
+			t.Errorf("panelAppPath(%q, %q) = %q, want %q", c.prefix, c.path, got, c.want)
+		}
 	}
 }

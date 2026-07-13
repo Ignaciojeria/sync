@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	authapp "testboi1/internal/auth/application"
-	"testboi1/internal/shared"
-	"testboi1/internal/shared/configuration"
-	mounted "testboi1/internal/shared/mounted"
+	authapp "fixtests1/internal/auth/application"
+	"fixtests1/internal/shared"
+	"fixtests1/internal/shared/configuration"
+	mounted "fixtests1/internal/shared/mounted"
 
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"
@@ -21,10 +21,12 @@ import (
 
 type contextKey string
 
-const (
-	claimsContextKey  contextKey = "jwt_claims"
-	sessionCookieName            = "app_session_id"
-)
+const claimsContextKey contextKey = "jwt_claims"
+
+// sessionCookieName es el nombre de la cookie de sesión; vive fuera del
+// bloque const de claimsContextKey porque su tipo es string puro, no el
+// contextKey tipado que usa el resto del middleware.
+const sessionCookieName = "app_session_id"
 
 type sessionStore interface {
 	FindActiveSessionByID(sessionID string) (authapp.Session, error)

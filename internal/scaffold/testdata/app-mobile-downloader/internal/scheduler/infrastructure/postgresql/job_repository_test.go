@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	schedulerapp "testboi1/internal/scheduler/application"
-	sharedpostgresql "testboi1/internal/shared/infrastructure/postgresql"
+	schedulerapp "fixtests1/internal/scheduler/application"
+	sharedpostgresql "fixtests1/internal/shared/infrastructure/postgresql"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/jmoiron/sqlx"
@@ -364,9 +364,10 @@ func TestDistributedLockReleaseError(t *testing.T) {
 }
 
 func TestHashJobNameDeterministic(t *testing.T) {
-	if hashJobName("job") != hashJobName("job") {
-		t.Fatal("expected identical hashes for same input")
-	}
+	// ponytail: hashJobName es puro (FNV-64a), así que el chequeo
+	// idéntico contra sí mismo era tautológico. El coverage real vive en
+	// TestHashJobNameFNV64a; este test solo verifica que dos inputs
+	// distintos producen hashes distintos.
 	if hashJobName("job") == hashJobName("job-other") {
 		t.Fatal("expected different hashes for different inputs")
 	}

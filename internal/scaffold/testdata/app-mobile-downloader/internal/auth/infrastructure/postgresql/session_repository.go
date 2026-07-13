@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	authapp "testboi1/internal/auth/application"
-	sharedpostgresql "testboi1/internal/shared/infrastructure/postgresql"
+	authapp "fixtests1/internal/auth/application"
+	sharedpostgresql "fixtests1/internal/shared/infrastructure/postgresql"
 )
 
 type SessionRepository struct {

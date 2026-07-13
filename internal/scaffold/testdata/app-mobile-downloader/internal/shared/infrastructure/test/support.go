@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"testboi1/internal/quality/ui"
+	"fixtests1/internal/quality/ui"
 )
 
 const CoverageDir = "tmp/coverage"

@@ -7,10 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"testboi1/internal/shared"
-	"testboi1/internal/shared/configuration"
-
-	"github.com/go-fuego/fuego"
+	"fixtests1/internal/shared"
+	"fixtests1/internal/shared/configuration"
 )
 
 type fakeRunner struct {
@@ -38,8 +36,8 @@ func TestNew(t *testing.T) {
 	if s == nil {
 		t.Fatal("expected server to be created")
 	}
-	if s.Server == nil {
-		t.Fatal("expected embedded fuego server to be initialized")
+	if s == nil || s.Mux == nil {
+		t.Fatal("expected net/http server to be initialized")
 	}
 }
 
@@ -103,7 +101,7 @@ func TestShutdownHook(t *testing.T) {
 
 func TestStartServerRegistersShutdownHook(t *testing.T) {
 	hooks := &shared.Hooks{}
-	server := &Server{Server: fuego.NewServer(fuego.WithAddr(":0"))}
+	server := NewServer(WithAddr(":0"))
 
 	if err := Start(server, hooks); err != nil {
 		t.Fatalf("Start() error = %v", err)

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	schedulerapp "testboi1/internal/scheduler/application"
+	schedulerapp "fixtests1/internal/scheduler/application"
 )
 
 func formatTime(t *time.Time) string {

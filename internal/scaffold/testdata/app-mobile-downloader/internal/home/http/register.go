@@ -1,8 +1,8 @@
 package home
 
 import (
-	"testboi1/internal/shared/server"
-	topologyapp "testboi1/internal/topology/application"
+	"fixtests1/internal/shared/server"
+	topologyapp "fixtests1/internal/topology/application"
 )
 
 // Register wires home routes onto the shared server.

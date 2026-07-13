@@ -1,27 +1,24 @@
 package dev
 
 import (
+	authmiddleware "fixtests1/internal/auth/middleware"
+	infratest "fixtests1/internal/shared/infrastructure/test"
+	"fixtests1/internal/shared/server"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
-
-	authmiddleware "testboi1/internal/auth/middleware"
-	"testboi1/internal/shared/server"
-	infratest "testboi1/internal/shared/infrastructure/test"
-
-	"github.com/go-fuego/fuego"
 )
 
 func testReportCoverageHandler(s *server.Server) {
-	fuego.Get(s.Server, "/report/tests/coverage.html", testReportCoverage, fuego.OptionMiddleware(authmiddleware.RequireEditor()))
+	server.Get(s, "/report/tests/coverage.html", testReportCoverage, server.OptionMiddleware(authmiddleware.RequireEditor()))
 }
 
-func testReportCoverage(c fuego.ContextNoBody) (string, error) {
+func testReportCoverage(c server.ContextNoBody) (string, error) {
 	htmlReport := filepath.Join(infratest.CoverageDir, "coverage.html")
 	f, err := os.Open(htmlReport)
 	if err != nil {
-		return "", fuego.HTTPError{Status: http.StatusNotFound, Detail: "report not found"}
+		return "", server.HTTPError{Status: http.StatusNotFound, Detail: "report not found"}
 	}
 	defer f.Close()
 
@@ -32,4 +29,3 @@ func testReportCoverage(c fuego.ContextNoBody) (string, error) {
 	_, _ = io.Copy(c.Response(), f)
 	return "", nil
 }
-

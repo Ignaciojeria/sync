@@ -1,11 +1,11 @@
 package dev
 
 import (
-	"testboi1/internal/quality/ui"
-	"github.com/go-fuego/fuego"
+	"fixtests1/internal/quality/ui"
+	"fixtests1/internal/shared/server"
 )
 
-func renderResultAndDashboard(c fuego.ContextNoBody, state ui.TestRunState) (string, error) {
+func renderResultAndDashboard(c server.ContextNoBody, state ui.TestRunState) (string, error) {
 	c.SetHeader("Content-Type", "text/html; charset=utf-8")
 	w := c.Response()
 	ctx := c.Context()
@@ -14,4 +14,3 @@ func renderResultAndDashboard(c fuego.ContextNoBody, state ui.TestRunState) (str
 	}
 	return "", nil
 }
-

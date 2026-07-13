@@ -3,7 +3,7 @@ package postgresql
 import (
 	"testing"
 
-	"testboi1/internal/shared/configuration"
+	"fixtests1/internal/shared/configuration"
 )
 
 func TestNewConnectionReturnsErrorWhenDatabaseURLIsEmpty(t *testing.T) {
@@ -14,12 +14,29 @@ func TestNewConnectionReturnsErrorWhenDatabaseURLIsEmpty(t *testing.T) {
 }
 
 func TestParseDatabaseName(t *testing.T) {
-	got, err := parseDatabaseName("postgres://user:pass@localhost:5432/appdb?sslmode=disable")
-	if err != nil {
-		t.Fatalf("parseDatabaseName() error = %v", err)
+	cases := []struct {
+		in      string
+		want    string
+		wantErr bool
+	}{
+		{"postgres://user:pass@localhost:5432/appdb?sslmode=disable", "appdb", false},
+		{"postgres://user:pass@localhost:5432/", "", false},
+		{"://not-a-url", "", true},
 	}
-	if got != "appdb" {
-		t.Fatalf("parseDatabaseName() = %q", got)
+	for _, c := range cases {
+		got, err := parseDatabaseName(c.in)
+		if c.wantErr {
+			if err == nil {
+				t.Errorf("parseDatabaseName(%q): expected error", c.in)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("parseDatabaseName(%q) error = %v", c.in, err)
+		}
+		if got != c.want {
+			t.Errorf("parseDatabaseName(%q) = %q, want %q", c.in, got, c.want)
+		}
 	}
 }
 

@@ -2,25 +2,22 @@ package auth
 
 import (
 	"context"
+	authapp "fixtests1/internal/auth/application"
+	"fixtests1/internal/auth/infrastructure/postgresql"
+	"fixtests1/internal/shared/configuration"
+	sharedpostgresql "fixtests1/internal/shared/infrastructure/postgresql"
+	"fixtests1/internal/shared/server"
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/MicahParks/jwkset"
+	"github.com/MicahParks/keyfunc/v3"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/jmoiron/sqlx"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
 	"sync"
 	"testing"
 	"time"
-
-	authapp "testboi1/internal/auth/application"
-	"testboi1/internal/auth/infrastructure/postgresql"
-	"testboi1/internal/shared/configuration"
-	sharedpostgresql "testboi1/internal/shared/infrastructure/postgresql"
-	"testboi1/internal/shared/server"
-
-	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/MicahParks/jwkset"
-	"github.com/MicahParks/keyfunc/v3"
-	"github.com/go-fuego/fuego"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/jmoiron/sqlx"
 )
 
 // inMemoryKeyfunc is a keyfunc.Keyfunc backed by a single symmetric secret.
@@ -57,8 +54,8 @@ func setupCallbackTestServer(t *testing.T, conf configuration.Conf, store *postg
 		_ = mock
 	}
 
-	fs := fuego.NewServer()
-	s := &server.Server{Server: fs}
+	fs := server.NewServer()
+	s := fs
 	Register(s, conf, store, jwks)
 	ts := httptest.NewServer(fs.Mux)
 	t.Cleanup(ts.Close)
@@ -118,8 +115,8 @@ func TestRegisterCallbackSuccess(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("s-1"))
 	mock.ExpectCommit()
 
-	fs := fuego.NewServer()
-	s := &server.Server{Server: fs}
+	fs := server.NewServer()
+	s := fs
 	Register(s, conf, store, inMemoryKeyfunc{secret: []byte("secret")})
 	ts := httptest.NewServer(fs.Mux)
 	defer ts.Close()
@@ -205,8 +202,8 @@ func TestRegisterCallbackUsesMountedReturnTo(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("s-1"))
 	mock.ExpectCommit()
 
-	fs := fuego.NewServer()
-	s := &server.Server{Server: fs}
+	fs := server.NewServer()
+	s := fs
 	Register(s, conf, store, inMemoryKeyfunc{secret: []byte("secret")})
 	ts := httptest.NewServer(fs.Mux)
 	defer ts.Close()

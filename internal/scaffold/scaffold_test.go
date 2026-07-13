@@ -23,7 +23,7 @@ func TestMaterializeAppMobileDownloader(t *testing.T) {
 	}
 
 	mainGo := readGeneratedFile(t, dir, "cmd/api/main.go")
-	if !strings.Contains(mainGo, "my-project/internal/home/http") || !strings.Contains(mainGo, "my-project/pkg/agent/http") {
+	if !strings.Contains(mainGo, "my-project/internal/home/http") || !strings.Contains(mainGo, "my-project/internal/agent/http") {
 		t.Fatalf("imports were not rendered with module name: %q", mainGo)
 	}
 
@@ -41,8 +41,8 @@ func TestMaterializeAppMobileDownloader(t *testing.T) {
 		"internal/gateway/http/balance.go",
 		"internal/design/http/register.go",
 		"internal/editor/http/register.go",
-		"pkg/agent/http/register.go",
-		"pkg/agent/worker/handlers/events.go",
+		"internal/agent/http/register.go",
+		"internal/agent/http/support.go",
 		"doc/agent-runtime.md",
 		"scripts/run-api.sh",
 		"scripts/_tree_generator.py",

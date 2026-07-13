@@ -9,8 +9,8 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import (
+	designapp "fixtests1/internal/design/application"
 	"strings"
-	designapp "testboi1/internal/design/application"
 )
 
 func Page(themes []designapp.ResolvedTheme, active designapp.ResolvedTheme, previewPrefix string) templ.Component {

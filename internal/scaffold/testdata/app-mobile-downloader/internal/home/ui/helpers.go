@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	topologyapp "testboi1/internal/topology/application"
+	topologyapp "fixtests1/internal/topology/application"
 )
 
 func statusBadgeClass(status string) string {
@@ -54,16 +54,4 @@ func splitSessionClientName(clientName string) (string, string) {
 		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
 	}
 	return clientName, ""
-}
-
-func sessionIDLabel(sessionID string) string {
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return ""
-	}
-	parts := strings.SplitN(sessionID, "--", 2)
-	if len(parts) == 2 && strings.TrimSpace(parts[0]) != "" {
-		return strings.TrimSpace(parts[0])
-	}
-	return sessionID
 }

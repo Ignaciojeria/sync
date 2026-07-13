@@ -3338,7 +3338,7 @@ func setupAndStartMutagen(cfg *config.Config) error {
 
 func startMutagenProjectWithRetry(mutagenBin string) error {
 	// Evita usar un daemon viejo iniciado con otro binario/carpeta de agentes.
-	_ = exec.Command(mutagenBin, "daemon", "stop").Run()
+	resetMutagenDaemonState(mutagenBin)
 
 	maxAttempts := 5
 	var lastErr error
@@ -3366,7 +3366,7 @@ func startMutagenProjectWithRetry(mutagenBin string) error {
 
 		if strings.Contains(lowOut, "unable to connect to daemon") || strings.Contains(lowOut, "connection timed out") {
 			fmt.Printf("ℹ️  Mutagen intento %d/%d: daemon no disponible; reiniciando y reintentando...\n", attempt, maxAttempts)
-			_ = exec.Command(mutagenBin, "daemon", "stop").Run()
+			resetMutagenDaemonState(mutagenBin)
 			startDaemon := exec.Command(mutagenBin, "daemon", "start")
 			dOut, dErr := startDaemon.CombinedOutput()
 			daemonMsg := strings.TrimSpace(string(dOut))
@@ -3387,6 +3387,16 @@ func startMutagenProjectWithRetry(mutagenBin string) error {
 		return fmt.Errorf("mutagen project start falló tras varios reintentos: %w", lastErr)
 	}
 	return fmt.Errorf("mutagen project start falló tras varios reintentos")
+}
+
+func resetMutagenDaemonState(mutagenBin string) {
+	_ = exec.Command(mutagenBin, "daemon", "stop").Run()
+	if runtime.GOOS == "windows" {
+		_ = exec.Command("taskkill", "/IM", "mutagen.exe", "/F").Run()
+	}
+	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+		_ = os.Remove(filepath.Join(home, ".mutagen", "daemon", "daemon.lock"))
+	}
 }
 
 func printMutagenPostInitChecklist(destination, sessionName, vmURL string) {

@@ -3,15 +3,12 @@ package editor
 import (
 	"crypto/tls"
 	"errors"
+	"fixtests1/internal/shared/server"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
-
-	"testboi1/internal/shared/server"
-
-	"github.com/go-fuego/fuego"
 )
 
 func TestEditorUpstreamURL(t *testing.T) {
@@ -127,8 +124,8 @@ func TestEditorHandler(t *testing.T) {
 	t.Run("invalid upstream", func(t *testing.T) {
 		t.Setenv("EDITOR_UPSTREAM_URL", "://bad")
 		defer t.Setenv("EDITOR_UPSTREAM_URL", "")
-		fs := fuego.NewServer()
-		s := &server.Server{Server: fs}
+		fs := server.NewServer()
+		s := fs
 		editorHandler(s)
 	})
 
@@ -148,8 +145,8 @@ func TestEditorHandler(t *testing.T) {
 		t.Setenv("EDITOR_UPSTREAM_URL", upstream.URL)
 		defer t.Setenv("EDITOR_UPSTREAM_URL", "")
 
-		fs := fuego.NewServer()
-		s := &server.Server{Server: fs}
+		fs := server.NewServer()
+		s := fs
 		editorHandler(s)
 
 		proxyServer := httptest.NewServer(fs.Mux)
@@ -190,8 +187,8 @@ func TestEditorHandler(t *testing.T) {
 
 		t.Setenv("EDITOR_UPSTREAM_URL", upstreamURL)
 
-		fs := fuego.NewServer()
-		s := &server.Server{Server: fs}
+		fs := server.NewServer()
+		s := fs
 		editorHandler(s)
 
 		proxyServer := httptest.NewServer(fs.Mux)

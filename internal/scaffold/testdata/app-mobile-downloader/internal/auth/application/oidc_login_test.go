@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"testboi1/internal/shared/configuration"
+	"fixtests1/internal/shared/configuration"
 )
 
 func TestBuildLoginURL(t *testing.T) {
@@ -86,11 +86,15 @@ func TestBuildLoginURL(t *testing.T) {
 }
 
 func TestBuildDirectGoogleLoginURL(t *testing.T) {
+	// ponytail: clientID `"built-in-fixtests1-client"` codifica el slug
+	// `fixtests1` (la función busca `-<slug>-` adentro del clientID).
+	// Usar un slug distinto vuelve el derive imposible y contamina el
+	// resto de los casos aunque la aserción no toque el appName.
 	conf := configuration.Conf{
 		OIDCIssuer:                 "https://issuer.example/",
 		OIDCUpstreamGoogleClientID: "google-client",
-		OIDCClientID:               "built-in-testboi1-client",
-		PROJECT_NAME:               "mobile-downloader",
+		OIDCClientID:               "built-in-fixtests1-client",
+		PROJECT_NAME:               "fixtests1",
 		OIDCRedirectURI:            "https://app.example/cb",
 		OIDCScopes:                 "openid profile",
 	}
@@ -164,21 +168,21 @@ func TestDeriveCasdoorAppName(t *testing.T) {
 	t.Run("extracts prefix before -<slug>-", func(t *testing.T) {
 		// La función recorta hasta el final del slug incluido (excluye solo el guion
 		// final del needle). Documentamos el comportamiento real del código.
-		got, err := DeriveCasdoorAppName("built-in-testboi1-client", "mobile-downloader")
+		got, err := DeriveCasdoorAppName("built-in-fixtests1-client", "fixtests1")
 		if err != nil {
 			t.Fatalf("DeriveCasdoorAppName() error = %v", err)
 		}
-		if got != "built-in-testboi1" {
-			t.Fatalf("got %q, want built-in-testboi1", got)
+		if got != "built-in-fixtests1" {
+			t.Fatalf("got %q, want built-in-fixtests1", got)
 		}
 	})
 
 	t.Run("trims surrounding whitespace", func(t *testing.T) {
-		got, err := DeriveCasdoorAppName("  built-in-testboi1-client  ", "mobile-downloader")
+		got, err := DeriveCasdoorAppName("  built-in-fixtests1-client  ", "fixtests1")
 		if err != nil {
 			t.Fatalf("DeriveCasdoorAppName() error = %v", err)
 		}
-		if got != "built-in-testboi1" {
+		if got != "built-in-fixtests1" {
 			t.Fatalf("got %q", got)
 		}
 	})

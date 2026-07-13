@@ -2,7 +2,6 @@ package design
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -245,13 +244,4 @@ func cloneTypography(input map[string]TypographyToken) map[string]TypographyToke
 		result[key] = value
 	}
 	return result
-}
-
-func sortedKeys(input map[string]string) []string {
-	keys := make([]string, 0, len(input))
-	for key := range input {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
 }

@@ -1,16 +1,14 @@
 package home
 
 import (
-	homeui "testboi1/internal/home/ui"
-	"testboi1/internal/shared/server"
-	topologyapp "testboi1/internal/topology/application"
-	"testboi1/internal/ui/layout"
-
-	"github.com/go-fuego/fuego"
+	homeui "fixtests1/internal/home/ui"
+	"fixtests1/internal/shared/server"
+	topologyapp "fixtests1/internal/topology/application"
+	"fixtests1/internal/ui/layout"
 )
 
 func homeHandler(s *server.Server, topology topologyapp.SnapshotReader) {
-	fuego.All(s.Server, "/", func(c fuego.ContextNoBody) (any, error) {
+	server.All(s, "/", func(c server.ContextNoBody) (any, error) {
 		snapshot, err := topology.GetSnapshot(c.Context())
 		if err != nil {
 			return nil, err

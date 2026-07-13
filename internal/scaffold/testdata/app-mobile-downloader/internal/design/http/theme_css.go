@@ -1,27 +1,24 @@
 package design
 
 import (
+	designapp "fixtests1/internal/design/application"
+	"fixtests1/internal/shared/server"
 	"fmt"
 	"net/http"
 	"strings"
-
-	designapp "testboi1/internal/design/application"
-	"testboi1/internal/shared/server"
-
-	"github.com/go-fuego/fuego"
 )
 
 func registerThemeCSSHandler(s *server.Server, catalog designapp.Catalog) {
-	fuego.Get(s.Server, "/design/theme/{id}", themeCSSHandler(catalog))
+	server.Get(s, "/design/theme/{id}", themeCSSHandler(catalog))
 }
 
-func themeCSSHandler(catalog designapp.Catalog) func(c fuego.ContextNoBody) (any, error) {
-	return func(c fuego.ContextNoBody) (any, error) {
+func themeCSSHandler(catalog designapp.Catalog) func(c server.ContextNoBody) (any, error) {
+	return func(c server.ContextNoBody) (any, error) {
 		id := strings.TrimSpace(c.PathParam("id"))
 		id = catalog.ResolveThemeID(id)
 		theme, ok := catalog.ThemeByID(id)
 		if !ok {
-			return nil, fuego.HTTPError{Status: http.StatusNotFound, Detail: "theme not found"}
+			return nil, server.HTTPError{Status: http.StatusNotFound, Detail: "theme not found"}
 		}
 
 		css := designapp.CompileThemeCSS(theme)
