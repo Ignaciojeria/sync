@@ -3258,6 +3258,13 @@ func setupAndStartMutagen(cfg *config.Config) error {
 		_ = saveProjectConfig(*cfg)
 	}
 
+	if stale, err := mutagenYAMLStaleForSession("mutagen.yml", sessionName); err != nil {
+		return fmt.Errorf("no se pudo inspeccionar mutagen.yml: %w", err)
+	} else if stale {
+		fmt.Printf("ℹ️  mutagen.yml pertenece a otro proyecto; regenerando para %q\n", sessionName)
+		_ = os.Remove("mutagen.yml")
+		_ = os.Remove("mutagen.yml.lock")
+	}
 	if _, err := os.Stat("mutagen.yml"); os.IsNotExist(err) {
 		if destination == "" {
 			return fmt.Errorf("falta destino mutagen (usa --mutagen-destination o configura PROJECTS_SYNC_SSH_* en backend)")
@@ -3446,6 +3453,38 @@ func defaultMutagenSessionName(slug string) string {
 		return "dev-sync-" + s
 	}
 	return fmt.Sprintf("dev-sync-%s-%s", s, hex.EncodeToString(b))
+}
+
+// mutagenYAMLStaleForSession devuelve true si mutagen.yml existe pero no
+// contiene una sesión top-level con el nombre esperado. Indica que el archivo
+// es de un proyecto previo y debe regenerarse.
+// ponytail: regex sin libs YAML; cubre el caso simple (un nombre de sesión).
+func mutagenYAMLStaleForSession(path, sessionName string) (bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	if len(data) == 0 {
+		return false, nil
+	}
+	want := strings.TrimSpace(sessionName)
+	if want == "" {
+		return false, nil
+	}
+	prefix := want + ":"
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") || trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, prefix) {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func ensureInitialSyncHealthy(mutagenBin, sessionName, destination string) error {
