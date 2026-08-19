@@ -3,7 +3,7 @@ package postgresql
 import (
 	"testing"
 
-	"fixtests1/internal/shared/configuration"
+	"gitinittest5/internal/shared/configuration"
 )
 
 func TestNewConnectionReturnsErrorWhenDatabaseURLIsEmpty(t *testing.T) {

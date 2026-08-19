@@ -3,7 +3,7 @@ package layout
 import (
 	"bytes"
 	"context"
-	"fixtests1/internal/shared/server"
+	"gitinittest5/internal/shared/server"
 	"github.com/a-h/templ"
 	"net/http"
 	"net/http/httptest"

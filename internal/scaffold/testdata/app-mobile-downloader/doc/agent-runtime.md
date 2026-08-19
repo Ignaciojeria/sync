@@ -1,4 +1,4 @@
-# Runtime del agente pi en `fixtests1`
+# Runtime del agente pi en `gitinittest5`
 
 > Documento vivo para entender qué partes del módulo `internal/agent`
 > sobreviven a un fork del repo sin intervención y qué partes requieren
@@ -8,8 +8,38 @@
 > **Nota 2026-07-08:** el modo activo del proyecto es **app única**
 > en `cmd/api`. Este doc describe únicamente el flujo actual.
 
-## 0. Pool de runtimes (cambio del 2026-07-03 — baja RAM drástica)
+> **Nota 2026-07-20 (multi-agente):** las reglas específicas del
+> agente (capas, sandbox, opt-out, runtime embebido) viven ahora en
+> `agents/develop/AGENTS.md`. El `.pi/` del agente se sembró desde
+> la raíz a `agents/develop/.pi/` como preparación para multi-
+> agente. Cuando aparezcan nuevos agentes (`reviewer`, `docs`,
+> etc.), cada uno vivirá bajo `agents/<id>/` con su propio `.pi/`
+> y `AGENTS.md`. El registro está en
+> `internal/agent/application/registry.go` y se invoca via
+> `AgentService.CreateSession(input.AgentID)`; vacío resuelve al
+> default (`"develop"`).
 
+### Sandbox y workspaces por agente (2026-07-20)
+
+A partir de la separación multi-agente, el sandbox de cada sesión
+se siembra desde `agents/<agentID>/` (no desde la raíz del repo):
+
+- `.pi/` se copia desde `agents/<agentID>/.pi/` (era `./.pi/`
+  antes).
+- El `AGENTS.md` del workspace del agente se copia al sandbox
+  para que pi lo lea como reglas del agente.
+- El `AGENTS.md` **raíz** del repo **no** se siembra dentro del
+  sandbox — es la fuente de reglas para humanos/IA que abren el
+  repo desde su editor, no para el agente embebido.
+
+Los sandboxes existentes en `tmp/agent-work/` siguen funcionando
+porque ya tienen su `.pi` copiado adentro; este card **no
+migra** sesiones existentes. Si una sesión legada quiere
+actualizar su `.pi`, hay que borrar el sandbox y crear sesión
+nueva (decisión consciente: las sesiones en curso podrían tener
+configuración modificada que no queremos pisar).
+
+## 0. Pool de runtimes (cambio del 2026-07-03 — baja RAM drástica)
 **Antes**: cada chat usado mantenía 1 proceso `pi` vivo
 (`map[sessionID]Runtime` en `internal/agent/application/manager.go`).
 Con N chats: N procesos.
@@ -79,12 +109,12 @@ claude-sonnet` desde una VM con `air` activo:
 ### 3.1. Renombre de módulo Go (obligatorio)
 
 Todos los archivos `.go` tienen el module path
-`fixtests1/<paquete>`. Al forkear a un proyecto nuevo hay que:
+`gitinittest5/<paquete>`. Al forkear a un proyecto nuevo hay que:
 
 ```sh
 # desde la raíz del fork
 go mod edit -module github.com/mi-org/mi-proyecto
-rg -l "fixtests1" | xargs sed -i 's|fixtests1|mi-proyecto|g'
+rg -l "gitinittest5" | xargs sed -i 's|gitinittest5|mi-proyecto|g'
 go mod tidy
 ```
 
@@ -192,7 +222,7 @@ Variables que NO existen (deberían):
 ```sh
 # 1. Renombrar el módulo y los imports
 go mod edit -module <nuevo-path>
-rg -l "fixtests1" | xargs sed -i 's|fixtests1|<nuevo-path>|g'
+rg -l "gitinittest5" | xargs sed -i 's|gitinittest5|<nuevo-path>|g'
 go mod tidy
 
 # 2. Asegurar que el hot-reload ignore tmp/

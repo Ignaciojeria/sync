@@ -1,11 +1,11 @@
 package auth
 
 import (
-	authapp "fixtests1/internal/auth/application"
-	authpostgresql "fixtests1/internal/auth/infrastructure/postgresql"
-	"fixtests1/internal/shared/configuration"
-	mounted "fixtests1/internal/shared/mounted"
-	"fixtests1/internal/shared/server"
+	authapp "gitinittest5/internal/auth/application"
+	authpostgresql "gitinittest5/internal/auth/infrastructure/postgresql"
+	"gitinittest5/internal/shared/configuration"
+	mounted "gitinittest5/internal/shared/mounted"
+	"gitinittest5/internal/shared/server"
 	"net/http"
 )
 

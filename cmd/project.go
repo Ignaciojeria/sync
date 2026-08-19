@@ -37,6 +37,7 @@ var (
 	skipAirAutoStart       bool
 	skipInitialCommit      bool
 	forceWorkspaceTakeover bool
+	withScaffold           bool
 )
 
 var initCmd = &cobra.Command{
@@ -126,36 +127,26 @@ var initCmd = &cobra.Command{
 		}
 
 		bootstrapEmail := extractEmailFromJWT(cfg.Token)
-		if err := ensureGoProjectScaffold(slug, bootstrapEmail); err != nil {
-			return fmt.Errorf("no se pudo preparar scaffold Go base: %w", err)
+		if withScaffold {
+			if err := ensureGoProjectScaffold(slug, bootstrapEmail); err != nil {
+				return fmt.Errorf("no se pudo preparar scaffold Go base: %w", err)
+			}
+			if err := ensureLocalProjectGitRemoved(localProjectDir); err != nil {
+				return fmt.Errorf("no se pudo limpiar .git local previo: %w", err)
+			}
+			if err := ensureLocalAirConfig(); err != nil {
+				return fmt.Errorf("no se pudo preparar .air.toml base: %w", err)
+			}
+			if err := ensureWorkspaceConfig(slug); err != nil {
+				return fmt.Errorf("no se pudo preparar workspaces.yaml base: %w", err)
+			}
 		}
-		if err := ensureProjectGitRepository(); err != nil {
-			return fmt.Errorf("no se pudo inicializar repositorio git del proyecto: %w", err)
-		}
-		if err := ensureLocalAirConfig(); err != nil {
-			return fmt.Errorf("no se pudo preparar .air.toml base: %w", err)
-		}
-		if err := ensureWorkspaceConfig(slug); err != nil {
-			return fmt.Errorf("no se pudo preparar workspaces.yaml base: %w", err)
-		}
-		if err := ensureProjectGitIgnore(); err != nil {
+		if err := ensureProjectGitIgnore(!withScaffold); err != nil {
 			return fmt.Errorf("no se pudo preparar .gitignore base: %w", err)
 		}
-		if err := ensureGitHooksForWorkspaceLock(); err != nil {
-			return fmt.Errorf("no se pudo preparar hooks git de workspace lock: %w", err)
-		}
-		if err := ensureInitialGitCommit(skipInitialCommit); err != nil {
-			return fmt.Errorf("no se pudo crear commit inicial del proyecto: %w", err)
-		}
-		if currentBranch, ok := currentGitBranch(); ok {
-			cfg.WorkspaceBranch = currentBranch
-		} else if strings.TrimSpace(cfg.WorkspaceBranch) == "" {
-			cfg.WorkspaceBranch = "main"
-		}
-		fmt.Println("ℹ️  Workspaces base configurados en workspaces.yaml (prod/main y develop/develop)")
-		if isGitRepository() && !gitBranchExists("develop") {
-			fmt.Println("ℹ️  Recomendación: crea la branch 'develop' si usarás flujo GitFlow")
-		}
+		// ponytail: el repo git vive en la VM, no en Windows.
+		// init + hook + commit se hacen DESPUÉS de setupAndStartMutagen,
+		// porque ahí queda el SSH host key trust y el remote dir creado.
 
 		cfg.LastProjectID = projectID
 		cfg.LastProjectSlug = slug
@@ -304,17 +295,24 @@ var initCmd = &cobra.Command{
 		if err := materializeProjectEnv(cfg); err != nil {
 			return fmt.Errorf("no se pudo materializar .env del proyecto: %w", err)
 		}
-		if err := ensureGoModTidy(); err != nil {
-			return fmt.Errorf("no se pudo ejecutar go mod tidy: %w", err)
+		if err := writeWorkspaceCommands(cfg); err != nil {
+			return fmt.Errorf("no se pudo escribir comandos del workspace: %w", err)
+		}
+		if withScaffold {
+			if err := ensureGoModTidy(); err != nil {
+				return fmt.Errorf("no se pudo ejecutar go mod tidy: %w", err)
+			}
 		}
 		if strings.TrimSpace(cfg.ProjectDatabaseURL) != "" {
 			fmt.Println("🚀 Bootstrap remoto de conectividad DB en la VM...")
 			if err := ensureDBBootstrapOnProvisionedVM(&cfg); err != nil {
 				return fmt.Errorf("no se pudo bootstrapear conectividad DB remota: %w", err)
 			}
-			fmt.Println("🚀 Ejecutando migraciones iniciales del proyecto en la VM...")
-			if err := runProjectMigrationsOnVM(cfg, defaultScaffoldMigrations, ""); err != nil {
-				return fmt.Errorf("no se pudieron ejecutar migraciones iniciales en la VM: %w", err)
+			if withScaffold {
+				fmt.Println("🚀 Ejecutando migraciones iniciales del proyecto en la VM...")
+				if err := runProjectMigrationsOnVM(cfg, defaultScaffoldMigrations, ""); err != nil {
+					return fmt.Errorf("no se pudieron ejecutar migraciones iniciales en la VM: %w", err)
+				}
 			}
 		}
 
@@ -405,7 +403,6 @@ var initCmd = &cobra.Command{
 
 		airStarted := false
 		mutagenReady := false
-		wedeReady := false
 		httpChecked := false
 		httpReady := false
 		httpCode := 0
@@ -422,7 +419,10 @@ var initCmd = &cobra.Command{
 					fmt.Printf("   Puedes correr manualmente: %s daemon start && %s project start\n", mutagenHintCommand(), mutagenHintCommand())
 				} else {
 					mutagenReady = true
-					if !skipAirAutoStart {
+					// ponytail: git init en VM solo después de Mutagen
+					// (host key trust + remote dir ya listos).
+					gitOpsAfterMutagen(&cfg, skipInitialCommit)
+					if withScaffold && !skipAirAutoStart {
 						fmt.Println("🚀 Iniciando Air (mandatorio)...")
 						maxAirAttempts := 6
 						for i := 1; i <= maxAirAttempts; i++ {
@@ -453,13 +453,7 @@ var initCmd = &cobra.Command{
 			}
 		}
 
-		fmt.Println("🧩 Instalando y levantando Wede en la VM provisionada...")
-		if err := ensureRemoteWedeReady(&cfg); err != nil {
-			return fmt.Errorf("init incompleto: no se pudo instalar/iniciar wede: %w", err)
-		}
-		wedeReady = true
-
-		if strings.TrimSpace(cfg.LastVMHTTPSURL) != "" {
+		if withScaffold && strings.TrimSpace(cfg.LastVMHTTPSURL) != "" {
 			httpChecked = true
 			if airStarted {
 				fmt.Printf("🌐 Verificando endpoint HTTP: %s\n", strings.TrimSpace(cfg.LastVMHTTPSURL))
@@ -489,18 +483,17 @@ var initCmd = &cobra.Command{
 		}
 		if airStarted {
 			fmt.Println("   - Air: ✅")
+		} else if !withScaffold {
+			fmt.Println("   - Air: ⏭️  omitido (--skip-scaffold)")
 		} else if skipAirAutoStart {
 			fmt.Println("   - Air: ⏭️  omitido (--skip-air-auto-start)")
 		} else {
 			fmt.Println("   - Air: ⚠️")
 		}
 		fmt.Println("   - Runtime del agente: ✅ dentro de cmd/api (sin sidecars)")
-		if wedeReady {
-			fmt.Println("   - Wede: ✅")
-		} else {
-			fmt.Println("   - Wede: ⚠️")
-		}
-		if !httpChecked {
+		if !withScaffold {
+			fmt.Println("   - HTTP: ⏭️  omitido (--skip-scaffold)")
+		} else if !httpChecked {
 			fmt.Println("   - HTTP: ⏭️  sin URL")
 		} else if httpReady {
 			fmt.Printf("   - HTTP: ✅ (%d)\n", httpCode)
@@ -512,10 +505,7 @@ var initCmd = &cobra.Command{
 		if strings.TrimSpace(cfg.LastVMHTTPSURL) != "" {
 			fmt.Printf("   - URL: %s\n", strings.TrimSpace(cfg.LastVMHTTPSURL))
 		}
-		if !airStarted || !httpReady {
-			fmt.Println("   - Siguiente paso: einarc dev logs -f")
-		}
-		if !skipAirAutoStart && !airStarted {
+		if !skipAirAutoStart && withScaffold && !airStarted {
 			if airErr != nil {
 				return fmt.Errorf("init incompleto: Air es mandatorio y no inició (%v)", airErr)
 			}
@@ -2036,15 +2026,19 @@ func ensureWorkspaceConfig(slug string) error {
 	return nil
 }
 
-func ensureProjectGitIgnore() error {
+func ensureProjectGitIgnore(skipScaffold bool) error {
 	const path = ".gitignore"
 	required := []string{
 		".einar/",
 		".env",
-		"tmp/",
-		".air.log",
-		".air.pid",
-		"mutagen.yml.lock",
+	}
+	if withScaffold {
+		required = append(required,
+			"tmp/",
+			".air.log",
+			".air.pid",
+			"mutagen.yml.lock",
+		)
 	}
 
 	existing := ""
@@ -3119,6 +3113,23 @@ func saveProjectConfig(cfg config.Config) error {
 	return config.Save(cfg)
 }
 
+func writeWorkspaceCommands(cfg config.Config) error {
+	content := fmt.Sprintf(`# Comandos del workspace
+
+Ejecuta estos comandos desde la raíz del proyecto. Pi edita localmente; Mutagen replica a la VM.
+
+- `+"`sync clone <slug>`"+`: clona una VM existente en un workspace local mediante Mutagen.
+- `+"`sync take`"+`: toma ownership del workspace antes de editar si otro cliente lo usó.
+- `+"`sync vm exec -- \"go mod tidy && go test ./...\"`"+`: hace flush y ejecuta el comando en la VM.
+- `+"`sync invite user@gmail.com`"+`: invita a un colaborador al proyecto.
+- `+"`sync db connect`"+`: abre el túnel local a la base de datos; déjalo corriendo mientras la aplicación lo use.
+
+VM: %s
+SSH directo: `+"`ssh %s`"+`
+`, strings.TrimSpace(cfg.LastVMSshDest), strings.TrimSpace(strings.Split(cfg.LastVMSshDest, ":")[0]))
+	return os.WriteFile(filepath.Join(".einar", "COMMANDS.md"), []byte(content), 0o600)
+}
+
 func materializeProjectEnv(cfg config.Config) error {
 	databaseURLForRuntime := strings.TrimSpace(cfg.ProjectDatabaseURL)
 	if databaseURLForRuntime != "" {
@@ -3402,7 +3413,9 @@ func resetMutagenDaemonState(mutagenBin string) {
 		_ = exec.Command("taskkill", "/IM", "mutagen.exe", "/F").Run()
 	}
 	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
-		_ = os.Remove(filepath.Join(home, ".mutagen", "daemon", "daemon.lock"))
+		daemonDir := filepath.Join(home, ".mutagen", "daemon")
+		_ = os.Remove(filepath.Join(daemonDir, "daemon.lock"))
+		_ = os.Remove(filepath.Join(daemonDir, "daemon.sock"))
 	}
 }
 
@@ -3487,74 +3500,20 @@ func mutagenYAMLStaleForSession(path, sessionName string) (bool, error) {
 	return true, nil
 }
 
-func ensureInitialSyncHealthy(mutagenBin, sessionName, destination string) error {
+func ensureInitialSyncHealthy(mutagenBin, sessionName, _ string) error {
 	fmt.Println("🔄 Verificando sincronización inicial...")
-	target, remotePath, ok := sshTargetAndPathFromMutagenDestination(destination)
-	if !ok {
-		return fmt.Errorf("no se pudo resolver destino remoto de mutagen")
-	}
-
-	maxAttempts := 3
-	for i := 1; i <= maxAttempts; i++ {
-		flush := exec.Command(mutagenBin, "sync", "flush", sessionName)
-		if out, err := flush.CombinedOutput(); err != nil {
-			msg := strings.TrimSpace(string(out))
-			if msg != "" {
-				fmt.Printf("⚠️  flush intento %d/%d: %s\n", i, maxAttempts, msg)
-			}
-		} else {
-			_ = out
-		}
-
-		if err := remoteFilesPresent(target, remotePath, []string{"go.mod", ".air.toml"}); err == nil {
-			fmt.Println("✅ Sync healthy: archivos críticos presentes en VM")
+	for i := 1; i <= 3; i++ {
+		out, err := exec.Command(mutagenBin, "sync", "flush", sessionName).CombinedOutput()
+		if err == nil {
+			fmt.Println("✅ Sync healthy: flush completado")
 			return nil
-		} else {
-			fmt.Printf("⚠️  Verificación remota intento %d/%d: %v\n", i, maxAttempts, err)
+		}
+		if msg := strings.TrimSpace(string(out)); msg != "" {
+			fmt.Printf("⚠️  flush intento %d/3: %s\n", i, msg)
 		}
 		time.Sleep(time.Duration(i) * time.Second)
 	}
-
-	return fmt.Errorf("sync no quedó saludable tras reintentos (faltan archivos críticos en VM)")
-}
-
-func remoteFilesPresent(target, remotePath string, files []string) error {
-	names := make([]string, 0, len(files))
-	for _, f := range files {
-		name := strings.TrimSpace(f)
-		if name == "" {
-			continue
-		}
-		names = append(names, name)
-	}
-	if len(names) == 0 {
-		return nil
-	}
-
-	cleanRoot := strings.TrimSpace(remotePath)
-	cleanRoot = strings.TrimSuffix(cleanRoot, "/")
-	if cleanRoot == "" {
-		cleanRoot = "/"
-	}
-
-	checks := make([]string, 0, len(names))
-	for _, n := range names {
-		abs := cleanRoot + "/" + strings.TrimPrefix(n, "/")
-		checks = append(checks, fmt.Sprintf("if [ ! -f %q ]; then echo missing:%q; fi", abs, n))
-	}
-	cmdText := fmt.Sprintf("%s; ls -la %q", strings.Join(checks, "; "), cleanRoot)
-	msg, err := runSSHScript(target, cmdText)
-	if err != nil {
-		if msg != "" {
-			return fmt.Errorf("remote check error (%s): %s", cleanRoot, msg)
-		}
-		return err
-	}
-
-	if strings.Contains(msg, "missing:") {
-		return fmt.Errorf("archivos críticos faltantes en VM (%s:%s):\n%s", target, cleanRoot, msg)
-	}
-	return nil
+	return fmt.Errorf("sync no quedó saludable tras reintentos (flush falló)")
 }
 
 func waitForHTTPReady(url string, timeout time.Duration) (int, error) {
@@ -4377,6 +4336,7 @@ func init() {
 	initCmd.Flags().BoolVar(&skipSSHOnboarding, "skip-ssh-onboarding", false, "No ejecuta onboarding automático con 'ssh exe.dev'")
 	initCmd.Flags().BoolVar(&skipAirAutoStart, "skip-air-auto-start", false, "No inicia Air automáticamente en la VM")
 	initCmd.Flags().BoolVar(&skipInitialCommit, "skip-initial-commit", false, "No crea commit inicial del scaffold del proyecto")
+	initCmd.Flags().BoolVar(&withScaffold, "with-scaffold", false, "Materializa template Go/.air.toml/workspaces.yaml e inicia Air/migraciones (default: solo clave SSH + .env)")
 	initCmd.Flags().BoolVar(&forceWorkspaceTakeover, "force-workspace-takeover", false, "Toma control del workspace global aunque otro owner lo tenga reservado")
 	rootCmd.AddCommand(initCmd)
 }

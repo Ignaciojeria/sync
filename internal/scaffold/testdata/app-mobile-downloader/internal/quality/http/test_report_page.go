@@ -1,11 +1,11 @@
 package dev
 
 import (
-	authmiddleware "fixtests1/internal/auth/middleware"
-	"fixtests1/internal/quality/ui"
-	"fixtests1/internal/shared/infrastructure/test"
-	"fixtests1/internal/shared/server"
-	"fixtests1/internal/ui/layout"
+	authmiddleware "gitinittest5/internal/auth/middleware"
+	"gitinittest5/internal/quality/ui"
+	"gitinittest5/internal/shared/infrastructure/test"
+	"gitinittest5/internal/shared/server"
+	"gitinittest5/internal/ui/layout"
 )
 
 func testReportPageHandler(s *server.Server) {

@@ -20,11 +20,27 @@ type Runtime interface {
 
 // StartSpec contiene los datos mínimos para levantar una sesión de pi.
 type StartSpec struct {
-	SessionID   string
-	CWD         string
-	Model       string
-	Title       string
+	SessionID string
+	CWD       string
+	Model     string
+	Title     string
 	SessionFile string
+	// AgentID identifica qué agente corre esta sesión (ej.
+	// "develop"). Lo consume pirpc.resolveCWD para sembrar el
+	// .pi/ y AGENTS.md desde agents/<AgentID>/. Si viene vacío,
+	// pirpc cae a DefaultAgentID() — no se valida contra el
+	// registry porque el Manager ya lo normalizó antes.
+	AgentID string
+	// DisableNativeHonchoTools indica al runner que NO cargue la
+	// extensión Honcho de .pi/extensions/ en el spawn. Útil cuando
+	// el host ya enruta memoria vía MemoryProvider (Fase C) y
+	// quiere evitar doble consumo. Hoy no hay tal extensión en
+	// este repo (.pi/extensions/ sólo tiene provider.ts y
+	// smoke.ts), así que la flag es forward-compat para cuando
+	// aparezca. Si el pi binary suma honcho built-in en el
+	// futuro, también habría que filtrar acá; mientras tanto,
+	// no-op.
+	DisableNativeHonchoTools bool
 }
 
 // RuntimeState resume el estado observable del runtime.

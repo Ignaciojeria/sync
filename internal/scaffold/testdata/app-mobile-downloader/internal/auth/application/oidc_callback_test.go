@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"fixtests1/internal/shared/configuration"
+	"gitinittest5/internal/shared/configuration"
 )
 
 func TestExchangeAuthorizationCode(t *testing.T) {

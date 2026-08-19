@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	topologyapp "fixtests1/internal/topology/application"
+	topologyapp "gitinittest5/internal/topology/application"
 )
 
 type sessionFile struct {

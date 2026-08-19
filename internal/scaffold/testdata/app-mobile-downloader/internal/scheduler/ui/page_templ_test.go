@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	schedulerapp "fixtests1/internal/scheduler/application"
+	schedulerapp "gitinittest5/internal/scheduler/application"
 )
 
 func TestFormatTime(t *testing.T) {

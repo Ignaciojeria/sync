@@ -2,8 +2,8 @@ package home
 
 import (
 	"context"
-	"fixtests1/internal/shared/server"
-	topologyapp "fixtests1/internal/topology/application"
+	"gitinittest5/internal/shared/server"
+	topologyapp "gitinittest5/internal/topology/application"
 	"io"
 	"net/http"
 	"net/http/httptest"

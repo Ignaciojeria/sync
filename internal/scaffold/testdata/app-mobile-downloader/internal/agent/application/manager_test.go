@@ -77,7 +77,9 @@ type stubRuntime struct {
 	started         bool
 	closed          bool
 	promptCalls     int
+	steerCalls      int
 	lastPrompt      string
+	lastSteer       string
 	promptErr       error
 	promptHook      func(ctx context.Context, msg string) error
 	subscribeCh     chan Event
@@ -104,7 +106,13 @@ func (r *stubRuntime) Prompt(ctx context.Context, message string) error {
 	return r.promptErr
 }
 
-func (r *stubRuntime) Steer(ctx context.Context, _ string) error { return nil }
+func (r *stubRuntime) Steer(ctx context.Context, message string) error {
+	r.mu.Lock()
+	r.steerCalls++
+	r.lastSteer = message
+	r.mu.Unlock()
+	return nil
+}
 func (r *stubRuntime) Abort(ctx context.Context) error           { return nil }
 
 func (r *stubRuntime) Subscribe() (<-chan Event, func()) {

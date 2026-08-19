@@ -12,7 +12,7 @@ import (
 	"strings"
 	"sync"
 
-	agentapp "fixtests1/internal/agent/application"
+	agentapp "lastmile-agents/internal/agent/application"
 )
 
 // SessionStore implementa application.SessionStore con persistencia en disco.

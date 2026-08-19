@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	authapp "fixtests1/internal/auth/application"
-	"fixtests1/internal/shared"
-	"fixtests1/internal/shared/configuration"
+	authapp "gitinittest5/internal/auth/application"
+	"gitinittest5/internal/shared"
+	"gitinittest5/internal/shared/configuration"
 
 	"github.com/MicahParks/jwkset"
 	"github.com/golang-jwt/jwt/v5"

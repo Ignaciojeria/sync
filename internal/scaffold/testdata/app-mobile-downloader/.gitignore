@@ -2,10 +2,40 @@
 # Einar local runtime files
 .einar/
 .env
-tmp/
+# Ignore direct contents of tmp/ (build artifacts, agent sandbox,
+# logs, etc.) but keep the two checked-in subtrees below.
+tmp/*
+!.gitkeep
 .air.log
 .air.pid
 mutagen.yml.lock
 
+# Ignore agent runtime tmp dirs anywhere inside the tree
+# (transcripts, http events, etc.). Specific to avoid colliding with
+# the root-level tmp/ re-include rules below.
+internal/**/tmp/
+.pi/tmp/
+agents/**/.pi/tmp/
+
 # Compiled binaries
 *.exe
+
+# npm cache (created by npx skills)
+/.npm-cache/
+
+# Backlog bundle and CLI must be tracked in git so the kanban
+# workflow keeps full traceability (which cards were created,
+# moved, finished, and when). These un-ignore rules MUST sit AFTER
+# the "tmp/*" line above, because git does not allow re-including
+# a file whose parent directory is fully ignored.
+#
+# El bundle de datos (cards OKF) vive en internal/backlog/board/
+# (no en tmp/), por lo que ya está bajo control sin re-include.
+!tmp/backlog-cli/
+
+# Backups de binarios (rotational). El patrón *.exe arriba no
+# matchea `api.exe.bak-pre-xxx` porque el sufijo es `-pre-xxx`,
+# no `.exe`. Si en el futuro necesitás rotar binarios con otro
+# nombre, agregalo acá.
+api.exe.bak-*
+api.exe.stable

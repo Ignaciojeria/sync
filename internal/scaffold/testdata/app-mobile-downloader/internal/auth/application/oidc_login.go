@@ -6,8 +6,8 @@ import (
 	"net/url"
 	"strings"
 
-	"fixtests1/internal/shared"
-	"fixtests1/internal/shared/configuration"
+	"gitinittest5/internal/shared"
+	"gitinittest5/internal/shared/configuration"
 )
 
 func BuildLoginURL(conf configuration.Conf, state string, preferGoogle bool) (string, error) {

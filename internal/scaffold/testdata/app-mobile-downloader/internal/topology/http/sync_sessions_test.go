@@ -2,9 +2,9 @@ package topology
 
 import (
 	"bytes"
-	"fixtests1/internal/shared/server"
-	topologyapp "fixtests1/internal/topology/application"
-	memory "fixtests1/internal/topology/infrastructure/memory"
+	"gitinittest5/internal/shared/server"
+	topologyapp "gitinittest5/internal/topology/application"
+	memory "gitinittest5/internal/topology/infrastructure/memory"
 	"net/http"
 	"net/http/httptest"
 	"testing"

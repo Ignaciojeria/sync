@@ -1,9 +1,9 @@
 package dev
 
 import (
-	testreport "fixtests1/internal/quality/application/test_report"
-	"fixtests1/internal/quality/ui"
-	"fixtests1/internal/shared/server"
+	testreport "gitinittest5/internal/quality/application/test_report"
+	"gitinittest5/internal/quality/ui"
+	"gitinittest5/internal/shared/server"
 	"net/http"
 	"net/http/httptest"
 	"testing"

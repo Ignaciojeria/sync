@@ -1,8 +1,8 @@
 package dev
 
 import (
-	"fixtests1/internal/quality/application/test_report"
-	"fixtests1/internal/shared/server"
+	"gitinittest5/internal/quality/application/test_report"
+	"gitinittest5/internal/shared/server"
 )
 
 // Register wires quality (test report) routes onto the shared server.

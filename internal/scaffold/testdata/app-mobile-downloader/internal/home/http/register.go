@@ -1,8 +1,8 @@
 package home
 
 import (
-	"fixtests1/internal/shared/server"
-	topologyapp "fixtests1/internal/topology/application"
+	"gitinittest5/internal/shared/server"
+	topologyapp "gitinittest5/internal/topology/application"
 )
 
 // Register wires home routes onto the shared server.

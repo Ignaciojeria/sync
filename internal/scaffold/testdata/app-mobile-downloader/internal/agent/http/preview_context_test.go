@@ -2,7 +2,7 @@ package agent
 
 import (
 	"encoding/json"
-	agentapp "fixtests1/internal/agent/application"
+	agentapp "lastmile-agents/internal/agent/application"
 	"net/http"
 	"net/http/httptest"
 	"testing"

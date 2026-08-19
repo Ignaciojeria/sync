@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	agentapp "fixtests1/internal/agent/application"
+	agentapp "lastmile-agents/internal/agent/application"
 )
 
 // Tamaño del buffer de cada subscriber. Suficiente para amortiguar picos de

@@ -1,9 +1,9 @@
 package editor
 
 import (
-	editorui "fixtests1/internal/editor/ui"
-	"fixtests1/internal/shared/server"
-	"fixtests1/internal/ui/layout"
+	editorui "gitinittest5/internal/editor/ui"
+	"gitinittest5/internal/shared/server"
+	"gitinittest5/internal/ui/layout"
 )
 
 func editorViewHandler(s *server.Server) {

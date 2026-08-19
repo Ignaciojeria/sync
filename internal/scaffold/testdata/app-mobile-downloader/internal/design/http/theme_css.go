@@ -1,8 +1,8 @@
 package design
 
 import (
-	designapp "fixtests1/internal/design/application"
-	"fixtests1/internal/shared/server"
+	designapp "gitinittest5/internal/design/application"
+	"gitinittest5/internal/shared/server"
 	"fmt"
 	"net/http"
 	"strings"

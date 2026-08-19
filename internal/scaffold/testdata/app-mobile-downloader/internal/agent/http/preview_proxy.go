@@ -2,8 +2,8 @@ package agent
 
 import (
 	"errors"
-	agentapp "fixtests1/internal/agent/application"
-	"fixtests1/internal/shared/server"
+	agentapp "lastmile-agents/internal/agent/application"
+	"lastmile-agents/internal/shared/server"
 	"fmt"
 	"net/http"
 	"net/http/httputil"
@@ -17,8 +17,14 @@ const previewProxyHeader = "X-Agent-Preview-Proxy"
 func previewProxyHandler(s *server.Server, manager agentapp.AgentService, requireEditor func(http.Handler) http.Handler) {
 	_ = requireEditor
 	handler := http.HandlerFunc(previewProxy(manager))
-	server.Handle(s, "/agent/sessions/{id}/preview", handler)
-	server.Handle(s, "/agent/sessions/{id}/preview/{rest...}", handler)
+	// GET explícito (no wildcard): el proxy del preview sólo
+	// responde a GETs del browser. Sin método, el mux de Go 1.22
+	// entra en conflicto con `GET /agent/` (registrado por
+	// pageHandler como catch-all del canonical entry) porque
+	// ambos patrones se solapan en path pero registran distinto
+	// set de métodos.
+	server.Handle(s, "GET /agent/sessions/{id}/preview", handler)
+	server.Handle(s, "GET /agent/sessions/{id}/preview/{rest...}", handler)
 }
 
 func previewProxy(manager agentapp.AgentService) func(http.ResponseWriter, *http.Request) {

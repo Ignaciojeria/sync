@@ -3,7 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	agentapp "fixtests1/internal/agent/application"
+	agentapp "lastmile-agents/internal/agent/application"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -27,6 +27,7 @@ func (s mergeServiceStub) PromptRequest(context.Context, string, agentapp.Prompt
 	return nil
 }
 func (s mergeServiceStub) Steer(context.Context, string, string) error { return nil }
+func (s mergeServiceStub) Regenerate(context.Context, string) error   { return nil }
 func (s mergeServiceStub) Abort(context.Context, string) error         { return nil }
 func (s mergeServiceStub) Subscribe(context.Context, string) (<-chan agentapp.Event, func(), error) {
 	return nil, func() {}, nil

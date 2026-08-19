@@ -5,7 +5,7 @@ import (
 	"sort"
 	"sync"
 
-	agentapp "fixtests1/internal/agent/application"
+	agentapp "lastmile-agents/internal/agent/application"
 )
 
 // SessionStore persiste metadata de sesiones en memoria para el MVP.

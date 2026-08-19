@@ -1,9 +1,9 @@
 package http
 
 import (
-	gatewayapp "fixtests1/internal/gateway/application"
-	gatewayui "fixtests1/internal/gateway/ui"
-	"fixtests1/internal/shared/server"
+	gatewayapp "gitinittest5/internal/gateway/application"
+	gatewayui "gitinittest5/internal/gateway/ui"
+	"gitinittest5/internal/shared/server"
 	"fmt"
 	"github.com/a-h/templ"
 	"net/http"

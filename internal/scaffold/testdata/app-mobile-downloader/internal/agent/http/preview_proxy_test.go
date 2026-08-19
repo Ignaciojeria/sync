@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	agentapp "fixtests1/internal/agent/application"
+	agentapp "lastmile-agents/internal/agent/application"
 )
 
 type previewServiceStub struct {
@@ -30,6 +30,7 @@ func (s previewServiceStub) PromptRequest(context.Context, string, agentapp.Prom
 	return nil
 }
 func (s previewServiceStub) Steer(context.Context, string, string) error { return nil }
+func (s previewServiceStub) Regenerate(context.Context, string) error   { return nil }
 func (s previewServiceStub) Abort(context.Context, string) error         { return nil }
 func (s previewServiceStub) Subscribe(context.Context, string) (<-chan agentapp.Event, func(), error) {
 	return nil, func() {}, nil

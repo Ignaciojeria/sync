@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	authmiddleware "fixtests1/internal/auth/middleware"
-	"fixtests1/internal/shared/configuration"
+	authmiddleware "gitinittest5/internal/auth/middleware"
+	"gitinittest5/internal/shared/configuration"
 )
 
 // TestFromRequestWithClaimsUsesEditorEmail wires the JWT middleware in

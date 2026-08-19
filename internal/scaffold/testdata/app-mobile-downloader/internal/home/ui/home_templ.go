@@ -9,7 +9,7 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import (
-	topologyapp "fixtests1/internal/topology/application"
+	topologyapp "gitinittest5/internal/topology/application"
 	"strings"
 )
 

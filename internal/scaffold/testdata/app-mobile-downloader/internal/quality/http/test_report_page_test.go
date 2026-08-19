@@ -1,9 +1,9 @@
 package dev
 
 import (
-	authmiddleware "fixtests1/internal/auth/middleware"
-	"fixtests1/internal/shared/configuration"
-	"fixtests1/internal/shared/server"
+	authmiddleware "gitinittest5/internal/auth/middleware"
+	"gitinittest5/internal/shared/configuration"
+	"gitinittest5/internal/shared/server"
 	"net/http"
 	"net/http/httptest"
 	"strings"

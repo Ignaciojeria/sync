@@ -36,22 +36,30 @@ func TestMaterializeAppMobileDownloader(t *testing.T) {
 		".air.toml",
 		".gitignore",
 		".githooks/post-checkout",
+		".nvmrc",
 		"AGENTS.md",
+		"agents/develop/AGENTS.md",
+		"agents/develop/.pi/extensions/provider.ts",
+		"agents/develop/.pi/extensions/smoke.ts",
 		"design/ocean/DESIGN.md",
 		"internal/gateway/http/balance.go",
 		"internal/design/http/register.go",
 		"internal/editor/http/register.go",
 		"internal/agent/http/register.go",
 		"internal/agent/http/support.go",
+		"internal/backlog/http/register.go",
+		"internal/versions/http/register.go",
+		"internal/shared/server/compat.go",
 		"doc/agent-runtime.md",
+		"doc/rpcdocs.md",
 		"scripts/run-api.sh",
+		"scripts/check-mounted-paths.sh",
+		"scripts/reset-agent-runtime.sh",
 		"scripts/_tree_generator.py",
 		"scripts/structure.config.toml",
 		"wede.config.json",
 		"workspaces.yaml",
 		"mutagen.yml",
-		".pi/extensions/provider.ts",
-		".pi/extensions/smoke.ts",
 	} {
 		if _, err := os.Stat(filepath.Join(dir, path)); err != nil {
 			t.Fatalf("expected %s to be materialized: %v", path, err)
@@ -59,12 +67,12 @@ func TestMaterializeAppMobileDownloader(t *testing.T) {
 	}
 
 	mutagenYAML := readGeneratedFile(t, dir, "mutagen.yml")
-	if strings.Contains(mutagenYAML, "scaffoldxd1") || !strings.Contains(mutagenYAML, "my-project") {
+	if strings.Contains(mutagenYAML, "gitinittest5") || !strings.Contains(mutagenYAML, "my-project") {
 		t.Fatalf("mutagen.yml was not rendered with project name: %q", mutagenYAML)
 	}
 
 	workspacesYAML := readGeneratedFile(t, dir, "workspaces.yaml")
-	if strings.Contains(workspacesYAML, "scaffoldxd1") || !strings.Contains(workspacesYAML, "slug: my-project") {
+	if strings.Contains(workspacesYAML, "gitinittest5") || !strings.Contains(workspacesYAML, "slug: my-project") {
 		t.Fatalf("workspaces.yaml was not rendered with project name: %q", workspacesYAML)
 	}
 

@@ -1,6 +1,6 @@
 package editor
 
-import "fixtests1/internal/shared/server"
+import "gitinittest5/internal/shared/server"
 
 // Register wires editor routes (reverse proxy + console view) onto the server.
 func Register(s *server.Server) {

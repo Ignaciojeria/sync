@@ -17,33 +17,11 @@ func setTempDirs(t *testing.T) {
 	t.Setenv("AGENT_EVENTS_DIR", filepath.Join(t.TempDir(), "events"))
 }
 
-type fakeSource struct {
-	rows []RuntimeEventRecord
-	err  error
-}
-
-func (f *fakeSource) ListSession(_ context.Context, _ string) ([]RuntimeEventRecord, error) {
-	return f.rows, f.err
-}
-
 func resetRuntimeState(t *testing.T) {
 	t.Helper()
-	SetRuntimeEventsHistorySource(nil)
 	transcriptState.Lock()
 	transcriptState.assistant = map[string]ConversationItem{}
 	transcriptState.Unlock()
-}
-
-func TestSetRuntimeEventsHistorySource_RoundTrip(t *testing.T) {
-	defer resetRuntimeState(t)
-	SetRuntimeEventsHistorySource(&fakeSource{rows: []RuntimeEventRecord{{Offset: 1}}})
-	if runtimeEventsHistorySource == nil {
-		t.Fatal("expected source set")
-	}
-	SetRuntimeEventsHistorySource(nil)
-	if runtimeEventsHistorySource != nil {
-		t.Fatal("expected source cleared")
-	}
 }
 
 func TestLoadConversationHistoryDelegates(t *testing.T) {
@@ -72,43 +50,6 @@ func TestLoadHistory_LimitDefaultsWhenZero(t *testing.T) {
 	got, err := LoadConversationHistoryCtx(context.Background(), "s1", 0, 0)
 	if err != nil || got.LastSeq != 1 || len(got.Items) != 1 {
 		t.Fatalf("got = %+v", got)
-	}
-}
-
-func TestLoadHistory_SourceReturnsData(t *testing.T) {
-	defer resetRuntimeState(t)
-	SetRuntimeEventsHistorySource(&fakeSource{rows: []RuntimeEventRecord{
-		{Offset: 1, Kind: "user_prompt", Payload: json.RawMessage(`{"type":"user_prompt","payload":{"text":"hi"}}`)},
-	}})
-	got, err := LoadConversationHistoryCtx(context.Background(), "s1", 0, 10)
-	if err != nil || len(got.Items) != 1 || got.Items[0].Text != "hi" {
-		t.Fatalf("got = %+v err = %v", got, err)
-	}
-}
-
-func TestLoadHistory_SourceError_FallsBackToTranscript(t *testing.T) {
-	defer resetRuntimeState(t)
-	setTempDirs(t)
-	SetRuntimeEventsHistorySource(&fakeSource{err: fmt.Errorf("boom")})
-	if err := appendTranscriptItem("s1", ConversationItem{Seq: 1, Kind: "user", Text: "fallback"}); err != nil {
-		t.Fatal(err)
-	}
-	got, err := LoadConversationHistoryCtx(context.Background(), "s1", 0, 10)
-	if err != nil || len(got.Items) != 1 || got.Items[0].Text != "fallback" {
-		t.Fatalf("got = %+v err = %v", got, err)
-	}
-}
-
-func TestLoadHistory_SourceEmpty_FallsBackToTranscript(t *testing.T) {
-	defer resetRuntimeState(t)
-	setTempDirs(t)
-	SetRuntimeEventsHistorySource(&fakeSource{rows: []RuntimeEventRecord{}})
-	if err := appendTranscriptItem("s1", ConversationItem{Seq: 1, Kind: "user", Text: "fallback"}); err != nil {
-		t.Fatal(err)
-	}
-	got, err := LoadConversationHistoryCtx(context.Background(), "s1", 0, 10)
-	if err != nil || len(got.Items) != 1 {
-		t.Fatalf("got = %+v err = %v", got, err)
 	}
 }
 
@@ -266,6 +207,195 @@ func TestMaterializeEvent_MessageEnd_SeqAlreadySet(t *testing.T) {
 	items, _ := readConversationTranscript("s1")
 	if len(items) != 1 || items[0].Seq != 9 {
 		t.Fatalf("expected seq from update, got %+v", items)
+	}
+}
+
+// ponytail: regression para el bug del mergeAssistantDelta que
+// corrompía textos largos. Cuando message_end trae el
+// contenido completo en payload.message.content, ese texto es
+// la fuente de verdad — NO el draft acumulado por text_delta.
+// El test simula el caso clásico de overlap=1 entre espacios
+// consecutivos: el draft queda "Agent              Docs" (14
+// espacios) y el payload trae "Agent               Docs" (15
+// espacios). El fix debe preferir el payload.
+func TestMaterializeEvent_MessageEnd_PrefersPayloadOverDraft(t *testing.T) {
+	defer resetRuntimeState(t)
+	setTempDirs(t)
+	const fullText = "Agent               Docs" // 15 espacios entre Agent y Docs
+	// Acumulamos via text_delta con un delta que TRIGGERS el
+	// bug de overlap=1: current termina en espacio, delta
+	// empieza en espacio.
+	MaterializeEvent("s1", 1, Event{Type: "message_start", Payload: json.RawMessage(`{}`)})
+	MaterializeEvent("s1", 2, Event{Type: "message_update", Payload: json.RawMessage(`{"assistantMessageEvent":{"type":"text_delta","delta":"Agent              "}`)})
+	MaterializeEvent("s1", 3, Event{Type: "message_update", Payload: json.RawMessage(`{"assistantMessageEvent":{"type":"text_delta","delta":" Docs           "}`)})
+	// El draft acumulado está corrupto (un espacio menos).
+	// message_end con payload completo debe sobrescribirlo.
+	endPayload := []byte(`{"message":{"role":"assistant","content":[{"type":"text","text":"` + fullText + `"}]}}`)
+	MaterializeEvent("s1", 4, Event{Type: "message_end", Payload: endPayload})
+	items, _ := readConversationTranscript("s1")
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d: %+v", len(items), items)
+	}
+	if items[0].Kind != "assistant" {
+		t.Fatalf("kind = %q, want assistant", items[0].Kind)
+	}
+	if items[0].Text != fullText {
+		t.Fatalf("text = %q (%d chars), want %q (%d chars). El merge bug corrompió el draft y el payload no lo sobrescribió.",
+			items[0].Text, len(items[0].Text), fullText, len(fullText))
+	}
+	if len(items[0].Text) != len(fullText) {
+		t.Fatalf("len mismatch: got %d, want %d", len(items[0].Text), len(fullText))
+	}
+}
+
+// ponytail: cuando message_end trae solo thinking (sin text),
+// el payload thinking sobrescribe el draft. Esto cubre el caso
+// de mensajes donde el assistant razona largo pero no produce
+// respuesta visible — antes se persistía pensando corrupto,
+// ahora se persiste el thinking completo del payload.
+func TestMaterializeEvent_MessageEnd_PayloadThinkingOverridesDraft(t *testing.T) {
+	defer resetRuntimeState(t)
+	setTempDirs(t)
+	const thinkingFull = "Análisis completo del usuario"
+	const textFull = "respuesta final correcta"
+	MaterializeEvent("s1", 1, Event{Type: "message_start", Payload: json.RawMessage(`{}`)})
+	MaterializeEvent("s1", 2, Event{Type: "message_update", Payload: json.RawMessage(`{"assistantMessageEvent":{"type":"thinking_delta","delta":"Análisis  "}`)})
+	MaterializeEvent("s1", 3, Event{Type: "message_update", Payload: json.RawMessage(`{"assistantMessageEvent":{"type":"thinking_delta","delta":" parcial"}`)})
+	MaterializeEvent("s1", 4, Event{Type: "message_update", Payload: json.RawMessage(`{"assistantMessageEvent":{"type":"text_delta","delta":"respuesta  "}`)})
+	MaterializeEvent("s1", 5, Event{Type: "message_update", Payload: json.RawMessage(`{"assistantMessageEvent":{"type":"text_delta","delta":" vieja "}`)})
+	endPayload := []byte(`{"message":{"role":"assistant","content":[{"type":"thinking","thinking":"` + thinkingFull + `"},{"type":"text","text":"` + textFull + `"}]}}`)
+	MaterializeEvent("s1", 6, Event{Type: "message_end", Payload: endPayload})
+	items, _ := readConversationTranscript("s1")
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d: %+v", len(items), items)
+	}
+	var thinking, text string
+	for _, it := range items {
+		switch it.Kind {
+		case "thinking":
+			thinking = it.Text
+		case "assistant":
+			text = it.Text
+		}
+	}
+	if thinking != thinkingFull {
+		t.Fatalf("thinking = %q, want %q", thinking, thinkingFull)
+	}
+	if text != textFull {
+		t.Fatalf("text = %q, want %q", text, textFull)
+	}
+}
+
+// ponytail: si message_end no trae payload con message.content
+// (eventos viejos, tests sintéticos), caemos al draft como
+// antes. Esto preserva el contrato de los tests existentes.
+func TestExtractAssistantContentFromPayload_ToolResultIgnored(t *testing.T) {
+	// ponytail: pi emite message_end también para mensajes
+	// con role=toolResult (el resultado de la tool se envía
+	// dos veces). Sin el filtro de role, el contenido se
+	// extrae como assistant y se duplica el tool_result que
+	// ya capturamos por la otra vía (tool_execution_end).
+	type want struct {
+		text, thinking string
+		hasMessage     bool
+		role           string
+	}
+	cases := []struct {
+		name    string
+		payload string
+		want    want
+	}{
+		{
+			name:    "toolResult role",
+			payload: `{"message":{"role":"toolResult","toolCallId":"abc","content":[{"type":"text","text":"output de la tool"}]}}`,
+			want:    want{text: "", thinking: "", hasMessage: true, role: "toolResult"},
+		},
+		{
+			name:    "user role",
+			payload: `{"message":{"role":"user","content":[{"type":"text","text":"hola"}]}}`,
+			want:    want{text: "", thinking: "", hasMessage: true, role: "user"},
+		},
+		{
+			name:    "assistant role with text",
+			payload: `{"message":{"role":"assistant","content":[{"type":"text","text":"respuesta"}]}}`,
+			want:    want{text: "respuesta", thinking: "", hasMessage: true, role: "assistant"},
+		},
+		{
+			name:    "assistant role case insensitive",
+			payload: `{"message":{"role":"Assistant","content":[{"type":"text","text":"resp"}]}}`,
+			want:    want{text: "resp", thinking: "", hasMessage: true, role: "Assistant"},
+		},
+		{
+			name:    "assistant with thinking and text",
+			payload: `{"message":{"role":"assistant","content":[{"type":"thinking","thinking":"razonamiento"},{"type":"text","text":"respuesta"}]}}`,
+			want:    want{text: "respuesta", thinking: "razonamiento", hasMessage: true, role: "assistant"},
+		},
+		{
+			name:    "empty payload",
+			payload: ``,
+			want:    want{text: "", thinking: "", hasMessage: false, role: ""},
+		},
+		{
+			name:    "invalid JSON",
+			payload: `not-json`,
+			want:    want{text: "", thinking: "", hasMessage: false, role: ""},
+		},
+		{
+			name:    "payload sin message field",
+			payload: `{"type":"message_end"}`,
+			want:    want{text: "", thinking: "", hasMessage: false, role: ""},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			gotText, gotThinking, gotHasMessage, gotRole := extractAssistantContentFromPayload(json.RawMessage(c.payload))
+			if gotText != c.want.text || gotThinking != c.want.thinking || gotHasMessage != c.want.hasMessage || gotRole != c.want.role {
+				t.Fatalf("got (%q, %q, %v, %q), want (%q, %q, %v, %q)",
+					gotText, gotThinking, gotHasMessage, gotRole,
+					c.want.text, c.want.thinking, c.want.hasMessage, c.want.role)
+			}
+		})
+	}
+}
+
+// ponytail: regression para la duplicación de tool_result como
+// assistant. Simula la secuencia real de pi: tool_execution_end
+// (que persistimos como tool_result) seguido de message_end con
+// role=toolResult (que pi emite además). Sin el filtro de role,
+// el contenido se persiste como assistant duplicando el tool
+// result. Con el fix, el draft se cae porque role!=assistant.
+func TestMaterializeEvent_MessageEnd_ToolResultRoleDoesNotDuplicateAsAssistant(t *testing.T) {
+	defer resetRuntimeState(t)
+	setTempDirs(t)
+	const toolOutput = "Successfully wrote 7885 bytes to /tmp/x.md"
+	MaterializeEvent("s1", 1, Event{Type: "message_start", Payload: json.RawMessage(`{}`)})
+	MaterializeEvent("s1", 2, Event{Type: "message_update", Payload: json.RawMessage(`{"assistantMessageEvent":{"type":"text_delta","delta":"draft previo"}}`)})
+	// tool_execution_end: persiste como tool_result.
+	MaterializeEvent("s1", 3, Event{Type: "tool_execution_end", Payload: json.RawMessage(`{"toolName":"write","result":{"content":[{"type":"text","text":"` + toolOutput + `"}]}}`)})
+	// message_end con role=toolResult: NO debe crear un assistant con ese contenido.
+	MaterializeEvent("s1", 4, Event{Type: "message_end", Payload: json.RawMessage(`{"message":{"role":"toolResult","content":[{"type":"text","text":"` + toolOutput + `"}]}}`)})
+	items, _ := readConversationTranscript("s1")
+	asstCount := 0
+	toolResultCount := 0
+	for _, it := range items {
+		switch it.Kind {
+		case "assistant":
+			asstCount++
+			if strings.Contains(it.Text, toolOutput) {
+				t.Fatalf("assistant item contains tool output (duplicación): %q", it.Text)
+			}
+		case "tool_result":
+			toolResultCount++
+			if it.Text != toolOutput {
+				t.Fatalf("tool_result text = %q, want %q", it.Text, toolOutput)
+			}
+		}
+	}
+	if asstCount != 0 {
+		t.Fatalf("expected 0 assistant items, got %d. El message_end con role=toolResult se está persistiendo como assistant.", asstCount)
+	}
+	if toolResultCount != 1 {
+		t.Fatalf("expected 1 tool_result, got %d", toolResultCount)
 	}
 }
 
@@ -474,32 +604,84 @@ func TestRebuildConversation_Empty(t *testing.T) {
 	}
 }
 
-func TestRebuildConversationFromRuntimeRecords_AllPaths(t *testing.T) {
-	records := []RuntimeEventRecord{
-		{Offset: 1, Payload: json.RawMessage(`{"type":"user_prompt","payload":{"text":"hi"}}`)},
-		{Offset: 2, Payload: json.RawMessage(`{"type":"message_start","payload":{"message":{"role":"assistant"}}}`)},
-		{Offset: 3, Payload: json.RawMessage(`{"type":"message_start","payload":{"message":{"role":"assistant","errorMessage":"failed","stopReason":"insufficient_credits"}}}`)},
-		{Offset: 4, Payload: json.RawMessage(`{"type":"message_update","payload":{"assistantMessageEvent":{"type":"text_delta","delta":"hola "}}}`)},
-		{Offset: 5, Payload: json.RawMessage(`{"type":"message_update","payload":{"assistantMessageEvent":{"type":"other","delta":"skip"}}}`)},
-		{Offset: 6, Payload: json.RawMessage(`{"type":"message_update","payload":{"assistantMessageEvent":{"type":"text_delta","delta":"mundo"}}}`)},
-		{Offset: 7, Payload: json.RawMessage(`{"type":"message_end"}`)},
-		{Offset: 8, Payload: json.RawMessage(`{"type":"tool_execution_start","payload":{"toolName":"","type":"bash","args":{}}}`)},
-		{Offset: 9, Payload: json.RawMessage(`{"type":"tool_execution_start","payload":"not-json"}`)},
-		{Offset: 10, Payload: json.RawMessage(`{"type":"tool_execution_start","payload":"not-json-2"}`)},
-		{Offset: 11, Payload: json.RawMessage(`{"type":"runtime_error","payload":{"reason":"oops"}}`)},
-		{Offset: 12, Payload: json.RawMessage(`{"type":"runtime_exit","payload":{"message":"killed"}}`)},
-		{Offset: 13, Payload: json.RawMessage(`{"type":"runtime_error","payload":{}}`)},
-		{Offset: 14, Payload: json.RawMessage(`{"type":"unknown_event_type"}`)},
-		{Offset: 15, Payload: json.RawMessage(`{"type":"user_prompt","payload":{}}`)},
-		{Offset: 16, Payload: json.RawMessage(`{"type":"user_prompt","payload":"not-json"}`)},
-		{Offset: 17, Payload: json.RawMessage(`not-json`)},
-		{Offset: 18, Payload: json.RawMessage(`not-json-2`)},
-		{Offset: 19, Payload: json.RawMessage(`{"type":"message_update","payload":"not-json"}`)},
-		{Offset: 20, Payload: json.RawMessage(`{"type":"runtime_error","payload":"not-an-object"}`)},
-		{Offset: 21, Payload: json.RawMessage(`{"type":"stderr","payload":"not-an-object"}`)},
-		{Offset: 22, Payload: json.RawMessage(`{"type":"runtime_exit","payload":"not-an-object"}`)},
+// ponytail: regression para el mismo bug del mergeAssistantDelta
+// pero en el path de replay desde PostgreSQL. Cuando el journal
+// tiene message_end con el contenido completo en
+// payload.message.content, ese texto es la fuente de verdad y
+// debe sobrescribir el draft acumulado por los text_delta
+// previos. Sin esto, los replays siguen produciendo texto
+// corrupto aunque arreglemos MaterializeEvent.
+func TestRebuildConversationFromRuntimeRecords_PayloadOverridesDraft(t *testing.T) {
+	const fullText = "Agent               Docs" // 15 espacios entre Agent y Docs
+	entries := []historyJournalEntry{
+		{Seq: 1, Payload: json.RawMessage(`{"type":"message_start","payload":{"message":{"role":"assistant"}}}`)},
+		// text_delta que triggerea el bug de overlap=1 entre
+		// espacios: current termina en espacio, delta empieza
+		// en espacio. El draft queda con 14 espacios en vez
+		// de 15.
+		{Seq: 2, Payload: json.RawMessage(`{"type":"message_update","payload":{"assistantMessageEvent":{"type":"text_delta","delta":"Agent              "}}}`)},
+		{Seq: 3, Payload: json.RawMessage(`{"type":"message_update","payload":{"assistantMessageEvent":{"type":"text_delta","delta":" Docs           "}}}`)},
+		// message_end con payload completo (15 espacios). Debe
+		// sobrescribir el draft corrupto.
+		{Seq: 4, Payload: json.RawMessage(`{"type":"message_end","payload":{"message":{"role":"assistant","content":[{"type":"text","text":"` + fullText + `"}]}}}`)},
 	}
-	items := rebuildConversationFromRuntimeRecords(records)
+	items := rebuildConversation(entries)
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d: %+v", len(items), items)
+	}
+	if items[0].Kind != "assistant" {
+		t.Fatalf("kind = %q, want assistant", items[0].Kind)
+	}
+	if items[0].Text != fullText {
+		t.Fatalf("text = %q (%d chars), want %q (%d chars). El merge bug corrompió el replay y el payload no lo sobrescribió.",
+			items[0].Text, len(items[0].Text), fullText, len(fullText))
+	}
+}
+
+// ponytail: si message_end en el journal NO tiene payload con
+// message.content (eventos viejos, journal corrupto), el replay
+// cae al draft acumulado. Preserva la lógica existente.
+func TestRebuildConversationFromRuntimeRecords_FallbackToDraftWhenNoPayload(t *testing.T) {
+	entries := []historyJournalEntry{
+		{Seq: 1, Payload: json.RawMessage(`{"type":"message_start","payload":{"message":{"role":"assistant"}}}`)},
+		{Seq: 2, Payload: json.RawMessage(`{"type":"message_update","payload":{"assistantMessageEvent":{"type":"text_delta","delta":"draft text"}}}`)},
+		{Seq: 3, Payload: json.RawMessage(`{"type":"message_end"}`)},
+	}
+	items := rebuildConversation(entries)
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
+	}
+	if items[0].Text != "draft text" {
+		t.Fatalf("text = %q, want draft text (fallback to draft)", items[0].Text)
+	}
+}
+
+func TestRebuildConversationFromRuntimeRecords_AllPaths(t *testing.T) {
+	entries := []historyJournalEntry{
+		{Seq: 1, Payload: json.RawMessage(`{"type":"user_prompt","payload":{"text":"hi"}}`)},
+		{Seq: 2, Payload: json.RawMessage(`{"type":"message_start","payload":{"message":{"role":"assistant"}}}`)},
+		{Seq: 3, Payload: json.RawMessage(`{"type":"message_start","payload":{"message":{"role":"assistant","errorMessage":"failed","stopReason":"insufficient_credits"}}}`)},
+		{Seq: 4, Payload: json.RawMessage(`{"type":"message_update","payload":{"assistantMessageEvent":{"type":"text_delta","delta":"hola "}}}`)},
+		{Seq: 5, Payload: json.RawMessage(`{"type":"message_update","payload":{"assistantMessageEvent":{"type":"other","delta":"skip"}}}`)},
+		{Seq: 6, Payload: json.RawMessage(`{"type":"message_update","payload":{"assistantMessageEvent":{"type":"text_delta","delta":"mundo"}}}`)},
+		{Seq: 7, Payload: json.RawMessage(`{"type":"message_end"}`)},
+		{Seq: 8, Payload: json.RawMessage(`{"type":"tool_execution_start","payload":{"toolName":"","type":"bash","args":{}}}`)},
+		{Seq: 9, Payload: json.RawMessage(`{"type":"tool_execution_start","payload":"not-json"}`)},
+		{Seq: 10, Payload: json.RawMessage(`{"type":"tool_execution_start","payload":"not-json-2"}`)},
+		{Seq: 11, Payload: json.RawMessage(`{"type":"runtime_error","payload":{"reason":"oops"}}`)},
+		{Seq: 12, Payload: json.RawMessage(`{"type":"runtime_exit","payload":{"message":"killed"}}`)},
+		{Seq: 13, Payload: json.RawMessage(`{"type":"runtime_error","payload":{}}`)},
+		{Seq: 14, Payload: json.RawMessage(`{"type":"unknown_event_type"}`)},
+		{Seq: 15, Payload: json.RawMessage(`{"type":"user_prompt","payload":{}}`)},
+		{Seq: 16, Payload: json.RawMessage(`{"type":"user_prompt","payload":"not-json"}`)},
+		{Seq: 17, Payload: json.RawMessage(`not-json`)},
+		{Seq: 18, Payload: json.RawMessage(`not-json-2`)},
+		{Seq: 19, Payload: json.RawMessage(`{"type":"message_update","payload":"not-json"}`)},
+		{Seq: 20, Payload: json.RawMessage(`{"type":"runtime_error","payload":"not-an-object"}`)},
+		{Seq: 21, Payload: json.RawMessage(`{"type":"stderr","payload":"not-an-object"}`)},
+		{Seq: 22, Payload: json.RawMessage(`{"type":"runtime_exit","payload":"not-an-object"}`)},
+	}
+	items := rebuildConversation(entries)
 	if len(items) < 1 {
 		t.Fatalf("expected items, got %+v", items)
 	}
@@ -726,5 +908,129 @@ func TestRewriteTranscript_MarshalError(t *testing.T) {
 	bad := []ConversationItem{{Kind: "user", Args: json.RawMessage("not-valid-json")}}
 	if err := rewriteTranscript("s1", bad); err == nil {
 		t.Fatal("expected marshal error when item contains invalid JSON")
+	}
+}
+
+// ponytail: regresión para auto-recuperación de transcripts
+// corruptos por el bug del mergeAssistantDelta. El transcript
+// tiene un assistant corrupto (texto corto) y el pi session
+// file tiene el texto completo. LoadConversationHistory debe
+// preferir el pi file cuando detecta la divergencia.
+func TestLoadHistory_AutoRecoversCorruptedAssistantFromPiFile(t *testing.T) {
+	defer resetRuntimeState(t)
+	setTempDirs(t)
+
+	// Transcript con un assistant corrupto (texto corto, como
+	// quedaría después del bug del merge).
+	if err := appendTranscriptItem("s1", ConversationItem{Seq: 1, Kind: "user", Text: "hola"}); err != nil {
+		t.Fatal(err)
+	}
+	corruptedText := strings.Repeat("x", 500) // ~50% del real
+	if err := appendTranscriptItem("s1", ConversationItem{Seq: 2, Kind: "assistant", Text: corruptedText}); err != nil {
+		t.Fatal(err)
+	}
+
+	// pi session file con el texto completo.
+	fullText := strings.Repeat("a", 1000)
+	piDir := piSessionPath("s1")
+	// piSessionPath devuelve la ruta completa; extraemos el dir.
+	if err := os.MkdirAll(filepath.Dir(piDir), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	piContent := `{"type":"message","id":"m1","message":{"role":"assistant","content":[{"type":"text","text":"` + fullText + `"}]}}
+`
+	if err := os.WriteFile(piDir, []byte(piContent), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := LoadConversationHistoryCtx(context.Background(), "s1", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var asstText string
+	for _, it := range got.Items {
+		if it.Kind == "assistant" {
+			asstText = it.Text
+		}
+	}
+	if asstText != fullText {
+		t.Fatalf("assistant text = %d chars, want %d. La auto-recuperación del pi file no se activó.",
+			len(asstText), len(fullText))
+	}
+}
+
+// ponytail: si el transcript y el pi file tienen assistant
+// del mismo largo (o el del transcript es ≥70% del pi file),
+// NO activamos la recuperación. Evita falsos positivos para
+// resúmenes cortos legítimos.
+func TestLoadHistory_DoesNotRecoverWhenAssistantLooksComplete(t *testing.T) {
+	defer resetRuntimeState(t)
+	setTempDirs(t)
+
+	completeText := strings.Repeat("z", 100)
+	if err := appendTranscriptItem("s1", ConversationItem{Seq: 1, Kind: "assistant", Text: completeText}); err != nil {
+		t.Fatal(err)
+	}
+
+	piDir := piSessionPath("s1")
+	if err := os.MkdirAll(filepath.Dir(piDir), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	// pi file con texto MUY parecido en largo (95% del real).
+	piText := strings.Repeat("z", 95)
+	piContent := `{"type":"message","id":"m1","message":{"role":"assistant","content":[{"type":"text","text":"` + piText + `"}]}}
+`
+	if err := os.WriteFile(piDir, []byte(piContent), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := LoadConversationHistoryCtx(context.Background(), "s1", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var asstText string
+	for _, it := range got.Items {
+		if it.Kind == "assistant" {
+			asstText = it.Text
+		}
+	}
+	// Esperamos el del transcript (100 chars), NO el del pi
+	// file (95 chars).
+	if len(asstText) != 100 {
+		t.Fatalf("assistant text len = %d, want 100. La recuperación se activó cuando no debía.",
+			len(asstText))
+	}
+}
+
+// ponytail: regresión para el bug del rebuild path que no
+// extraía los tool_result porque el unmarshal usaba
+// record.Payload (event JSON entero) en vez de event.Payload
+// (inner payload ya extraído). Sin este fix, el rebuild
+// desde PostgreSQL/journal producía tool items sin sus
+// tool_result companions.
+func TestRebuildConversationFromRuntimeRecords_ToolExecutionEndExtractsResult(t *testing.T) {
+	const toolOutput = "Successfully wrote 7885 bytes to /tmp/x.md"
+	entries := []historyJournalEntry{
+		{Seq: 1, Payload: json.RawMessage(`{"type":"message_start","payload":{"message":{"role":"assistant"}}}`)},
+		{Seq: 2, Payload: json.RawMessage(`{"type":"tool_execution_start","payload":{"toolName":"write","args":{"path":"/tmp/x.md"}}}`)},
+		{Seq: 3, Payload: json.RawMessage(`{"type":"tool_execution_end","payload":{"toolName":"write","result":{"content":[{"type":"text","text":"` + toolOutput + `"}]}}}`)},
+	}
+	items := rebuildConversation(entries)
+	var got *ConversationItem
+	for i := range items {
+		if items[i].Kind == "tool_result" {
+			got = &items[i]
+			break
+		}
+	}
+	if got == nil {
+		t.Fatalf("expected tool_result item, got items=%+v", items)
+	}
+	if got.Text != toolOutput {
+		t.Fatalf("tool_result text = %q, want %q. El unmarshal del payload anidado falló.",
+			got.Text, toolOutput)
+	}
+	if got.ToolName != "write" {
+		t.Fatalf("tool_result toolName = %q, want write", got.ToolName)
 	}
 }

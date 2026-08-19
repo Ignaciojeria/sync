@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	topologyapp "fixtests1/internal/topology/application"
+	topologyapp "gitinittest5/internal/topology/application"
 )
 
 type SyncSessionsStore struct {

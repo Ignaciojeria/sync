@@ -1,0 +1,404 @@
+package ui
+
+import (
+	backlogapp "gitinittest5/internal/backlog/application"
+)
+
+// SwapKind controla cómo el componente Card se "cablea" para HTMX.
+type SwapKind int
+
+const (
+	SwapNone SwapKind = iota
+	SwapInsert
+	SwapReplace
+)
+
+// moveButtonAttrs inyecta los hx-* de un botón "mover tarjeta a {to}".
+func moveButtonAttrs(previewPrefix, slug string, from, to backlogapp.Status) templ.Attributes {
+	return templ.Attributes{
+		"hx-post":   appPath(previewPrefix, "/backlog/cards/"+slug+"/move"),
+		"hx-vals":   `{"to":"` + string(to) + `"}`,
+		"hx-target": "#" + CardID(slug),
+		"hx-swap":   "outerHTML",
+		"title":     "Mover a " + backlogapp.ColumnTitle(to),
+	}
+}
+
+// priorityButtonAttrs inyecta los hx-* de un botón "cambiar prioridad".
+func priorityButtonAttrs(previewPrefix, slug string, delta int) templ.Attributes {
+	return templ.Attributes{
+		"hx-post":   appPath(previewPrefix, "/backlog/cards/"+slug+"/priority"),
+		"hx-vals":   `{"delta":"` + intToStr(delta) + `"}`,
+		"hx-target": "#" + CardID(slug),
+		"hx-swap":   "outerHTML",
+	}
+}
+
+// deleteButtonAttrs inyecta los hx-* de un botón "eliminar tarjeta".
+func deleteButtonAttrs(previewPrefix, slug string) templ.Attributes {
+	return templ.Attributes{
+		"hx-delete":  appPath(previewPrefix, "/backlog/cards/"+slug),
+		"hx-target":  "#" + CardID(slug),
+		"hx-swap":    "outerHTML swap:1s",
+		"hx-confirm": "¿Eliminar esta tarjeta?",
+	}
+}
+
+// openDetailAttrs inyecta los hx-* que abren el modal de detalle de
+// la tarjeta al hacer click en el área del título/descripción.
+func openDetailAttrs(previewPrefix, slug string) templ.Attributes {
+	return templ.Attributes{
+		"hx-get":     appPath(previewPrefix, "/backlog/cards/"+slug+"/detail"),
+		"hx-target":  "#backlog-card-detail-content",
+		"hx-swap":    "innerHTML",
+		"hx-trigger": "click, keyup[key=='Enter'] from:[data-card-trigger]",
+	}
+}
+
+func intToStr(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	var buf [20]byte
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
+}
+
+// Board renderiza el tablero kanban completo.
+templ Board(board BoardView, previewPrefix string) {
+	<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4" id="backlog-board">
+		for _, col := range board.Columns {
+			@Column(col, previewPrefix)
+		}
+	</div>
+	@CardDetailModalShell()
+}
+
+// Column renderiza una columna.
+templ Column(col ColumnView, previewPrefix string) {
+	<section
+		class="card bg-base-100 border border-base-300/60 shadow-sm flex flex-col min-h-[12rem]"
+		id={ ColumnID(col.Status) }
+	>
+		<header class="flex items-center justify-between px-3 py-2 border-b border-base-300/60">
+			<h2 class="text-sm font-semibold tracking-tight flex items-center gap-1.5">
+				<span class={ statusDotClass(col.Status) }></span>
+				<span>{ col.Title }</span>
+			</h2>
+			<span class="badge badge-ghost badge-sm">{ len(col.Cards) }</span>
+		</header>
+		if len(col.Cards) == 0 {
+			<div class="flex-1 flex items-center justify-center text-xs text-base-content/40 px-3 py-6">
+				Sin tarjetas
+			</div>
+		} else {
+			<ul
+				class="flex-1 flex flex-col gap-2 p-2 min-h-[6rem]"
+				id={ ColumnListID(col.Status) }
+			>
+				for _, card := range col.Cards {
+					@Card(card, previewPrefix, SwapNone)
+				}
+			</ul>
+		}
+	</section>
+}
+
+// Card renderiza una tarjeta individual. El área del título +
+// descripción es clickeable y abre la vista de detalle (modal) vía
+// HTMX; los botones de acción detienen la propagación para que no
+// disparen el modal.
+//
+// Highlights de legibilidad:
+//   - Borde izquierdo grueso coloreado por prioridad (P0/P1) para
+//     señalización visual rápida.
+//   - Cards en `done` se atenúan.
+//   - Hover: borde primario + sombra suave.
+//   - Title con tipografía mayor y consistente.
+templ Card(card CardView, previewPrefix string, swap SwapKind) {
+	<li
+		id={ CardID(card.Slug) }
+		if swap == SwapInsert {
+			hx-swap-oob={ "beforeend:#" + ColumnListID(card.Status) }
+		}
+		if swap == SwapReplace {
+			hx-swap-oob={ "outerHTML:#" + CardID(card.Slug) }
+		}
+		class={ cardAccentClass(card) }
+	>
+		<div
+			data-card-trigger
+			tabindex="0"
+			role="button"
+			aria-label={ "Abrir detalle de " + card.Title }
+			class="cursor-pointer p-2.5 flex flex-col gap-1.5 outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-t-box"
+			{ openDetailAttrs(previewPrefix, card.Slug)... }
+		>
+			@cardHeader(card)
+			if card.Description != "" {
+				<p class="text-[13px] leading-snug text-base-content/70 break-words line-clamp-3">
+					{ card.Description }
+				</p>
+			}
+		</div>
+		if previewPrefix != "" || card.Timestamp != "" || hasMetaFooter(card) {
+			<div class="flex items-center justify-between gap-1 px-2.5 pb-2">
+				<div class="flex items-center gap-0.5" onclick="event.stopPropagation()" onkeydown="event.stopPropagation()">
+					if previewPrefix != "" {
+						@cardActions(card, previewPrefix)
+					}
+				</div>
+				<div class="flex items-center gap-2">
+					if card.Tags != nil && len(card.Tags) > 0 {
+						<span class="flex items-center gap-0.5">
+							for i, tag := range card.Tags {
+								if i < 2 {
+									<span class="badge badge-ghost badge-xs">{ tag }</span>
+								}
+							}
+							if len(card.Tags) > 2 {
+								<span class="text-[10px] text-base-content/50 font-medium" title={ tagTooltip(card.Tags) }>
+									+{ intToStr(len(card.Tags) - 2) }
+								</span>
+							}
+						</span>
+					}
+					if card.Timestamp != "" {
+						<span class="text-[10px] text-base-content/45 font-mono" title={ card.Timestamp }>
+							{ FormatTimestamp(card.Timestamp) }
+						</span>
+					}
+				</div>
+			</div>
+		}
+	</li>
+}
+
+func hasMetaFooter(card CardView) bool {
+	return card.Timestamp != "" || len(card.Tags) > 0
+}
+
+// cardAccentClass combina el acento de prioridad y el atenuado de
+// "done" para que el board comunique urgencia y completado a simple
+// vista sin obligar a leer el badge.
+func cardAccentClass(card CardView) string {
+	base := "group rounded-box border bg-base-100 hover:border-primary/60 hover:shadow-md focus-within:border-primary/60 focus-within:shadow-md transition-all duration-150"
+	border := "border-base-300/60"
+	switch card.Priority {
+	case backlogapp.PriorityP0:
+		border = "border-l-4 border-l-error border-base-300/60"
+	case backlogapp.PriorityP1:
+		border = "border-l-4 border-l-warning border-base-300/60"
+	}
+	if card.Status == backlogapp.StatusDone {
+		base = "group rounded-box border bg-base-100/70 opacity-70 hover:opacity-95 hover:border-primary/60 hover:shadow-md transition-all duration-150"
+	}
+	return base + " " + border
+}
+
+// tagTooltip arma un string con todas las tags (para el title del "+N").
+func tagTooltip(tags []string) string {
+	if len(tags) == 0 {
+		return ""
+	}
+	out := ""
+	for i, t := range tags {
+		if i > 0 {
+			out += ", "
+		}
+		out += t
+	}
+	return out
+}
+
+// cardHeader es el bloque de título + badges.
+templ cardHeader(card CardView) {
+	<div class="flex items-start justify-between gap-2">
+		<h3 class={ cardTitleClass(card.Status) + " flex-1 min-w-0" }>{ card.Title }</h3>
+		<div class="flex items-center gap-1 flex-shrink-0">
+			if card.Source == "agent" {
+				<span
+					class="badge badge-outline badge-xs font-semibold tracking-wide"
+					title="Tarjeta redactada por el agente"
+				>IA</span>
+			}
+			<span
+				class={ backlogapp.PriorityBadgeClass(card.Priority) }
+				title={ "Prioridad " + backlogapp.PriorityLabel(card.Priority) }
+			>
+				{ backlogapp.PriorityLabel(card.Priority) }
+			</span>
+		</div>
+	</div>
+}
+
+// cardTitleClass: tipografía del título según el estado. Las cards
+// completadas se tachan suavemente para reforzar que están cerradas.
+func cardTitleClass(s backlogapp.Status) string {
+	if s == backlogapp.StatusDone {
+		return "text-[15px] font-semibold leading-snug break-words line-through decoration-base-content/30"
+	}
+	return "text-[15px] font-semibold leading-snug break-words text-base-content"
+}
+
+// cardActions renderiza los botones de mover / prioridad / borrar.
+// Vive fuera del área que abre el modal (data-card-trigger) para
+// mantener la separación semántica.
+templ cardActions(card CardView, previewPrefix string) {
+	if canMoveLeft(card.Status) {
+		<button
+			class="btn btn-ghost btn-xs btn-square"
+			aria-label={ "Mover a " + backlogapp.ColumnTitle(prevStatus(card.Status)) }
+			{ moveButtonAttrs(previewPrefix, card.Slug, card.Status, prevStatus(card.Status))... }
+		>
+			←
+		</button>
+	}
+	if canMoveRight(card.Status) {
+		<button
+			class="btn btn-ghost btn-xs btn-square"
+			aria-label={ "Mover a " + backlogapp.ColumnTitle(nextStatus(card.Status)) }
+			{ moveButtonAttrs(previewPrefix, card.Slug, card.Status, nextStatus(card.Status))... }
+		>
+			→
+		</button>
+	}
+	if card.Priority != backlogapp.PriorityP0 {
+		<button
+			class="btn btn-ghost btn-xs btn-square"
+			{ priorityButtonAttrs(previewPrefix, card.Slug, -1)... }
+			title="Subir prioridad"
+			aria-label="Subir prioridad"
+		>
+			↑
+		</button>
+	}
+	if card.Priority != backlogapp.PriorityP3 {
+		<button
+			class="btn btn-ghost btn-xs btn-square"
+			{ priorityButtonAttrs(previewPrefix, card.Slug, +1)... }
+			title="Bajar prioridad"
+			aria-label="Bajar prioridad"
+		>
+			↓
+		</button>
+	}
+	<button
+		class="btn btn-ghost btn-xs btn-square text-error"
+		{ deleteButtonAttrs(previewPrefix, card.Slug)... }
+		title="Eliminar"
+		aria-label="Eliminar tarjeta"
+	>
+		×
+	</button>
+}
+
+// CardDetailModalShell monta el <dialog> que el header de cada card
+// carga vía HTMX. Vive en Board (no en Page) para que esté disponible
+// siempre que el board esté montado, incluyendo swaps OOB.
+templ CardDetailModalShell() {
+	<dialog id="backlog-card-detail" class="modal" aria-labelledby="backlog-card-detail-title">
+		<div class="modal-box max-w-3xl bg-base-100/98 backdrop-blur">
+			<form method="dialog" class="absolute right-3 top-3">
+				<button class="btn btn-sm btn-circle btn-ghost" aria-label="Cerrar" title="Cerrar (Esc)">✕</button>
+			</form>
+			<div id="backlog-card-detail-content" class="min-h-[8rem]">
+				<div class="flex items-center justify-center py-12 text-base-content/50 text-sm">
+					<span class="loading loading-spinner loading-sm mr-2"></span>
+					Cargando detalle…
+				</div>
+			</div>
+		</div>
+		<form method="dialog" class="modal-backdrop">
+			<button aria-label="Cerrar">close</button>
+		</form>
+	</dialog>
+	<script>
+		(function () {
+			var dlg = document.getElementById('backlog-card-detail');
+			if (!dlg || dlg.dataset.bound === '1') return;
+			dlg.dataset.bound = '1';
+			var content = document.getElementById('backlog-card-detail-content');
+			// Abrir el modal cada vez que su contenido es refrescado
+			// por HTMX. htmx:afterSwap burbujea desde el target.
+			document.body.addEventListener('htmx:afterSwap', function (e) {
+				if (e.target === content && !dlg.open) {
+					dlg.showModal();
+				}
+			});
+			// Si el detail carga antes de que el board esté en el
+			// DOM (deep link directo), abrirlo tras pintar.
+			document.body.addEventListener('htmx:load', function (e) {
+				if (e.target === content && !dlg.open && content.dataset.opened !== '1') {
+					content.dataset.opened = '1';
+					dlg.showModal();
+				}
+			});
+			// Las acciones (mover, prioridad, eliminar) viven dentro
+			// del modal. Tras cerrar el dialog dejamos el contenido
+			// listo para otra apertura, pero limpiamos datos de carga
+			// para no reabrir sin contenido nuevo.
+			dlg.addEventListener('close', function () {
+				content.removeAttribute('data-opened');
+			});
+			// Evitar propagación cuando se hace click sobre los
+			// botones de acción dentro del modal — los handlers
+			// hx-* ya tienen stopPropagation vía onclick inline, pero
+			// algunos browsers antiguos interpretan mejor este guard.
+			content.addEventListener('click', function (e) {
+				var btn = e.target.closest('button[hx-post], button[hx-delete]');
+				if (btn) e.stopPropagation();
+			}, true);
+		})();
+	</script>
+}
+
+// DeleteOutOfBand renderiza un template que elimina la tarjeta con
+// OOB-swap al recibirse como respuesta HTMX.
+templ DeleteOutOfBand(slug string) {
+	<template hx-swap-oob={ "delete:#" + CardID(slug) }></template>
+}
+
+func canMoveLeft(s backlogapp.Status) bool {
+	return s != backlogapp.StatusBacklog
+}
+
+func canMoveRight(s backlogapp.Status) bool {
+	return s != backlogapp.StatusDone
+}
+
+func prevStatus(s backlogapp.Status) backlogapp.Status {
+	for i, c := range backlogapp.ColumnOrder {
+		if c == s && i > 0 {
+			return backlogapp.ColumnOrder[i-1]
+		}
+	}
+	return s
+}
+
+func nextStatus(s backlogapp.Status) backlogapp.Status {
+	for i, c := range backlogapp.ColumnOrder {
+		if c == s && i < len(backlogapp.ColumnOrder)-1 {
+			return backlogapp.ColumnOrder[i+1]
+		}
+	}
+	return s
+}
+
+// navURL compone una URL app relativa respetando el prefijo de preview.
+func navURL(previewPrefix, path string) string {
+	return appPath(previewPrefix, path)
+}

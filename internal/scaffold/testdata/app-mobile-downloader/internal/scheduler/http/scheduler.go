@@ -4,10 +4,10 @@ import (
 	"log/slog"
 	"time"
 
-	schedulerapp "fixtests1/internal/scheduler/application"
-	schedulerpostgresql "fixtests1/internal/scheduler/infrastructure/postgresql"
-	"fixtests1/internal/shared"
-	sharedpostgresql "fixtests1/internal/shared/infrastructure/postgresql"
+	schedulerapp "gitinittest5/internal/scheduler/application"
+	schedulerpostgresql "gitinittest5/internal/scheduler/infrastructure/postgresql"
+	"gitinittest5/internal/shared"
+	sharedpostgresql "gitinittest5/internal/shared/infrastructure/postgresql"
 
 	"github.com/robfig/cron/v3"
 )

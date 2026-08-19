@@ -8,7 +8,7 @@ import (
 func TestNewConf(t *testing.T) {
 	once = sync.Once{}
 	t.Setenv("PORT", "9090")
-	t.Setenv("PROJECT_NAME", "fixtests1")
+	t.Setenv("PROJECT_NAME", "gitinittest5")
 	t.Setenv("DATABASE_URL", "postgres://example")
 	t.Setenv("OIDC_ISSUER", "https://issuer.example")
 	t.Setenv("OIDC_CLIENT_ID", "client-id")
@@ -24,7 +24,7 @@ func TestNewConf(t *testing.T) {
 	if conf.PORT != "9090" {
 		t.Fatalf("PORT = %q", conf.PORT)
 	}
-	if conf.PROJECT_NAME != "fixtests1" {
+	if conf.PROJECT_NAME != "gitinittest5" {
 		t.Fatalf("PROJECT_NAME = %q", conf.PROJECT_NAME)
 	}
 	if conf.DATABASE_URL != "postgres://example" {

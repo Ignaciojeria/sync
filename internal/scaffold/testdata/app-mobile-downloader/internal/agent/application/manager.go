@@ -25,6 +25,19 @@ var previewHealthcheckTimeout = 2 * time.Second
 // durante un send (ver pirpc.send). El caller puede decidir si reintentar.
 var errPromptTerminated = fmt.Errorf("agent runtime terminated by timeout")
 
+// ponytail: pi runtime rechaza nuevos prompts mientras está ocupado
+// con un tool. El wrapper Go lo intercepta y hace steer transparente
+// para que el cliente nunca vea ese error. Detectamos por substring
+// porque pi devuelve strings, no sentinels.
+func isAlreadyProcessing(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "already processing") ||
+		strings.Contains(text, "agent is already")
+}
+
 // ErrResumeUnavailable indica que el host no pudo reconstruir contexto
 // suficiente para retomar un turno existente de forma segura.
 var ErrResumeUnavailable = errors.New("agent resume unavailable")
@@ -68,6 +81,11 @@ type AgentService interface {
 	PromptRequest(ctx context.Context, id string, input PromptInput) error
 	Steer(ctx context.Context, id, message string) error
 	Abort(ctx context.Context, id string) error
+	// Regenerate re-envía el último prompt del user y borra
+	// las respuestas del assistant que vinieron después. El
+	// cliente recibe un envelope SSE kind="regenerate" con el
+	// seq del último user prompt para borrar los items del feed.
+	Regenerate(ctx context.Context, id string) error
 
 	// Subscribe devuelve un canal de eventos + cancel para SSE.
 	Subscribe(ctx context.Context, id string) (<-chan Event, func(), error)
@@ -106,9 +124,15 @@ const (
 )
 
 type PromptInput struct {
-	Message string
-	Action  PromptAction
-	TurnID  string
+	Message   string
+	Action    PromptAction
+	TurnID    string
+	// UserEmail identifica al humano que está chateando con el
+	// agente. Se usa para construir la MemoryKey del provider
+	// (mapea a un peer Honcho). Si está vacío, el provider no
+	// recibe contexto por prompt (comportamiento equivalente al
+	// noopProvider). El HTTP handler lo popula desde el JWT.
+	UserEmail string
 }
 
 const defaultTurnSteering = "Responde breve por defecto. Si el usuario pide opinión o contexto general, da un resumen corto y útil primero. Solo haz auditoría profunda si el usuario la pide explícitamente. No sigas investigando después de empezar la respuesta final salvo que expliques claramente por qué."
@@ -133,6 +157,8 @@ type Manager struct {
 	destroySession func(context.Context, Session) error
 	applySession   func(context.Context, Session) (ApplyResult, error)
 	mergeSession   func(context.Context, Session) (MergeResult, error)
+	memory         MemoryProvider
+	memoryWorkspaceID string
 
 	mu               sync.Mutex
 	runtimes         map[string]*runtimeSlot
@@ -142,11 +168,31 @@ type Manager struct {
 }
 
 // runtimeSlot une un Runtime vivo con la metadata necesaria para
-// elegir quién se evicta cuando el pool se llena.
+// elegir quién se evicta cuando el pool se llena, y para
+// coordinar la inyección de memoria por turno.
 type runtimeSlot struct {
 	runtime        Runtime
 	lastUsedAt     time.Time
 	defaultSteered bool
+	// memorySteeredTurn es el TurnID del último prompt al que ya
+	// se le inyectó contexto de memoria. Si el próximo PromptInput
+	// trae el mismo TurnID, no re-steereamos. Se resetea cuando
+	// llega un TurnID distinto.
+	memorySteeredTurn string
+	// lastHonchoSeq es el Seq máximo del ConversationItem que ya
+	// flusheamos a Honcho vía Remember. Items con seq <= a este
+	// no se reenvían. Vive en el slot porque la metadata se
+	// pierde al evictar; en ese caso el próximo flush
+	// potencialmente duplica, pero Honcho deduplica
+	// semánticamente vía deriver.
+	lastHonchoSeq     uint64
+	lastHonchoItemIdx int // cantidad de items ya enviados (maneja el caso seq=0 del MaterializeUserPrompt)
+	// flushInProgress evita que dos goroutines de flush corran
+	// en paralelo para el mismo slot. turn_end y agent_end
+	// pueden dispararse casi simultáneos; sin este flag, las dos
+	// ven lastHonchoItemIdx=0 antes de que la primera setee el
+	// marker y dupican todos los items a Honcho.
+	flushInProgress bool
 }
 
 func NewManager(store SessionStore, runner Runner) *Manager {
@@ -156,11 +202,44 @@ func NewManager(store SessionStore, runner Runner) *Manager {
 		now:              time.Now,
 		newID:            defaultNewID,
 		poolSize:         defaultRuntimePoolSize,
+		memory:           noopProvider{},
 		runtimes:         map[string]*runtimeSlot{},
 		subscribers:      map[string]map[chan Event]struct{}{},
 		assistantPreview: map[string]string{},
 		pendingInputs:    map[string]PromptInput{},
 	}
+}
+
+// WithMemory reemplaza el provider de memoria. Default: noopProvider{}.
+// Pensado para usar en main antes del primer prompt; después de eso
+// el provider es inmutable.
+func (m *Manager) WithMemory(p MemoryProvider) *Manager {
+	if p == nil {
+		p = noopProvider{}
+	}
+	m.memory = p
+	return m
+}
+
+// WithMemoryWorkspace setea el Honcho WorkspaceID (u otro
+// identificador de tenant) usado para construir la MemoryKey de
+// cada prompt. Default: vacío, en cuyo caso el provider no se
+// llama (equivale a noopProvider).
+func (m *Manager) WithMemoryWorkspace(id string) *Manager {
+	m.memoryWorkspaceID = strings.TrimSpace(id)
+	return m
+}
+
+// hasRealMemory devuelve true cuando el provider configurado no
+// es el noop default. Usado por ensureRuntime para setear
+// DisableNativeHonchoTools=true en el StartSpec sólo cuando
+// realmente hay un provider que enruta memoria desde el host.
+func (m *Manager) hasRealMemory() bool {
+	if m.memory == nil {
+		return false
+	}
+	_, isNoop := m.memory.(noopProvider)
+	return !isNoop
 }
 
 func defaultNewID() string {
@@ -331,6 +410,14 @@ func (m *Manager) MergePreview(ctx context.Context, id string) (MergeResult, err
 			return MergeResult{}, err
 		}
 	}
+	// ponytail: "no changes" es un éxito sin integración real. No
+	// seteamos MergedAt/MergedCommit ni actualizamos branches (la
+	// sesión sigue disponible para merges futuros, y un eventual
+	// merge real los volverá a llenar). Devolvemos el resultado
+	// tal cual para que el bar muestre "Up to date".
+	if result.NoChanges {
+		return result, nil
+	}
 	session.MergedAt = ptrTime(m.now())
 	session.MergedCommit = strings.TrimSpace(result.Commit)
 	if strings.TrimSpace(result.BaseBranch) != "" {
@@ -353,6 +440,60 @@ func (m *Manager) MergePreview(ctx context.Context, id string) (MergeResult, err
 // Prompt disparará un ensureRuntime que spawnará un proceso nuevo.
 func (m *Manager) Prompt(ctx context.Context, id, message string) error {
 	return m.PromptRequest(ctx, id, PromptInput{Message: message})
+}
+
+// Regenerate re-envía el último prompt del user de la sesión,
+// borrando las respuestas del assistant que vinieron después.
+// El cliente V2 recibe un envelope SSE kind="regenerate" con
+// el seq del último user prompt; borra los items del feed con
+// seq mayor a ese, y los nuevos fragments del assistant
+// llegan con seqs nuevos que se renderizan normalmente.
+//
+// Limitaciones (M-C.2 simple):
+// - Solo funciona para el ÚLTIMO prompt del user. No se
+//   puede regenerar respuestas intermedias (más invasivo,
+//   requiere redesign del state machine).
+// - Los side effects de tools ejecutadas en el turno viejo
+//   (bash, write, etc) NO se rollbackean. El agente puede
+//   re-ejecutar tools side-effectful — para casos como
+//   "git commit" eso es problemático. Queda como
+//   responsabilidad del agente (y del user) validar el
+//   contexto antes de regenerar.
+func (m *Manager) Regenerate(ctx context.Context, id string) error {
+	items, err := readConversationTranscript(id)
+	if err != nil {
+		return err
+	}
+	if len(items) == 0 {
+		return errors.New("regenerate: transcript vacío")
+	}
+	// ponytail: encontramos el último user prompt y borramos
+	// todo lo que viene después. Buscamos desde el final
+	// hacia atrás porque si el último item es un assistant,
+	// ese es el que queremos regenerar (su prompt es el
+	// user inmediatamente anterior).
+	var lastUserSeq uint64
+	var lastUserText string
+	for i := len(items) - 1; i >= 0; i-- {
+		if items[i].Kind == "user" && items[i].Text != "" {
+			lastUserSeq = items[i].Seq
+			lastUserText = items[i].Text
+			break
+		}
+	}
+	if lastUserText == "" {
+		return errors.New("regenerate: no hay user prompt en el transcript")
+	}
+	// Borramos todos los items con seq > lastUserSeq. El
+	// último user prompt queda; los nuevos fragments van a
+	// appendear con seqs nuevos desde lastUserSeq+1.
+	if err := truncateTranscriptAfter(id, lastUserSeq); err != nil {
+		return err
+	}
+	// Re-enviamos el prompt. PromptRequest maneja el caso
+	// de runtime running (queuePendingInput) y el caso de
+	// runtime caído (ensureRuntime spawnea uno nuevo).
+	return m.PromptRequest(ctx, id, PromptInput{Message: lastUserText})
 }
 
 func (m *Manager) PromptRequest(ctx context.Context, id string, input PromptInput) error {
@@ -378,12 +519,41 @@ func (m *Manager) PromptRequest(ctx context.Context, id string, input PromptInpu
 	callCtx, cancel := context.WithTimeout(ctx, promptCallTimeout)
 	defer cancel()
 
-	if err := m.ensureDefaultSteering(callCtx, id, runtime); err != nil {
-		m.setSessionStatus(ctx, session, SessionStatusError)
-		return err
+	// Default steering desactivado temporalmente (Fase 1 fix
+	// LLM coherence): el steer de 280 chars en español descarrila
+	// al modelo "minimax/m3" en sesiones >500 turnos (probado
+	// vía cmd/spike-pigo en branch feature/pi-go-migration). El
+	// bug se manifiesta como respuestas incoherentes o hangs.
+	// La función ensureDefaultSteering queda definida por si
+	// queremos re-habilitar via flag o mover a --append-system-prompt.
+	// if err := m.ensureDefaultSteering(callCtx, id, runtime); err != nil {
+	// 	m.setSessionStatus(ctx, session, SessionStatusError)
+	// 	return err
+	// }
+
+	// Inyección de memoria Honcho (opt-in, best-effort). Un error
+	// del provider NO bloquea el prompt — loggeamos y seguimos.
+	// El slot marker evita re-steerear con el mismo contexto si
+	// pi invoca Prompt varias veces para el mismo TurnID (típico
+	// cuando hay queuePendingInput).
+	if err := m.injectMemoryRecall(callCtx, id, runtime, input); err != nil {
+		slog.Warn("agent: memory recall failed; continuing without",
+			"session_id", id,
+			"err", err,
+		)
 	}
 
 	if err := runtime.Prompt(callCtx, message); err != nil {
+		if isAlreadyProcessing(err) {
+			// ponytail: pi está ejecutando otro tool. Hacemos steer
+			// transparente y NO marcamos la sesión como error — el
+			// runtime sigue vivo. Si steer también falla, retornamos
+			// ese error y dejamos que el caller decida. Esto reemplaza
+			// la lógica de "already processing" que el cliente JS
+			// tenía que orquestar manualmente (ver isAlreadyProcessingError,
+			// recoverBusyTurn, holdBusyUntilTurnEnd en page.templ).
+			return runtime.Steer(callCtx, message)
+		}
 		if isCallTimeout(callCtx, err) {
 			m.setSessionStatus(ctx, session, SessionStatusError)
 			slog.Warn("agent prompt killed by timeout",
@@ -397,7 +567,12 @@ func (m *Manager) PromptRequest(ctx context.Context, id string, input PromptInpu
 		return err
 	}
 	m.setSessionPreview(ctx, id, "user", message, 0)
-	MaterializeUserPrompt(id, message)
+	// ponytail: NO llamamos MaterializeUserPrompt acá — el sendPrompt
+	// handler (POST /prompt) ya lo escribió al inicio. Si lo
+	// llamáramos también, sería no-op por dedup (readLastTranscriptLine),
+	// pero es ruido y confunde el path. El user prompt se persiste
+	// en el sendPrompt path SIEMPRE, antes de runtime.Prompt, así
+	// que sobrevive a timeouts y errores.
 	m.setSessionStatus(ctx, session, SessionStatusRunning)
 	return nil
 }
@@ -614,6 +789,18 @@ func (m *Manager) ensureRuntime(ctx context.Context, id string) (Runtime, Sessio
 		Model:       session.Model,
 		Title:       session.Title,
 		SessionFile: session.PiSessionFile,
+		// AgentID quedó normalizado en Create o via backfill
+		// en ensureSessionDefaults. Si por algún motivo llega
+		// vacío acá, caemos al default del registry para que
+		// el runner nunca siembre desde una ruta inesperada.
+		AgentID:                session.AgentID,
+		// Si el host ya enruta memoria vía MemoryProvider
+		// real (no noop), pedimos al runner que no cargue
+		// la extensión Honcho nativa de .pi/extensions/ para
+		// evitar doble consumo. Forward-compat: hoy esa
+		// extensión no existe en este repo, pero el filtro
+		// queda en pirpc.Process.
+		DisableNativeHonchoTools: m.hasRealMemory(),
 	})
 	if err != nil {
 		m.setSessionStatus(ctx, session, SessionStatusError)
@@ -761,6 +948,195 @@ func (m *Manager) ensureDefaultSteering(ctx context.Context, id string, runtime 
 	return nil
 }
 
+// injectMemoryRecall es la pieza central de Fase C. Construye
+// la MemoryKey, garantiza que los peers existan en Honcho (best
+// effort), trae contexto relevante al mensaje y lo inyecta como
+// steer si no está vacío. Re-steerear con el mismo TurnID es
+// no-op (slot marker).
+//
+// Garantías:
+//   - NO bloquea el prompt si el provider falla (sigue sin memoria).
+//   - NO se llama si UserEmail o memoryWorkspaceID están vacíos.
+//   - NO se llama si la MemoryKey quedó igual que el último
+//     TurnID ya steereado en este slot.
+//
+// Devuelve error siempre que el provider falló; el caller decide
+// si loggear o propagar.
+func (m *Manager) injectMemoryRecall(ctx context.Context, id string, runtime Runtime, input PromptInput) error {
+	if m.memory == nil {
+		return nil
+	}
+	if m.memoryWorkspaceID == "" || strings.TrimSpace(input.UserEmail) == "" {
+		return nil
+	}
+	key := MemoryKey{
+		WorkspaceID: m.memoryWorkspaceID,
+		SessionID:   id,
+		UserEmail:   input.UserEmail,
+	}
+
+	// Slot marker: si ya steereamos este TurnID, no repetir.
+	// Evita inyecciones duplicadas cuando PromptRequest se llama
+	// varias veces para el mismo turn (Regenerate, queuePending,
+	// etc.).
+	m.mu.Lock()
+	slot := m.runtimes[id]
+	if slot != nil && slot.memorySteeredTurn == input.TurnID {
+		m.mu.Unlock()
+		return nil
+	}
+	m.mu.Unlock()
+
+	// EnsurePeers es idempotente y barato. Si falla, el resto del
+	// flujo (Recall) va a fallar también, así que no hace
+	// diferencia cortocircuitar acá.
+	if err := m.memory.EnsurePeers(ctx, key); err != nil {
+		return fmt.Errorf("ensure peers: %w", err)
+	}
+
+	mem, err := m.memory.Recall(ctx, key, input.Message)
+	if err != nil {
+		return fmt.Errorf("recall: %w", err)
+	}
+	if strings.TrimSpace(mem.Text) == "" {
+		return nil
+	}
+
+	steer := "Memoria relevante (de sesiones previas con este usuario):\n" + mem.Text
+	if err := runtime.Steer(ctx, steer); err != nil {
+		return fmt.Errorf("steer memory: %w", err)
+	}
+
+	// Marcamos el slot. Si el runtime fue reemplazado entre la
+	// lectura y la escritura, el steer quedó en el runtime
+	// anterior (ya cerrado); no es recuperable, sólo loggeamos.
+	m.mu.Lock()
+	if s := m.runtimes[id]; s != nil && s.runtime == runtime {
+		s.memorySteeredTurn = input.TurnID
+	} else {
+		slog.Warn("agent: runtime was replaced after memory steer",
+			"session_id", id,
+		)
+	}
+	m.mu.Unlock()
+	return nil
+}
+
+// flushMemoryRemember persiste los mensajes user/assistant
+// del transcript desde el último flush. Lo llama el handler de
+// turn_end/agent_end en background; cualquier error es
+// warning-only porque perder un flush es aceptable para v1.
+func (m *Manager) flushMemoryRemember(ctx context.Context, id string) {
+	if m.memory == nil {
+		return
+	}
+	if m.memoryWorkspaceID == "" {
+		return
+	}
+
+	// Single-flight por slot: si ya hay un flush corriendo para
+	// esta session, salimos. Sin esto, turn_end y agent_end
+	// race-condition y dupican mensajes en Honcho.
+	m.mu.Lock()
+	slot := m.runtimes[id]
+	if slot == nil {
+		// Slot evictado entre el evento y el flush. Reanclar
+		// uno nuevo para tracking.
+		slot = &runtimeSlot{}
+		m.runtimes[id] = slot
+	}
+	if slot.flushInProgress {
+		m.mu.Unlock()
+		return
+	}
+	slot.flushInProgress = true
+	startIdx := slot.lastHonchoItemIdx
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		if s := m.runtimes[id]; s != nil {
+			s.flushInProgress = false
+		}
+		m.mu.Unlock()
+	}()
+
+	session, err := m.store.Get(ctx, id)
+	if err != nil {
+		slog.Warn("agent: memory flush: store get failed",
+			"session_id", id, "err", err)
+		return
+	}
+	// OwnerEmail de la session, no de PromptInput: el flush
+	// ocurre al final del turno, después de que el prompt ya
+	// pasó. El dueño de la session es el humano del chat.
+	userEmail := strings.TrimSpace(session.OwnerEmail)
+	if userEmail == "" {
+		// Sin owner no podemos construir la key; abortamos
+		// silenciosamente. (caso: session creada por dev sin
+		// pasar email; el provider es noop de todas formas.)
+		return
+	}
+
+	history, err := LoadConversationHistoryCtx(ctx, id, 0, 0) // 0 = todo
+	if err != nil {
+		slog.Warn("agent: memory flush: load history failed",
+			"session_id", id, "err", err)
+		return
+	}
+
+	key := MemoryKey{
+		WorkspaceID: m.memoryWorkspaceID,
+		SessionID:   id,
+		UserEmail:   userEmail,
+	}
+
+	// Filtramos por índice (no por Seq) porque
+	// MaterializeUserPrompt graba items con Seq=0, lo que haría
+	// que un filter basado en Seq no-envíe nada en el primer
+	// flush. El transcript es append-only y LoadConversation
+	// devuelve los items en orden estable, así que el índice
+	// es monotónico.
+	if startIdx > len(history.Items) {
+		startIdx = 0 // el slot se evictó; mandamos todo de nuevo. Honcho deduplica semánticamente.
+	}
+	var (
+		msgs []MemoryMessage
+	)
+	for i := startIdx; i < len(history.Items); i++ {
+		item := history.Items[i]
+		if item.Kind != "user" && item.Kind != "assistant" {
+			continue
+		}
+		text := strings.TrimSpace(item.Text)
+		if text == "" {
+			continue
+		}
+		msgs = append(msgs, MemoryMessage{
+			Role:      item.Kind,
+			Text:      text,
+			CreatedAt: session.UpdatedAt, // aproximación; Honcho no usa timestamp estricto
+		})
+	}
+	if len(msgs) == 0 {
+		return
+	}
+
+	if err := m.memory.Remember(ctx, key, msgs); err != nil {
+		slog.Warn("agent: memory flush: remember failed",
+			"session_id", id,
+			"count", len(msgs),
+			"err", err,
+		)
+		return
+	}
+
+	m.mu.Lock()
+	if s := m.runtimes[id]; s != nil {
+		s.lastHonchoItemIdx = len(history.Items)
+	}
+	m.mu.Unlock()
+}
+
 func (m *Manager) setSessionPreview(ctx context.Context, id, kind, text string, seq uint64) {
 	text = strings.TrimSpace(text)
 	if text == "" {
@@ -771,7 +1147,7 @@ func (m *Manager) setSessionPreview(ctx context.Context, id, kind, text string, 
 		return
 	}
 	session = m.ensureSessionDefaults(ctx, session)
-	session.LastPreview = previewText(text, 600)
+	session.LastPreview = previewText(cleanMarkdownForPreview(text), 600)
 	session.LastPreviewKind = strings.TrimSpace(kind)
 	if seq > 0 {
 		session.LastSeq = seq
@@ -812,8 +1188,8 @@ func (m *Manager) capturePreviewEvent(id string, event Event) {
 			return
 		}
 		m.mu.Lock()
-		m.assistantPreview[id] += payload.AssistantMessageEvent.Delta
-		text := m.assistantPreview[id]
+		m.assistantPreview[id] = mergeAssistantDelta(m.assistantPreview[id], payload.AssistantMessageEvent.Delta)
+		text := visibleAssistantText(m.assistantPreview[id])
 		m.mu.Unlock()
 		if strings.TrimSpace(text) != "" {
 			m.setSessionPreview(ctx, id, "assistant", text, 0)
@@ -824,6 +1200,10 @@ func (m *Manager) capturePreviewEvent(id string, event Event) {
 		m.mu.Unlock()
 	case "turn_end", "agent_end":
 		m.markSessionIdleAndFlushPending(ctx, id)
+		// Flush de memoria Honcho en background. Si el adapter
+		// es noop, el método es no-op silencioso. No bloquea el
+		// event loop de capturePreviewEvent.
+		go m.flushMemoryRemember(context.Background(), id)
 	case "tool_execution_start":
 		var payload struct {
 			ToolName string `json:"toolName"`
@@ -868,6 +1248,16 @@ func (m *Manager) ensureSessionDefaults(ctx context.Context, session Session) Se
 	}
 	if session.PreviewPort > 0 && strings.TrimSpace(session.PreviewURL) == "" {
 		session.PreviewURL = previewPublicURL(session.ID)
+		changed = true
+	}
+	// Backfill AgentID para sesiones creadas antes de que el
+	// multi-agente existiera (no tenían el campo). Sin esto,
+	// pirpc.resolveCWD recibiría AgentID="" y caería al
+	// default, pero queremos que el Session persistido refleje
+	// la realidad para que el cliente y el runner sean
+	// consistentes.
+	if strings.TrimSpace(session.AgentID) == "" {
+		session.AgentID = DefaultAgentID()
 		changed = true
 	}
 	if changed {

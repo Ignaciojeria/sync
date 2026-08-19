@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	designdata "fixtests1/design"
+	designdata "gitinittest5/design"
 )
 
 const ThemeCookieName = "design-theme"

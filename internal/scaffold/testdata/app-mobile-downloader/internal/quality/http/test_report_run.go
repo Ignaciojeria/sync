@@ -1,10 +1,10 @@
 package dev
 
 import (
-	authmiddleware "fixtests1/internal/auth/middleware"
-	"fixtests1/internal/quality/application/test_report"
-	"fixtests1/internal/shared"
-	"fixtests1/internal/shared/server"
+	authmiddleware "gitinittest5/internal/auth/middleware"
+	"gitinittest5/internal/quality/application/test_report"
+	"gitinittest5/internal/shared"
+	"gitinittest5/internal/shared/server"
 )
 
 func testReportRunHandler(s *server.Server, runner *testreport.Runner) {

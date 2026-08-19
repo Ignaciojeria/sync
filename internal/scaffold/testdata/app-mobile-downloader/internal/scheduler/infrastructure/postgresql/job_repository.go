@@ -5,8 +5,8 @@ import (
 	"hash/fnv"
 	"time"
 
-	schedulerapp "fixtests1/internal/scheduler/application"
-	sharedpostgresql "fixtests1/internal/shared/infrastructure/postgresql"
+	schedulerapp "gitinittest5/internal/scheduler/application"
+	sharedpostgresql "gitinittest5/internal/shared/infrastructure/postgresql"
 )
 
 type JobRepository struct {

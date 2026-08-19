@@ -3,10 +3,10 @@ package layout
 import (
 	"net/http"
 
-	authmiddleware "fixtests1/internal/auth/middleware"
-	designapp "fixtests1/internal/design/application"
-	"fixtests1/internal/shared"
-	mounted "fixtests1/internal/shared/mounted"
+	authmiddleware "gitinittest5/internal/auth/middleware"
+	designapp "gitinittest5/internal/design/application"
+	"gitinittest5/internal/shared"
+	mounted "gitinittest5/internal/shared/mounted"
 )
 
 // NavigationContext contiene todo el contexto necesario para renderizar navegacion.

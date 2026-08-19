@@ -2,11 +2,11 @@ package auth
 
 import (
 	"context"
-	authapp "fixtests1/internal/auth/application"
-	"fixtests1/internal/auth/infrastructure/postgresql"
-	"fixtests1/internal/shared/configuration"
-	sharedpostgresql "fixtests1/internal/shared/infrastructure/postgresql"
-	"fixtests1/internal/shared/server"
+	authapp "gitinittest5/internal/auth/application"
+	"gitinittest5/internal/auth/infrastructure/postgresql"
+	"gitinittest5/internal/shared/configuration"
+	sharedpostgresql "gitinittest5/internal/shared/infrastructure/postgresql"
+	"gitinittest5/internal/shared/server"
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/MicahParks/jwkset"
 	"github.com/MicahParks/keyfunc/v3"

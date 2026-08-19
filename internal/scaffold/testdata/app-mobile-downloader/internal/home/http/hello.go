@@ -1,10 +1,10 @@
 package home
 
 import (
-	homeui "fixtests1/internal/home/ui"
-	"fixtests1/internal/shared/server"
-	topologyapp "fixtests1/internal/topology/application"
-	"fixtests1/internal/ui/layout"
+	homeui "gitinittest5/internal/home/ui"
+	"gitinittest5/internal/shared/server"
+	topologyapp "gitinittest5/internal/topology/application"
+	"gitinittest5/internal/ui/layout"
 )
 
 func homeHandler(s *server.Server, topology topologyapp.SnapshotReader) {

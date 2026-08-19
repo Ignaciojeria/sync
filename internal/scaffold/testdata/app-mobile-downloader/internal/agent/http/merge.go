@@ -1,8 +1,8 @@
 package agent
 
 import (
-	agentapp "fixtests1/internal/agent/application"
-	"fixtests1/internal/shared/server"
+	agentapp "lastmile-agents/internal/agent/application"
+	"lastmile-agents/internal/shared/server"
 	"net/http"
 )
 

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	agentapp "fixtests1/internal/agent/application"
+	agentapp "lastmile-agents/internal/agent/application"
 )
 
 // Manager prepara un workspace Git aislado por sesión.
@@ -324,8 +324,30 @@ func (m *Manager) MergePreview(ctx context.Context, session agentapp.Session) (a
 	if previewBranch == "" || baseBranch == "" {
 		return agentapp.MergeResult{}, fmt.Errorf("worktree: session is not mergeable")
 	}
-	if session.MergedAt != nil || strings.TrimSpace(session.MergedCommit) != "" {
-		return agentapp.MergeResult{}, fmt.Errorf("worktree: preview already merged")
+	// ponytail: si pi dejó archivos sueltos en el worktree (sin
+	// commit), "git merge preview-branch" desde la base sólo
+	// integraría los commits del branch — los archivos sueltos se
+	// perderían silenciosamente. Para no perder trabajo, los
+	// commiteamos acá con un mensaje explícito antes del merge.
+	// Si el worktree está limpio, es no-op.
+	if err := m.commitWorktreePending(ctx, session, previewBranch); err != nil {
+		return agentapp.MergeResult{}, err
+	}
+	// ponytail: detectamos "no hay nada que mergear" antes de tocar
+	// la base. Si preview-branch == base-branch, o todos los commits
+	// de preview ya están en base (preview es ancestor de base), el
+	// merge real sería un noop. Devolvemos NoChanges y el caller
+	// decide qué mostrar.
+	noChanges, err := noChangesToMerge(ctx, repoRoot, previewBranch, baseBranch)
+	if err != nil {
+		return agentapp.MergeResult{}, err
+	}
+	if noChanges {
+		return agentapp.MergeResult{
+			BaseBranch:    baseBranch,
+			PreviewBranch: previewBranch,
+			NoChanges:     true,
+		}, nil
 	}
 	if dirty, err := repoDirty(ctx, repoRoot); err != nil {
 		return agentapp.MergeResult{}, err
@@ -344,6 +366,77 @@ func (m *Manager) MergePreview(ctx context.Context, session agentapp.Session) (a
 		return agentapp.MergeResult{}, err
 	}
 	return agentapp.MergeResult{BaseBranch: baseBranch, PreviewBranch: previewBranch, Commit: commit}, nil
+}
+
+// commitWorktreePending hace commit de archivos sueltos en el
+// worktree de la sesión, si los hay. Sólo aplica cuando el worktree
+// es un repo git (tiene .git) y la sesión corre en un worktree
+// (Branch != ""). En modo plain-copy (Branch == "") no hay git en
+// el worktree y esta función es no-op silencioso.
+func (m *Manager) commitWorktreePending(ctx context.Context, session agentapp.Session, previewBranch string) error {
+	if previewBranch == "" {
+		return nil
+	}
+	workspacePath := strings.TrimSpace(session.WorkspacePath)
+	if workspacePath == "" {
+		return nil
+	}
+	if _, err := gitOutput(ctx, workspacePath, "rev-parse", "--git-dir"); err != nil {
+		// no es un repo git (plain-copy o destruido); no hacemos nada.
+		return nil
+	}
+	dirty, err := repoDirty(ctx, workspacePath)
+	if err != nil {
+		return fmt.Errorf("worktree: workspace status: %w", err)
+	}
+	if !dirty {
+		return nil
+	}
+	commitMsg := fmt.Sprintf("chore(session-%s): pending changes before merge", session.ID)
+	if err := gitRun(ctx, workspacePath, "add", "-A"); err != nil {
+		return fmt.Errorf("worktree: add pending in workspace: %w", err)
+	}
+	if err := gitRun(ctx, workspacePath, "commit", "-m", commitMsg); err != nil {
+		return fmt.Errorf("worktree: commit pending in workspace: %w", err)
+	}
+	return nil
+}
+
+// noChangesToMerge devuelve true cuando el merge desde preview hacia
+// base no integraría nada nuevo. Dos casos:
+//   - preview y base apuntan al mismo commit (la sesión nunca se
+//     despegó de base).
+//   - preview es ancestor de base (todos sus commits ya están en
+//     base; merge sería fast-forward / no-op).
+func noChangesToMerge(ctx context.Context, repoRoot, previewBranch, baseBranch string) (bool, error) {
+	equal, err := branchHeadsEqual(ctx, repoRoot, previewBranch, baseBranch)
+	if err != nil {
+		return false, err
+	}
+	if equal {
+		return true, nil
+	}
+	mbOut, err := gitOutput(ctx, repoRoot, "merge-base", previewBranch, baseBranch)
+	if err != nil {
+		return false, fmt.Errorf("worktree: merge-base %q %q: %w", previewBranch, baseBranch, err)
+	}
+	previewHead, err := gitOutput(ctx, repoRoot, "rev-parse", "--verify", previewBranch)
+	if err != nil {
+		return false, fmt.Errorf("worktree: rev-parse %q: %w", previewBranch, err)
+	}
+	return strings.TrimSpace(mbOut) == strings.TrimSpace(previewHead), nil
+}
+
+func branchHeadsEqual(ctx context.Context, repoRoot, branchA, branchB string) (bool, error) {
+	a, err := gitOutput(ctx, repoRoot, "rev-parse", "--verify", branchA)
+	if err != nil {
+		return false, fmt.Errorf("worktree: rev-parse %q: %w", branchA, err)
+	}
+	b, err := gitOutput(ctx, repoRoot, "rev-parse", "--verify", branchB)
+	if err != nil {
+		return false, fmt.Errorf("worktree: rev-parse %q: %w", branchB, err)
+	}
+	return strings.TrimSpace(a) == strings.TrimSpace(b), nil
 }
 
 func repoDirty(ctx context.Context, repoRoot string) (bool, error) {
@@ -429,6 +522,13 @@ func (m *Manager) Destroy(ctx context.Context, session agentapp.Session) error {
 			}
 			_ = gitRun(ctx, workspacePath, "worktree", "remove", "--force", workspacePath)
 			_ = gitRunWithGitDir(ctx, commonDir, "branch", "-D", branch)
+			// ponytail: prune las entradas stale del admin de
+			// worktrees. Sin esto, las entradas quedan en
+			// .git/worktrees/<id>/ marcadas como "prunable" y
+			// git worktree list las sigue reportando. Prune es
+			// best-effort (igual que el resto del cleanup): si
+			// falla, el siguiente prune manual las limpia.
+			_ = gitRunWithGitDir(ctx, commonDir, "worktree", "prune")
 		}
 		_ = os.RemoveAll(workspacePath)
 	} else if workspacePath != "" {

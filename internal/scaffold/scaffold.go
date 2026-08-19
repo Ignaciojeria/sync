@@ -11,8 +11,8 @@ import (
 
 const (
 	templateDirName   = "app-mobile-downloader"
-	sourceModuleName  = "nethttpfix3"
-	sourceProjectName = "nethttpfix3"
+	sourceModuleName  = "gitinittest5"
+	sourceProjectName = "gitinittest5"
 )
 
 //go:embed all:testdata/app-mobile-downloader

@@ -159,94 +159,11 @@ npm_config_cache="./.npm-cache" npx -y skills add <owner/repo> --skill <skill> -
 
 ---
 
-## Módulo agente (internal/agent)
+## Agentes
 
-El agente es un bounded context más dentro de `internal/agent/`, igual que
-auth, editor, home, quality y scheduler. Sigue las mismas capas
-(`application/`, `http/`, `infrastructure/`, `ui/`) y se enciende/apaga con
-la flag `AGENT_ENABLED` sin tocar el resto del wiring. Detalle completo en
-`doc/agent-runtime.md`.
-
-### Capas
-
-```
-internal/agent/
-├── application/         ← AgentService (interfaz pública) + Manager (impl)
-├── http/                ← handlers /agent/* (consumen AgentService)
-├── infrastructure/
-│   ├── pirpc/           ← spawn de pi, sandbox CWD, prompt timeout
-│   ├── disk/            ← session store persistente en AGENT_SESSION_DIR
-│   └── memory/          ← session store en RAM (fallback)
-└── ui/                  ← templates templ del chat
-```
-
-### Reglas
-
-1. El host habla con el agente sólo vía `agentapp.AgentService`. Nada de
-   tocar `*agentapp.Manager` desde fuera del paquete.
-2. El sandbox CWD se resuelve solo en `pirpc.resolveCWD`. Si el caller
-   pasa un CWD vacío o `.`, el runner lo redirige a `tmp/agent-work/<sessionID>/`.
-3. El `.air.toml` debe seguir excluyendo `tmp/` para que las ediciones
-   del agente dentro del sandbox no disparen rebuilds.
-4. Para apagar el agente sin tocar el código: `AGENT_ENABLED=false`.
-   El host omite los endpoints `/agent/*` y no levanta `pi`.
-
-### Opt-out limpio
-
-Si un proyecto derivado no quiere agente, basta con:
-
-```sh
-# al ejecutar el servidor
-AGENT_ENABLED=false ./bin/server
-```
-
-Y si quieren sacar el wiring del PATH:
-
-```sh
-# eliminar el bloque "agent" en cmd/api/main.go:
-# - los imports de internal/agent
-# - la llamada a registerAgent(s, hooks, newAgentDeps())
-```
-
-No hay dependencias del agente que el resto del código acuse de recibo.
-
----
-
-## Modo runtime actual: app única (`cmd/api`)
-
-El proyecto corre ahora como **una sola app** en dev:
-
-```
-browser
-   ↓
-cmd/api (:8001)
-   ├─ /agent
-   ├─ /agent/auth
-   └─ /agent/sessions/*
-```
-
-### Reglas
-
-1. El entrypoint activo es `cmd/api`.
-2. El agente corre embebido en el mismo proceso vía `agenthttp.RegisterAllLegacy(...)`.
-3. `air` recompila `cmd/api` y deja los cambios visibles de una vez.
-4. `cmd/bff` y `cmd/agent-worker` fueron eliminados; cualquier referencia vieja es histórica.
-
-### Arranque para dev
-
-```sh
-# hot-reload normal
-air
-
-# o sin air
-bash ./scripts/run-api.sh start
-bash ./scripts/run-api.sh status
-bash ./scripts/run-api.sh stop
-```
-
-### Nota histórica
-
-La documentación de 3 procesos se mantiene solo como referencia histórica en
-`doc/agent-runtime.md` y debe considerarse stale salvo que se indique lo
-contrario.
+Las reglas específicas de cada agente (capas, sandbox, opt-out,
+runtime embebido, entrypoint único) viven en `agents/<id>/AGENTS.md`.
+Hoy hay un solo agente registrado, `develop` (ver
+`agents/develop/AGENTS.md`). El detalle histórico del runtime vive
+en `doc/agent-runtime.md`.
 

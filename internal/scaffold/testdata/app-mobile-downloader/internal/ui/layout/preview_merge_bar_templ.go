@@ -11,9 +11,21 @@ import templruntime "github.com/a-h/templ/runtime"
 import "strings"
 
 type PreviewMergeBarState struct {
-	Active        bool
-	SessionID     string
-	BackURL       string
+	Active    bool
+	SessionID string
+	// BackURL es el destino del botón "Back to agent". Construido
+	// server-side (en preview_context_ui.go) usando mounted.Host
+	// para que apunte al chat del agente en el host y NO adentro
+	// del mount del preview — el botón homónimo del chat usa el
+	// mismo criterio via hostAgentSessionURL.
+	BackURL string
+	// NoChanges aplica sólo cuando Success=true. Indica que el
+	// merge se ejecutó correctamente pero la rama de preview no
+	// tenía commits nuevos para integrar (preview-branch == base
+	// o preview totalmente mergeado en base). El bar muestra un
+	// estado neutro ("Up to date") y el handler no crea sesión
+	// nueva en este caso.
+	NoChanges     bool
 	BaseBranch    string
 	PreviewBranch string
 	Applicable    bool
@@ -78,26 +90,26 @@ func PreviewMergeBar(state PreviewMergeBarState) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(previewMergeBarBadge(state))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/layout/preview_merge_bar.templ`, Line: 23, Col: 82}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/layout/preview_merge_bar.templ`, Line: 35, Col: 82}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</span> <span class=\"flex-1 truncate text-base-content/84\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "></span> <span class=\"flex-1 truncate text-base-content/84\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(previewMergeBarMessage(state))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/layout/preview_merge_bar.templ`, Line: 24, Col: 86}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/layout/preview_merge_bar.templ`, Line: 36, Col: 86}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</span><div class=\"flex shrink-0 items-center gap-2\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "></span><div class=\"flex shrink-0 items-center gap-2\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -109,7 +121,7 @@ func PreviewMergeBar(state PreviewMergeBarState) templ.Component {
 				var templ_7745c5c3_Var6 templ.SafeURL
 				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(state.BackURL))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/layout/preview_merge_bar.templ`, Line: 27, Col: 73}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/layout/preview_merge_bar.templ`, Line: 39, Col: 73}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 				if templ_7745c5c3_Err != nil {
@@ -128,7 +140,7 @@ func PreviewMergeBar(state PreviewMergeBarState) templ.Component {
 				var templ_7745c5c3_Var7 string
 				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.ResolveAttributeValue(state.ActionPath)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/layout/preview_merge_bar.templ`, Line: 32, Col: 33}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/layout/preview_merge_bar.templ`, Line: 44, Col: 33}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var7)
 				if templ_7745c5c3_Err != nil {
@@ -139,15 +151,15 @@ func PreviewMergeBar(state PreviewMergeBarState) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var8 string
-				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(previewApplyConfirm(state))
+				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(previewMergeConfirm(state))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/layout/preview_merge_bar.templ`, Line: 35, Col: 46}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/layout/preview_merge_bar.templ`, Line: 47, Col: 46}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "\">Apply preview</button>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "\">Merge preview</button>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -166,6 +178,9 @@ func previewMergeBarTone(state PreviewMergeBarState) string {
 		return "text-error"
 	}
 	if state.Success {
+		if state.NoChanges {
+			return "text-base-content"
+		}
 		return "text-success"
 	}
 	return "text-base-content"
@@ -175,9 +190,12 @@ func previewMergeBarBadgeClass(state PreviewMergeBarState) string {
 	if strings.TrimSpace(state.ErrorMessage) != "" {
 		return "badge badge-error badge-sm"
 	}
-	if state.Success {
+	if state.Success && !state.NoChanges {
 		return "badge badge-success badge-sm"
 	}
+	// success + no changes, o estado neutral (apenas cargada la
+	// preview, sin click todavía): ambos usan tono info para no
+	// sugerir éxito falso ni error.
 	return "badge badge-info badge-sm"
 }
 
@@ -186,6 +204,9 @@ func previewMergeBarBadge(state PreviewMergeBarState) string {
 		return "Blocked"
 	}
 	if state.Success {
+		if state.NoChanges {
+			return "Up to date"
+		}
 		return "Applied"
 	}
 	return "Preview"
@@ -196,6 +217,9 @@ func previewMergeBarMessage(state PreviewMergeBarState) string {
 		return msg
 	}
 	if state.Success {
+		if state.NoChanges {
+			return "No hay cambios nuevos para mergear."
+		}
 		if strings.TrimSpace(state.BaseBranch) != "" {
 			return "Cambios aplicados a " + state.BaseBranch + "."
 		}
@@ -204,11 +228,16 @@ func previewMergeBarMessage(state PreviewMergeBarState) string {
 	return "Preview aislada: lo que veas aquí no se aplica al workspace base."
 }
 
-func previewApplyConfirm(state PreviewMergeBarState) string {
-	if strings.TrimSpace(state.BaseBranch) != "" {
-		return "Esto aplicará el contenido actual de esta preview sobre el workspace base (branch " + state.BaseBranch + ")."
+func previewMergeConfirm(state PreviewMergeBarState) string {
+	preview := strings.TrimSpace(state.PreviewBranch)
+	base := strings.TrimSpace(state.BaseBranch)
+	if preview != "" && base != "" {
+		return "Esto va a mergear la rama " + preview + " en " + base + " (no fast-forward). Si la preview no tiene cambios, no se creará un commit."
 	}
-	return "Esto aplicará el contenido actual de esta preview sobre el workspace base."
+	if preview != "" {
+		return "Esto va a mergear la rama " + preview + " en el branch base (no fast-forward)."
+	}
+	return "Esto va a mergear la preview en el branch base."
 }
 
 var _ = templruntime.GeneratedTemplate

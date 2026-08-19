@@ -3,11 +3,11 @@ package auth
 import (
 	"context"
 	"database/sql"
-	authapp "fixtests1/internal/auth/application"
-	authpostgresql "fixtests1/internal/auth/infrastructure/postgresql"
-	"fixtests1/internal/shared/configuration"
-	sharedpostgresql "fixtests1/internal/shared/infrastructure/postgresql"
-	"fixtests1/internal/shared/server"
+	authapp "gitinittest5/internal/auth/application"
+	authpostgresql "gitinittest5/internal/auth/infrastructure/postgresql"
+	"gitinittest5/internal/shared/configuration"
+	sharedpostgresql "gitinittest5/internal/shared/infrastructure/postgresql"
+	"gitinittest5/internal/shared/server"
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/MicahParks/jwkset"
 	"github.com/MicahParks/keyfunc/v3"
@@ -97,7 +97,7 @@ func TestRegisterLoginGoogle(t *testing.T) {
 		OIDCTokenEndpoint:         "https://issuer.example/token",
 		OIDCAuthorizationEndpoint: "https://issuer.example/auth",
 		OIDCLoginURL:              "https://issuer.example/login",
-		OIDCClientID:              "built-in-fixtests1-client",
+		OIDCClientID:              "built-in-gitinittest5-client",
 		PROJECT_NAME:              "mobile-downloader",
 	}
 
@@ -177,8 +177,8 @@ func TestRegisterLoginGoogle(t *testing.T) {
 	t.Run("host login can still use direct google when configured", func(t *testing.T) {
 		c := conf
 		c.OIDCUpstreamGoogleClientID = "google-client"
-		c.OIDCClientID = "mobile-downloader-fixtests1-client"
-		c.PROJECT_NAME = "fixtests1"
+		c.OIDCClientID = "mobile-downloader-gitinittest5-client"
+		c.PROJECT_NAME = "gitinittest5"
 		ts2, _, _ := newAuthTestServer(t, c)
 		client2 := ts2.Client()
 		client2.CheckRedirect = func(req *http.Request, via []*http.Request) error {
@@ -215,8 +215,8 @@ func TestRegisterLoginGoogle(t *testing.T) {
 	t.Run("mounted preview login can also use direct google when configured", func(t *testing.T) {
 		c := conf
 		c.OIDCUpstreamGoogleClientID = "google-client"
-		c.OIDCClientID = "mobile-downloader-fixtests1-client"
-		c.PROJECT_NAME = "fixtests1"
+		c.OIDCClientID = "mobile-downloader-gitinittest5-client"
+		c.PROJECT_NAME = "gitinittest5"
 		ts2, _, _ := newAuthTestServer(t, c)
 		client2 := ts2.Client()
 		client2.CheckRedirect = func(req *http.Request, via []*http.Request) error {

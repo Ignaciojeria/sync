@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"fixtests1/internal/quality/ui"
+	"gitinittest5/internal/quality/ui"
 )
 
 func baseDeps() RunnerDeps {

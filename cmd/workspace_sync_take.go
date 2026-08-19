@@ -17,25 +17,6 @@ import (
 
 var workspaceSlug string
 
-var syncCmd = &cobra.Command{
-	Use:   "sync",
-	Short: "Sincroniza el working tree del workspace actual (sin takeover)",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := loadWorkspaceConfigForOps()
-		if err != nil {
-			return err
-		}
-		if err := ensureWorkspaceOwnership(&cfg, false); err != nil {
-			return err
-		}
-		if err := runWorkspaceMutagenSync(&cfg); err != nil {
-			return err
-		}
-		fmt.Println("✅ Workspace sincronizado")
-		return nil
-	},
-}
-
 var takeCmd = &cobra.Command{
 	Use:   "take",
 	Short: "Trae cambios pendientes y toma ownership del workspace actual",
@@ -327,8 +308,6 @@ func ensureMutagenYAMLForWorkspace(cfg *config.Config) error {
 }
 
 func init() {
-	syncCmd.Flags().StringVar(&workspaceSlug, "slug", "", "Slug del proyecto (si no existe .einar/config.json, por defecto usa nombre de carpeta)")
 	takeCmd.Flags().StringVar(&workspaceSlug, "slug", "", "Slug del proyecto (si no existe .einar/config.json, por defecto usa nombre de carpeta)")
-	rootCmd.AddCommand(syncCmd)
 	rootCmd.AddCommand(takeCmd)
 }

@@ -1,13 +1,13 @@
 package scheduler
 
 import (
-	authmiddleware "fixtests1/internal/auth/middleware"
-	schedulerapp "fixtests1/internal/scheduler/application"
-	schedulerpostgresql "fixtests1/internal/scheduler/infrastructure/postgresql"
-	schedulerui "fixtests1/internal/scheduler/ui"
-	sharedpostgresql "fixtests1/internal/shared/infrastructure/postgresql"
-	"fixtests1/internal/shared/server"
-	"fixtests1/internal/ui/layout"
+	authmiddleware "gitinittest5/internal/auth/middleware"
+	schedulerapp "gitinittest5/internal/scheduler/application"
+	schedulerpostgresql "gitinittest5/internal/scheduler/infrastructure/postgresql"
+	schedulerui "gitinittest5/internal/scheduler/ui"
+	sharedpostgresql "gitinittest5/internal/shared/infrastructure/postgresql"
+	"gitinittest5/internal/shared/server"
+	"gitinittest5/internal/ui/layout"
 	"net/http"
 	"strings"
 )

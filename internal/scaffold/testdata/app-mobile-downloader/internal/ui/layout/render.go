@@ -2,7 +2,7 @@ package layout
 
 import (
 	"context"
-	"fixtests1/internal/shared/server"
+	"gitinittest5/internal/shared/server"
 	"github.com/a-h/templ"
 	"io"
 )

@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	schedulerapp "fixtests1/internal/scheduler/application"
-	"fixtests1/internal/shared"
+	schedulerapp "gitinittest5/internal/scheduler/application"
+	"gitinittest5/internal/shared"
 )
 
 func TestShouldRun(t *testing.T) {

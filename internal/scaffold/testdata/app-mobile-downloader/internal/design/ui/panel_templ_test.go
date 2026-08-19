@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	designapp "fixtests1/internal/design/application"
+	designapp "gitinittest5/internal/design/application"
 
 	"github.com/a-h/templ"
 )

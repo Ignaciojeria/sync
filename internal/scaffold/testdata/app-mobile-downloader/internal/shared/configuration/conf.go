@@ -28,6 +28,20 @@ type Conf struct {
 	// el server la usa server-side para proxy a /balance y mostrarlo en la UI.
 	SyncAIGatewayBaseURL string `env:"SYNC_AI_GATEWAY_BASE_URL" envDefault:"https://sync-ai-gateway.exe.xyz/api/gateway/v1"`
 	SyncAIGatewayAPIKey  string `env:"SYNC_AI_GATEWAY_API_KEY"`
+
+	// Honcho es el MemoryProvider del agente (Fase C del plan
+	// enrutar-prompts-del-agente-por-honcho). HONCHO_ENABLED es
+	// el switch maestro: si está en "true" y hay API key, el
+	// Manager inyecta contexto antes de cada prompt y persiste al
+	// final de cada turno. Si está vacío o "false", el provider
+	// es noop y todo el código corre idéntico al actual.
+	HonchoEnabled       bool   `env:"HONCHO_ENABLED" envDefault:"false"`
+	HonchoBaseURL       string `env:"HONCHO_BASE_URL" envDefault:"https://api.honcho.dev"`
+	HonchoAPIKey        string `env:"HONCHO_API_KEY"`
+	HonchoWorkspaceID   string `env:"HONCHO_WORKSPACE_ID"`
+	HonchoTokenBudget   int    `env:"HONCHO_TOKEN_BUDGET" envDefault:"1000"`
+	HonchoTopK          int    `env:"HONCHO_TOP_K" envDefault:"8"`
+	HonchoRecallTimeoutMS int  `env:"HONCHO_RECALL_TIMEOUT_MS" envDefault:"2000"`
 }
 
 func NewConf() (Conf, error) {

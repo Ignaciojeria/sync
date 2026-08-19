@@ -2,11 +2,11 @@ package dev
 
 import (
 	"errors"
-	authmiddleware "fixtests1/internal/auth/middleware"
-	testreport "fixtests1/internal/quality/application/test_report"
-	"fixtests1/internal/quality/ui"
-	"fixtests1/internal/shared/configuration"
-	"fixtests1/internal/shared/server"
+	authmiddleware "gitinittest5/internal/auth/middleware"
+	testreport "gitinittest5/internal/quality/application/test_report"
+	"gitinittest5/internal/quality/ui"
+	"gitinittest5/internal/shared/configuration"
+	"gitinittest5/internal/shared/server"
 	"io"
 	"net/http"
 	"net/http/httptest"

@@ -4,8 +4,7 @@ import (
 	"context"
 	"testing"
 
-	agentapp "fixtests1/internal/agent/application"
-	agentui "fixtests1/internal/agent/ui"
+	agentapp "lastmile-agents/internal/agent/application"
 )
 
 type pageServiceStub struct {
@@ -40,6 +39,7 @@ func (s pageServiceStub) PromptRequest(context.Context, string, agentapp.PromptI
 }
 func (s pageServiceStub) Steer(context.Context, string, string) error { return nil }
 func (s pageServiceStub) Abort(context.Context, string) error         { return nil }
+func (s pageServiceStub) Regenerate(context.Context, string) error   { return nil }
 func (s pageServiceStub) Subscribe(context.Context, string) (<-chan agentapp.Event, func(), error) {
 	return nil, func() {}, nil
 }
@@ -59,43 +59,62 @@ func (s pageServiceStub) Delete(context.Context, string) error { return nil }
 func (s pageServiceStub) Close() error                         { return nil }
 
 func TestResolveAgentEntryRedirect_UsesLatestSession(t *testing.T) {
-	got := resolveAgentEntryRedirect(t.Context(), pageServiceStub{sessions: map[string]agentapp.Session{"s1": {ID: "s1"}}, order: []agentapp.Session{{ID: "s1"}}}, agentui.PageState{})
+	got := resolveAgentEntryRedirect(t.Context(), pageServiceStub{sessions: map[string]agentapp.Session{"s1": {ID: "s1"}}, order: []agentapp.Session{{ID: "s1"}}}, "", "", "/agent")
 	if want := "/agent?session=s1"; got != want {
 		t.Fatalf("redirect = %q, want %q", got, want)
 	}
 }
 
 func TestResolveAgentEntryRedirect_FallsBackToSessionsPage(t *testing.T) {
-	got := resolveAgentEntryRedirect(t.Context(), pageServiceStub{}, agentui.PageState{})
+	got := resolveAgentEntryRedirect(t.Context(), pageServiceStub{}, "", "", "/agent")
 	if want := "/agent/home"; got != want {
 		t.Fatalf("redirect = %q, want %q", got, want)
 	}
 }
 
 func TestResolveAgentEntryRedirect_RespectsMountedPrefix(t *testing.T) {
-	got := resolveAgentEntryRedirect(t.Context(), pageServiceStub{sessions: map[string]agentapp.Session{"s1": {ID: "s1"}}, order: []agentapp.Session{{ID: "s1"}}}, agentui.PageState{MountPrefix: "/agent/sessions/p1/preview/"})
+	got := resolveAgentEntryRedirect(t.Context(), pageServiceStub{sessions: map[string]agentapp.Session{"s1": {ID: "s1"}}, order: []agentapp.Session{{ID: "s1"}}}, "/agent/sessions/p1/preview/", "", "/agent")
 	if want := "/agent/sessions/p1/preview/agent?session=s1"; got != want {
 		t.Fatalf("redirect = %q, want %q", got, want)
 	}
 }
 
 func TestResolveAgentEntryRedirect_SkipsWhenSessionAlreadySelected(t *testing.T) {
-	got := resolveAgentEntryRedirect(t.Context(), pageServiceStub{sessions: map[string]agentapp.Session{"s9": {ID: "s9"}}, order: []agentapp.Session{{ID: "s9"}}}, agentui.PageState{ActiveSessionID: "s9"})
+	got := resolveAgentEntryRedirect(t.Context(), pageServiceStub{sessions: map[string]agentapp.Session{"s9": {ID: "s9"}}, order: []agentapp.Session{{ID: "s9"}}}, "", "s9", "/agent")
 	if got != "" {
 		t.Fatalf("redirect = %q, want empty", got)
 	}
 }
 
 func TestResolveAgentEntryRedirect_IgnoresPreviewOwnerSessionID(t *testing.T) {
-	got := resolveAgentEntryRedirect(t.Context(), pageServiceStub{sessions: map[string]agentapp.Session{"p1": {ID: "p1"}}, order: []agentapp.Session{{ID: "p1"}}}, agentui.PageState{MountPrefix: "/agent/sessions/p1/preview/", ActiveSessionID: "p1"})
+	got := resolveAgentEntryRedirect(t.Context(), pageServiceStub{sessions: map[string]agentapp.Session{"p1": {ID: "p1"}}, order: []agentapp.Session{{ID: "p1"}}}, "/agent/sessions/p1/preview/", "p1", "/agent")
 	if want := "/agent/sessions/p1/preview/agent/home"; got != want {
 		t.Fatalf("redirect = %q, want %q", got, want)
 	}
 }
 
 func TestResolveAgentEntryRedirect_SkipsPreviewOwnerWhenPickingDefaultSession(t *testing.T) {
-	got := resolveAgentEntryRedirect(t.Context(), pageServiceStub{sessions: map[string]agentapp.Session{"p1": {ID: "p1"}, "s2": {ID: "s2"}}, order: []agentapp.Session{{ID: "p1"}, {ID: "s2"}}}, agentui.PageState{MountPrefix: "/agent/sessions/p1/preview/"})
+	got := resolveAgentEntryRedirect(t.Context(), pageServiceStub{sessions: map[string]agentapp.Session{"p1": {ID: "p1"}, "s2": {ID: "s2"}}, order: []agentapp.Session{{ID: "p1"}, {ID: "s2"}}}, "/agent/sessions/p1/preview/", "", "/agent")
 	if want := "/agent/sessions/p1/preview/agent?session=s2"; got != want {
+		t.Fatalf("redirect = %q, want %q", got, want)
+	}
+}
+
+func TestResolveAgentEntryRedirect_RespectsV2BasePath(t *testing.T) {
+	// ponytail: V2 usa el mismo helper pero con basePath="/agent-v2".
+	// El redirect tiene que apuntar a /agent-v2/home y no a /agent/home.
+	got := resolveAgentEntryRedirect(t.Context(), pageServiceStub{}, "", "", "/agent-v2")
+	if want := "/agent-v2/home"; got != want {
+		t.Fatalf("redirect = %q, want %q", got, want)
+	}
+}
+
+func TestResolveAgentEntryRedirect_NormalizesBasePath(t *testing.T) {
+	// ponytail: el helper debe tolerar basePath con o sin slash
+	// inicial y con o sin slash final. Si llega "agent-v2/" debe
+	// normalizarse a "/agent-v2".
+	got := resolveAgentEntryRedirect(t.Context(), pageServiceStub{}, "", "", "agent-v2/")
+	if want := "/agent-v2/home"; got != want {
 		t.Fatalf("redirect = %q, want %q", got, want)
 	}
 }

@@ -1,0 +1,197 @@
+package ui
+
+import (
+	backlogapp "gitinittest5/internal/backlog/application"
+)
+
+// Detail renderiza la vista de detalle de una tarjeta, pensada para
+// usarse como contenido de un <dialog> (modal) cuando se abre vía
+// HTMX, o como página completa cuando se navega directo al slug.
+//
+// El diseño prioriza la lectura por encima de la densidad:
+// tipografía mayor que la card del board, jerarquía clara de
+// secciones, y auto-detección de Acceptance Criteria y Links para
+// resaltarlas como alertas.
+templ Detail(card CardView, previewPrefix string) {
+	<article class="space-y-5" id={ "backlog-detail-" + card.Slug }>
+		@detailBreadcrumb(card, previewPrefix)
+		@detailHeader(card)
+		@detailMeta(card)
+		@detailBody(card)
+		@detailFooter(card, previewPrefix)
+	</article>
+}
+
+// detailBreadcrumb da contexto de navegación: Backlog > Columna > Título,
+// con badge de status.
+templ detailBreadcrumb(card CardView, previewPrefix string) {
+	<nav class="flex items-center gap-2 text-xs text-base-content/60 flex-wrap" aria-label="Ruta de la tarjeta">
+		<a class="hover:text-primary transition-colors" href={ navURL(previewPrefix, "/backlog") }>Backlog</a>
+		<span aria-hidden="true" class="opacity-50">/</span>
+		<span class="text-base-content/80 font-medium">{ backlogapp.ColumnTitle(card.Status) }</span>
+		<span aria-hidden="true" class="opacity-50">/</span>
+		<span class="text-base-content truncate max-w-[40ch]" title={ card.Title }>{ card.Title }</span>
+	</nav>
+}
+
+// detailHeader muestra título + descripción como lead.
+templ detailHeader(card CardView) {
+	<header class="space-y-2">
+		<h1 class="text-2xl font-bold leading-tight tracking-tight text-base-content">
+			{ card.Title }
+		</h1>
+		if card.Description != "" {
+			<p class="text-[15px] leading-relaxed text-base-content/80 border-l-4 border-primary/70 pl-3 italic">
+				{ card.Description }
+			</p>
+		}
+	</header>
+}
+
+// detailMeta: grid 2x2 con la metadata principal de la tarjeta.
+// status y priority como badges con sus colores canónicos;
+// source + agent_session + timestamp + tags en la segunda fila.
+templ detailMeta(card CardView) {
+	<dl class="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-3 rounded-box border border-base-300/60 bg-base-200/40 px-4 py-3 text-sm">
+		<div class="space-y-0.5 min-w-0">
+			<dt class="text-[10px] uppercase tracking-[0.18em] text-base-content/50 font-semibold">Columna</dt>
+			<dd class="flex items-center gap-1.5">
+				<span class={ statusDotClass(card.Status) }></span>
+				<span class="font-medium">{ backlogapp.ColumnTitle(card.Status) }</span>
+			</dd>
+		</div>
+		<div class="space-y-0.5 min-w-0">
+			<dt class="text-[10px] uppercase tracking-[0.18em] text-base-content/50 font-semibold">Prioridad</dt>
+			<dd>
+				<span class={ backlogapp.PriorityBadgeClass(card.Priority) } title={ "Prioridad " + backlogapp.PriorityLabel(card.Priority) }>
+					{ backlogapp.PriorityLabel(card.Priority) }
+				</span>
+			</dd>
+		</div>
+		<div class="space-y-0.5 min-w-0">
+			<dt class="text-[10px] uppercase tracking-[0.18em] text-base-content/50 font-semibold">Origen</dt>
+			<dd class="flex items-center gap-1.5">
+				if card.Source == "agent" {
+					<span class="badge badge-outline badge-xs" title="Redactada por un agente">IA</span>
+					if card.AgentSession != "" {
+						<span class="font-mono text-[11px] text-base-content/70 truncate" title={ "Sesión: " + card.AgentSession }>
+							{ card.AgentSession }
+						</span>
+					}
+				} else {
+					<span class="badge badge-ghost badge-xs">humano</span>
+				}
+			</dd>
+		</div>
+		<div class="space-y-0.5 min-w-0">
+			<dt class="text-[10px] uppercase tracking-[0.18em] text-base-content/50 font-semibold">Actualizado</dt>
+			<dd class="font-mono text-[11px] text-base-content/80">
+				if card.Timestamp != "" {
+					<time datetime={ card.Timestamp } title={ card.Timestamp }>
+						{ FormatTimestamp(card.Timestamp) }
+					</time>
+				} else {
+					<span class="text-base-content/40">—</span>
+				}
+			</dd>
+		</div>
+		if len(card.Tags) > 0 {
+			<div class="col-span-2 sm:col-span-4 pt-2 border-t border-base-300/50 flex items-center flex-wrap gap-1.5">
+				<span class="text-[10px] uppercase tracking-[0.18em] text-base-content/50 font-semibold mr-1">Etiquetas</span>
+				for _, tag := range card.Tags {
+					<span class="badge badge-ghost badge-sm">{ tag }</span>
+				}
+			</div>
+		}
+	</dl>
+}
+
+// detailBody renderiza el cuerpo markdown saneado y, si detecta las
+// secciones convencionales del perfil (# Plan, # Acceptance
+// Criteria y # Links), las extrae y las pinta como alertas
+// destacadas fuera del flujo principal. La detección es
+// case-insensitive sobre el nombre exacto del heading.
+templ detailBody(card CardView) {
+	@detailBodySections(detailBodyParts(card.Body))
+}
+
+// detailBodyParts parte el body en (preamble, plan, criteria,
+// links, tail). Wrapea splitSections para exponer los tramos
+// directamente al componente templ, que solo acepta argumentos
+// simples.
+func detailBodyParts(body string) (string, string, string, string, string) {
+	s := splitSections(body)
+	return s.preamble, s.plan, s.criteria, s.links, s.tail
+}
+
+// detailFooter: acciones de la tarjeta + botón "Volver". Viven
+// siempre en el detalle porque también queremos poder repriorizar
+// o mover desde la vista modal sin volver al board.
+templ detailFooter(card CardView, previewPrefix string) {
+	<footer class="flex items-center justify-between gap-2 pt-2 border-t border-base-300/50">
+		<div class="flex items-center gap-0.5">
+			if canMoveLeft(card.Status) {
+				<button
+					class="btn btn-ghost btn-sm"
+					{ moveButtonAttrs(previewPrefix, card.Slug, card.Status, prevStatus(card.Status))... }
+				>
+					← { backlogapp.ColumnTitle(prevStatus(card.Status)) }
+				</button>
+			}
+			if canMoveRight(card.Status) {
+				<button
+					class="btn btn-ghost btn-sm"
+					{ moveButtonAttrs(previewPrefix, card.Slug, card.Status, nextStatus(card.Status))... }
+				>
+					{ backlogapp.ColumnTitle(nextStatus(card.Status)) } →
+				</button>
+			}
+		</div>
+		<div class="flex items-center gap-1">
+			if card.Priority != backlogapp.PriorityP0 {
+				<button
+					class="btn btn-ghost btn-sm btn-square"
+					{ priorityButtonAttrs(previewPrefix, card.Slug, -1)... }
+					title="Subir prioridad"
+					aria-label="Subir prioridad"
+				>
+					↑
+				</button>
+			}
+			if card.Priority != backlogapp.PriorityP3 {
+				<button
+					class="btn btn-ghost btn-sm btn-square"
+					{ priorityButtonAttrs(previewPrefix, card.Slug, +1)... }
+					title="Bajar prioridad"
+					aria-label="Bajar prioridad"
+				>
+					↓
+				</button>
+			}
+			<button
+				class="btn btn-ghost btn-sm btn-square text-error"
+				{ deleteButtonAttrs(previewPrefix, card.Slug)... }
+				title="Eliminar"
+				aria-label="Eliminar tarjeta"
+			>
+				×
+			</button>
+		</div>
+	</footer>
+}
+
+// statusDotClass devuelve la clase del puntito de color que identifica
+// el estado en el breadcrumb / metadata del detalle.
+func statusDotClass(s backlogapp.Status) string {
+	switch s {
+	case backlogapp.StatusBacklog:
+		return "h-2 w-2 rounded-full bg-base-content/40 inline-block"
+	case backlogapp.StatusTodo:
+		return "h-2 w-2 rounded-full bg-info inline-block"
+	case backlogapp.StatusInProgress:
+		return "h-2 w-2 rounded-full bg-warning inline-block"
+	case backlogapp.StatusDone:
+		return "h-2 w-2 rounded-full bg-success inline-block"
+	}
+	return "h-2 w-2 rounded-full bg-base-content/40 inline-block"
+}

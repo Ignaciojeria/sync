@@ -1,0 +1,23 @@
+package ui
+
+templ Page(board BoardView, previewPrefix string) {
+	<div class="space-y-4">
+		<div class="flex items-center justify-between gap-3 flex-wrap">
+			<div>
+				<h1 class="text-2xl font-bold tracking-tight">Backlog</h1>
+				<p class="text-sm text-base-content/60">
+					Backlog agentico: las tarjetas las redacta el agente en archivos Markdown.
+					<span class="text-base-content/40">{ board.Count } tarjeta{ pluralS(board.Count) } en total.</span>
+				</p>
+			</div>
+		</div>
+		@Board(board, previewPrefix)
+	</div>
+}
+
+func pluralS(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}

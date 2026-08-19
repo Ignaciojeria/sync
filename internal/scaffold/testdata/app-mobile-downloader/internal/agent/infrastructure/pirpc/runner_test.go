@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	agentapp "fixtests1/internal/agent/application"
+	agentapp "lastmile-agents/internal/agent/application"
 )
 
 // fakeBinary escribe un script en un tempdir y devuelve su path absoluto.

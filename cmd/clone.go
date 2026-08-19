@@ -21,7 +21,7 @@ var (
 
 var cloneCmd = &cobra.Command{
 	Use:   "clone <slug>",
-	Short: "Prepara un workspace local desde un slug y lo sincroniza con Mutagen",
+	Short: "Clona una VM existente en un workspace local mediante Mutagen",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		slug := strings.TrimSpace(args[0])

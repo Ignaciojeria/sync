@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	agentapp "fixtests1/internal/agent/application"
+	agentapp "lastmile-agents/internal/agent/application"
 )
 
 // Launcher levanta una preview HTTP por sesión usando el workspace aislado.
@@ -117,16 +117,29 @@ func previewCommand(workspace string) (*exec.Cmd, string, error) {
 	airConfig := filepath.Join(workspace, ".air.toml")
 	if info, err := os.Stat(airConfig); err == nil && !info.IsDir() {
 		if airPath, err := exec.LookPath("air"); err == nil {
-			return exec.Command(airPath, "-c", airConfig), "air", nil
+			cmd := exec.Command(airPath, "-c", airConfig)
+			// ponytail: AUTH_DISABLED=true en el preview server.
+			// El preview server escucha solo en 127.0.0.1 y solo
+			// es accesible via el proxy /agent/sessions/{id}/preview,
+			// que ya filtra por sesion y requiere auth de editor.
+			// Sin este flag, el preview server exige OIDC y el proxy
+			// no inyecta el JWT, asi que responde 401 al hacer click
+			// en 'Open preview'.
+			cmd.Env = append(os.Environ(), "AUTH_DISABLED=true")
+			return cmd, "air", nil
 		}
 		if _, err := exec.LookPath("go"); err == nil {
-			return exec.Command("go", "run", "github.com/air-verse/air@latest", "-c", airConfig), "air-go-run", nil
+			cmd := exec.Command("go", "run", "github.com/air-verse/air@latest", "-c", airConfig)
+			cmd.Env = append(os.Environ(), "AUTH_DISABLED=true")
+			return cmd, "air-go-run", nil
 		}
 	}
 	if err := buildWorkspaceBinary(context.Background(), workspace); err != nil {
 		return nil, "", err
 	}
-	return exec.Command(previewBinaryPath(workspace)), "binary", nil
+	cmd := exec.Command(previewBinaryPath(workspace))
+	cmd.Env = append(os.Environ(), "AUTH_DISABLED=true")
+	return cmd, "binary", nil
 }
 
 func buildWorkspaceBinary(ctx context.Context, workspace string) error {

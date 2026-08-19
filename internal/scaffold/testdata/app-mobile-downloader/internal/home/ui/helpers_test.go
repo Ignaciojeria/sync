@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	topologyapp "fixtests1/internal/topology/application"
+	topologyapp "gitinittest5/internal/topology/application"
 )
 
 func TestStatusBadgeClass(t *testing.T) {

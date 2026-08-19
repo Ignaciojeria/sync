@@ -1,6 +1,9 @@
 package layout
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestPreviewMergeBarTone(t *testing.T) {
 	cases := []struct {
@@ -8,9 +11,14 @@ func TestPreviewMergeBarTone(t *testing.T) {
 		in   PreviewMergeBarState
 		want string
 	}{
+		// ponytail: success+NoChanges es estado neutral, no success
+		// verde. El verde sólo lo merecemos cuando realmente
+		// integramos commits.
 		{"default", PreviewMergeBarState{}, "text-base-content"},
-		{"success", PreviewMergeBarState{Success: true}, "text-success"},
+		{"success applies", PreviewMergeBarState{Success: true}, "text-success"},
+		{"success noChanges neutral", PreviewMergeBarState{Success: true, NoChanges: true}, "text-base-content"},
 		{"error overrides success", PreviewMergeBarState{Success: true, ErrorMessage: "boom"}, "text-error"},
+		{"error overrides noChanges", PreviewMergeBarState{Success: true, NoChanges: true, ErrorMessage: "boom"}, "text-error"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -27,9 +35,11 @@ func TestPreviewMergeBarBadgeClass(t *testing.T) {
 		in   PreviewMergeBarState
 		want string
 	}{
-		{"default", PreviewMergeBarState{}, "badge badge-info badge-sm"},
-		{"success", PreviewMergeBarState{Success: true}, "badge badge-success badge-sm"},
+		{"default preview", PreviewMergeBarState{}, "badge badge-info badge-sm"},
+		{"success applies", PreviewMergeBarState{Success: true}, "badge badge-success badge-sm"},
+		{"success noChanges uses info not success", PreviewMergeBarState{Success: true, NoChanges: true}, "badge badge-info badge-sm"},
 		{"error", PreviewMergeBarState{ErrorMessage: "boom"}, "badge badge-error badge-sm"},
+		{"error overrides success", PreviewMergeBarState{Success: true, ErrorMessage: "boom"}, "badge badge-error badge-sm"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -47,7 +57,8 @@ func TestPreviewMergeBarBadge(t *testing.T) {
 		want string
 	}{
 		{"default", PreviewMergeBarState{}, "Preview"},
-		{"success", PreviewMergeBarState{Success: true}, "Applied"},
+		{"success applies", PreviewMergeBarState{Success: true}, "Applied"},
+		{"success noChanges", PreviewMergeBarState{Success: true, NoChanges: true}, "Up to date"},
 		{"error", PreviewMergeBarState{ErrorMessage: "boom"}, "Blocked"},
 	}
 	for _, c := range cases {
@@ -68,34 +79,31 @@ func TestPreviewMergeBarMessage(t *testing.T) {
 		{"default preview message", PreviewMergeBarState{}, "Preview aislada"},
 		{"success with branch", PreviewMergeBarState{Success: true, BaseBranch: "main"}, "Cambios aplicados a main."},
 		{"success without branch", PreviewMergeBarState{Success: true}, "Cambios aplicados."},
+		{"success noChanges", PreviewMergeBarState{Success: true, NoChanges: true}, "No hay cambios nuevos para mergear."},
 		{"error overrides", PreviewMergeBarState{Success: true, ErrorMessage: "boom"}, "boom"},
+		{"error overrides noChanges", PreviewMergeBarState{Success: true, NoChanges: true, ErrorMessage: "boom"}, "boom"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			got := previewMergeBarMessage(c.in)
-			if !contains(got, c.want) {
+			if !strings.Contains(got, c.want) {
 				t.Errorf("message = %q, want substring %q", got, c.want)
 			}
 		})
 	}
 }
 
-func TestPreviewApplyConfirm(t *testing.T) {
-	withBranch := previewApplyConfirm(PreviewMergeBarState{BaseBranch: "main"})
-	if !contains(withBranch, "main") {
-		t.Errorf("with branch = %q", withBranch)
+func TestPreviewMergeConfirm(t *testing.T) {
+	withBranches := previewMergeConfirm(PreviewMergeBarState{PreviewBranch: "agent/x", BaseBranch: "main"})
+	if !strings.Contains(withBranches, "agent/x") || !strings.Contains(withBranches, "main") {
+		t.Errorf("with branches = %q, want both branch names", withBranches)
 	}
-	noBranch := previewApplyConfirm(PreviewMergeBarState{})
-	if contains(noBranch, "branch") {
-		t.Errorf("no branch should not mention branch: %q", noBranch)
+	baseOnly := previewMergeConfirm(PreviewMergeBarState{PreviewBranch: "agent/x"})
+	if !strings.Contains(baseOnly, "agent/x") {
+		t.Errorf("with preview only = %q, want preview name", baseOnly)
 	}
-}
-
-func contains(haystack, needle string) bool {
-	for i := 0; i+len(needle) <= len(haystack); i++ {
-		if haystack[i:i+len(needle)] == needle {
-			return true
-		}
+	plain := previewMergeConfirm(PreviewMergeBarState{})
+	if strings.TrimSpace(plain) == "" {
+		t.Errorf("plain confirm should not be empty")
 	}
-	return false
 }

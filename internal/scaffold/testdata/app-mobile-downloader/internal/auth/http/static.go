@@ -1,7 +1,7 @@
 package auth
 
 import (
-	"fixtests1/internal/shared/server"
+	"gitinittest5/internal/shared/server"
 )
 
 func registerStaticAssets(s *server.Server) {

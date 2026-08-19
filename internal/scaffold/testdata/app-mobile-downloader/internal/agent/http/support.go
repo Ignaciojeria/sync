@@ -3,9 +3,9 @@ package agent
 import (
 	"encoding/json"
 	"errors"
-	agentapp "fixtests1/internal/agent/application"
-	"fixtests1/internal/shared/mounted"
-	"fixtests1/internal/shared/server"
+	agentapp "lastmile-agents/internal/agent/application"
+	"lastmile-agents/internal/shared/mounted"
+	"lastmile-agents/internal/shared/server"
 	"net/http"
 	"net/url"
 	"strings"
@@ -152,9 +152,43 @@ func previewOwnerSessionIDFromMountPrefix(prefix string) string {
 	return strings.TrimSpace(parts[2])
 }
 
+// isSafeSessionID valida que el sessionID sea razonable antes de
+// usarlo como path component o de reenviarlo al backend. Mismas
+// reglas que el backend V1 usa internamente: alfanum + dash +
+// underscore. Vive en support.go (helpers compartidos) porque la
+// usan varios handlers (regenerateHandler, worktree inspector,
+// DELETE de sesiones, etc.).
+func isSafeSessionID(id string) bool {
+	if id == "" || len(id) > 256 {
+		return false
+	}
+	for _, r := range id {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '-' || r == '_':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 func mapSessionError(err error) error {
 	if errors.Is(err, agentapp.ErrSessionNotFound) {
 		return server.HTTPError{Status: http.StatusNotFound, Detail: err.Error()}
+	}
+	// ponytail: fallos de persistencia del user_prompt al
+	// journal son recuperables (reintentar el POST). Lo mapeamos
+	// a 503 (Service Unavailable) para que el cliente sepa que
+	// el problema es transitorio del storage, no del prompt en
+	// sí. Sin esto, el handler devolvería 500 y el cliente no
+	// podría distinguir "mi prompt es inválido" vs "disco
+	// lleno, intentá de nuevo".
+	var journalErr *journalPersistError
+	if errors.As(err, &journalErr) {
+		return server.HTTPError{Status: http.StatusServiceUnavailable, Detail: "no se pudo persistir el prompt, intentá nuevamente"}
 	}
 	if errors.Is(err, agentapp.ErrResumeUnavailable) {
 		return server.HTTPError{Status: http.StatusBadRequest, Detail: err.Error()}

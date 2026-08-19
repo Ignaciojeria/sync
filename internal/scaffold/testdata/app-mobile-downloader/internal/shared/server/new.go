@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	authpostgresql "fixtests1/internal/auth/infrastructure/postgresql"
-	authmiddleware "fixtests1/internal/auth/middleware"
-	"fixtests1/internal/shared"
-	"fixtests1/internal/shared/configuration"
+	authpostgresql "gitinittest5/internal/auth/infrastructure/postgresql"
+	authmiddleware "gitinittest5/internal/auth/middleware"
+	"gitinittest5/internal/shared"
+	"gitinittest5/internal/shared/configuration"
 
 	"github.com/MicahParks/keyfunc/v3"
 )

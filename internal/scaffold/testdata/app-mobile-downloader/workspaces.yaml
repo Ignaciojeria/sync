@@ -1,7 +1,7 @@
 version: 1
 
 project:
-  slug: fixtests1
+  slug: gitinittest5
 
 defaults:
   baseBranch: main

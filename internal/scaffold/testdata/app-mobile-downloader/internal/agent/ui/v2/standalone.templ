@@ -1,0 +1,1472 @@
+package v2
+
+import "strings"
+
+// StandalonePage envuelve Page en un documento HTML completo.
+// Replica el patrón de agentui.StandalonePage pero con:
+//   - CSS mínimo embebido (no daisyUI por ahora en M-A)
+//   - Carga del módulo JS V2
+//   - data-theme que viene del layout del host (igual que V1)
+//
+// La V2 apunta a bundle chico (objetivo ≤30 KB gzip, límite duro
+// 40 KB gzip — ver doc/agent-ux-refactor-plan.md §3). El CSS
+// embebido es <2 KB. El JS se sirve como módulo estático separado
+// para que el browser lo cachee de forma independiente.
+templ StandalonePage(state PageState, themeID string, themeCSSHref string) {
+	@StandalonePageWithContent(state, themeID, themeCSSHref, Page(state))
+}
+
+templ StandalonePageWithContent(state PageState, themeID string, themeCSSHref string, content templ.Component) {
+	<!DOCTYPE html>
+	<html lang="es" data-theme={ themeID }>
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+			<meta name="color-scheme" content="light dark"/>
+			<title>Agent V2</title>
+			<script src="https://unpkg.com/htmx.org@2.0.4" crossorigin="anonymous"></script>
+			<link href={ themeCSSHref } rel="stylesheet" type="text/css"/>
+			// ponytail: highlight.js para syntax highlighting en
+			// los code blocks del markdown del assistant. Lo
+			// cargamos desde CDN (mismo patrón que htmx) para no
+			// inflar el bundle del módulo JS. La versión core
+			// (~30KB minified) detecta el lenguaje
+			// automáticamente y soporta los lenguajes más
+			// comunes de un coding agent (go, python, js/ts,
+			// bash, json, sql, etc.).
+			//
+			// El tema github-dark combina bien con la paleta
+			// oscura del chat (forest) y la clara (ocean/
+			// sunset) — los backgrounds son neutros. Si en el
+			// futuro queremos tema adaptativo, lo cambiamos a
+			// highlight.js con dos themes (light + dark) y un
+			// media query. Por ahora, fijo.
+			<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css"/>
+			<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js" defer></script>
+			<style>
+				/* V2 chat — estilos deliberadamente austeros para M-A.
+				 * Cuando entre M-B (thinking + tool cards), esta hoja
+				 * crece sin afectar a V1. Mientras tanto: colores del
+				 * tema activo via tokens, layout simple, tipografía
+				 * monoes para código. */
+				:root {
+					--v2-bg: var(--color-base-100, #fff);
+					--v2-fg: var(--color-base-content, #111);
+					--v2-text: var(--color-base-content, #111);
+					--v2-muted: color-mix(in srgb, var(--color-base-content, #111) 60%, transparent);
+					--v2-border: color-mix(in srgb, var(--color-base-content, #111) 12%, transparent);
+					--v2-surface: color-mix(in srgb, var(--color-base-100, #fff) 92%, var(--color-base-content, #111));
+					--v2-surface-hover: color-mix(in srgb, var(--color-base-100, #fff) 85%, var(--color-base-content, #111));
+					--v2-accent: var(--color-primary, #2563eb);
+					--v2-error: var(--color-error, #dc2626);
+					--v2-mono: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+					--v2-sans: var(--pi-font-body-family, system-ui, -apple-system, sans-serif);
+				}
+				[data-theme="forest"] { --v2-bg: #0b1220; --v2-fg: #e5f7ec; }
+				[data-theme="ocean"] { --v2-bg: #f8fafc; --v2-fg: #0f172a; }
+				[data-theme="sunset"] { --v2-bg: #fff7ed; --v2-fg: #1c1917; }
+
+				/* ponytail: box-sizing global. Sin esto, el
+				 * textarea.v2-input (y otros width: 100%) NO incluye
+				 * padding ni border en su width, y desborda ~12px del
+				 * contenedor. DaisyUI / normalize.css hacen esto
+				 * por default; el V2 lo estaba omitiendo. */
+				*, *::before, *::after {
+					box-sizing: border-box;
+				}
+
+				html, body {
+					margin: 0;
+					height: 100%;
+					background: var(--v2-bg);
+					color: var(--v2-fg);
+					font-family: var(--v2-sans);
+					font-size: 14px;
+					line-height: 1.5;
+					-webkit-font-smoothing: antialiased;
+				}
+				/* Defensa secundaria contra scroll horizontal a nivel
+				 * de página. Si un elemento interno se desborda
+				 * (URL larguísima sin word-break, etc.), lo clipamos
+				 * en lugar de generar scroll horizontal global.
+				 * El overflow intencional (pre.v2-tool-output, etc.)
+				 * usa overflow-x:auto internamente y sigue funcionando. */
+				body {
+					overflow-x: hidden;
+				}
+				.v2-shell {
+					display: grid;
+					grid-template-columns: 16rem minmax(0, 1fr);
+					height: 100dvh;
+				}
+				.v2-sidebar {
+					border-right: 1px solid var(--v2-border);
+					display: flex;
+					flex-direction: column;
+					min-height: 0;
+					background: color-mix(in srgb, var(--v2-bg) 95%, var(--v2-fg) 5%);
+				}
+				.v2-sidebar-header {
+					display: flex;
+					align-items: center;
+					justify-content: space-between;
+					padding: 0.75rem 1rem;
+					border-bottom: 1px solid var(--v2-border);
+				}
+				.v2-sidebar-title {
+					margin: 0;
+					font-size: 0.78rem;
+					font-weight: 600;
+					letter-spacing: 0.08em;
+					text-transform: uppercase;
+					color: var(--v2-muted);
+				}
+				.v2-sessions-list {
+					list-style: none;
+					margin: 0;
+					padding: 0.5rem;
+					overflow-y: auto;
+				}
+				.v2-sessions-empty {
+					padding: 0.75rem;
+					color: var(--v2-muted);
+					font-size: 0.85rem;
+				}
+				.v2-session-row {
+					display: flex;
+					align-items: center;
+					gap: 0.25rem;
+					padding: 0.5rem;
+					border-radius: 0.5rem;
+				}
+				.v2-session-row-active {
+					background: color-mix(in srgb, var(--v2-accent) 12%, transparent);
+				}
+				.v2-session-link {
+					flex: 1;
+					min-width: 0;
+					text-decoration: none;
+					color: inherit;
+				}
+				.v2-session-title {
+					font-weight: 500;
+					font-size: 0.88rem;
+					white-space: nowrap;
+					overflow: hidden;
+					text-overflow: ellipsis;
+				}
+				.v2-session-meta {
+					display: flex;
+					gap: 0.5rem;
+					font-size: 0.7rem;
+					color: var(--v2-muted);
+					margin-top: 0.15rem;
+				}
+				/* ponytail: preview del último mensaje del
+				 * assistant. Se muestra en una sola línea con
+				 * ellipsis. El color es ligeramente más claro
+				 * que el meta (status + model) para que el
+				 * preview destaque sin pelearse visualmente.
+				 * Line-height apretado para que el item del
+				 * sidebar no crezca demasiado cuando hay preview. */
+				.v2-session-preview {
+					margin-top: 0.2rem;
+					font-size: 0.72rem;
+					color: color-mix(in srgb, var(--v2-fg) 70%, transparent);
+					line-height: 1.3;
+					white-space: nowrap;
+					overflow: hidden;
+					text-overflow: ellipsis;
+				}
+				.v2-session-model {
+					font-family: var(--v2-mono);
+					white-space: nowrap;
+					overflow: hidden;
+					text-overflow: ellipsis;
+				}
+				.v2-btn-icon {
+					width: 1.75rem;
+					height: 1.75rem;
+					border: none;
+					border-radius: 0.4rem;
+					background: transparent;
+					color: var(--v2-muted);
+					font-size: 1.1rem;
+					cursor: pointer;
+				}
+				.v2-btn-icon:hover {
+					background: color-mix(in srgb, var(--v2-fg) 8%, transparent);
+					color: var(--v2-fg);
+				}
+
+				.v2-main {
+					display: flex;
+					flex-direction: column;
+					min-width: 0;
+					min-height: 0;
+				}
+				.v2-header {
+					display: flex;
+					align-items: center;
+					justify-content: space-between;
+					padding: 0.75rem 1rem;
+					border-bottom: 1px solid var(--v2-border);
+				}
+				.v2-title {
+					margin: 0;
+					font-size: 0.95rem;
+					font-weight: 600;
+				}
+				.v2-header-actions {
+					display: flex;
+					align-items: center;
+					gap: 0.75rem;
+				}
+				/* ponytail: badge primario 'Working' al lado del
+				 * balance. Estilo V1: tipografía monoespacada,
+				 * tipografía del budget bar, 3 dots animados
+				 * que aparecen/desaparecen en cascada. El texto
+				 * lo controla JS (working/queued/error); los dots
+				 * son CSS puro (no JS los toca). El badge tiene
+				 * min-width para que el budget bar NO salte cuando
+				 * el texto aparece/desaparece.
+				 *
+				 * La animación de los dots vive acá y se
+				 * reproduce sólo cuando el badge está en estado
+				 * 'working'. En idle, los dots quedan invisibles
+				 * (opacity 0) sin animación. En error, cambian a
+				 * color de error y se quedan quietos (sin
+				 * animación). */
+				.v2-phase-badge {
+					display: inline-flex;
+					align-items: baseline;
+					gap: 0.4rem;
+					margin-left: 0.65rem;
+					padding: 0;
+					min-width: 5.5rem;
+					min-height: 1rem;
+					font-family: var(--v2-mono);
+					font-size: 0.72rem;
+					color: var(--v2-muted);
+					/* ponytail: NO transition. Cualquier
+					 * transition en el badge podría causar
+					 * flicker si el browser decide repintar
+					 * durante un cambio de estado. Cambios de
+					 * color son instantáneos (sin animación).
+					 * La única animación permitida es la de los
+					 * dots. */
+				}
+				.v2-phase-badge-text {
+					display: inline-block;
+					min-width: 4.4rem;
+					/* ponytail: min-width previene que el
+					 * texto 'Trabajando' (11 chars) vs 'En cola'
+					 * (7 chars) cambie el ancho del badge.
+					 * Sin esto, el budget bar 'salta' cada vez
+					 * que el texto cambia — el mismo tipo de
+					 * flicker que vimos en el header. */
+				}
+				.v2-phase-badge-dots {
+					display: inline-flex;
+					align-items: baseline;
+					gap: 0.18rem;
+					opacity: 0;
+					transition: opacity 120ms ease;
+				}
+				.v2-phase-badge[data-state="working"] .v2-phase-badge-dots {
+					opacity: 1;
+				}
+				.v2-phase-badge[data-state="working"] {
+					color: var(--v2-accent);
+				}
+				.v2-phase-badge[data-state="error"] {
+					color: var(--v2-error);
+				}
+				.v2-working-dot {
+					display: inline-block;
+					width: 0.32rem;
+					height: 0.32rem;
+					border-radius: 999px;
+					background: currentColor;
+					opacity: 0;
+					transform: translateY(0);
+				}
+				/* ponytail: la animación se aplica SOLO
+				 * cuando el badge está en estado working.
+				 * data-state se controla por JS sin re-render
+				 * completo (sólo cambia el atributo del badge
+				 * raíz, los dots heredan via CSS). El delay
+				 * entre dots es 120ms / 240ms (mismo que V1)
+				 * para que la cascada sea visible pero no
+				 * mareante. */
+				.v2-phase-badge[data-state="working"] .v2-working-dot {
+					animation: v2-working 1.1s infinite ease-in-out;
+				}
+				.v2-phase-badge[data-state="working"] .v2-working-dot:nth-child(2) {
+					animation-delay: 120ms;
+				}
+				.v2-phase-badge[data-state="working"] .v2-working-dot:nth-child(3) {
+					animation-delay: 240ms;
+				}
+				@keyframes v2-working {
+					0%, 60%, 100% {
+						opacity: 0.35;
+						transform: translateY(0);
+					}
+					30% {
+						opacity: 0.95;
+						transform: translateY(-0.08rem);
+					}
+				}
+				@media (prefers-reduced-motion: reduce) {
+					.v2-phase-badge[data-state="working"] .v2-working-dot {
+						animation: none;
+						opacity: 0.8;
+					}
+					.v2-phase-badge-dots {
+						transition: none;
+					}
+				}
+				/* ponytail: badge SECUNDARIO. Opt-in (toggle en el
+				 * header). Muestra la sub-fase real (Pensando /
+				 * Tool / Respondiendo / etc.) con un data-subphase
+				 * para que cada color refleje el tipo de
+				 * actividad. Importante: este badge nunca debe
+				 * mostrarse con el primario OCULTO — si el primario
+				 * está en idle, el secundario también (o el
+				 * usuario pensaría que el agent está trabajando
+				 * cuando no es así). El JS maneja esto en
+				 * reflectPhaseDetail. */
+				.v2-phase-detail-badge {
+					font-size: 0.66rem;
+					padding: 0.1rem 0.5rem;
+					border-radius: 999px;
+					border: 1px solid var(--v2-border);
+					color: var(--v2-muted);
+					font-family: var(--v2-mono);
+					letter-spacing: 0.04em;
+				}
+				.v2-phase-detail-badge[data-subphase="thinking"] {
+					color: color-mix(in srgb, var(--v2-accent) 90%, transparent);
+					border-color: color-mix(in srgb, var(--v2-accent) 35%, transparent);
+					background: color-mix(in srgb, var(--v2-accent) 8%, transparent);
+				}
+				.v2-phase-detail-badge[data-subphase="tooling"] {
+					color: color-mix(in srgb, var(--v2-warning, #f59e0b) 90%, transparent);
+					border-color: color-mix(in srgb, var(--v2-warning, #f59e0b) 45%, transparent);
+					background: color-mix(in srgb, var(--v2-warning, #f59e0b) 10%, transparent);
+				}
+				.v2-phase-detail-badge[data-subphase="answering"] {
+					color: color-mix(in srgb, #10b981 90%, transparent);
+					border-color: color-mix(in srgb, #10b981 45%, transparent);
+					background: color-mix(in srgb, #10b981 10%, transparent);
+				}
+				.v2-phase-detail-badge[data-subphase="compacting"] {
+					color: color-mix(in srgb, var(--v2-warning, #f59e0b) 90%, transparent);
+					border-color: color-mix(in srgb, var(--v2-warning, #f59e0b) 45%, transparent);
+					background: color-mix(in srgb, var(--v2-warning, #f59e0b) 10%, transparent);
+				}
+				.v2-phase-detail-badge[data-subphase="retrying"] {
+					color: var(--v2-error);
+					border-color: color-mix(in srgb, var(--v2-error) 50%, transparent);
+					background: color-mix(in srgb, var(--v2-error) 8%, transparent);
+				}
+				.v2-phase-detail-badge[data-subphase="queued"] {
+					color: var(--v2-muted);
+					border-color: color-mix(in srgb, var(--v2-muted) 50%, transparent);
+					background: color-mix(in srgb, var(--v2-muted) 8%, transparent);
+				}
+				.v2-phase-detail-badge[data-subphase="error"] {
+					color: var(--v2-error);
+					border-color: color-mix(in srgb, var(--v2-error) 50%, transparent);
+				}
+				/* ponytail: toggle para mostrar/ocultar el badge
+				 * secundario. Es un icono chiquito (i de info) al
+				 * lado del primario. Cuando el secundario está
+				 * visible, el toggle se ve "activo" (más opaco).
+				 * Click lo togglea. Persistimos en sessionStorage. */
+				.v2-phase-detail-toggle {
+					width: 1.4rem;
+					height: 1.4rem;
+					padding: 0;
+					border: 1px solid var(--v2-border);
+					border-radius: 999px;
+					background: transparent;
+					color: var(--v2-muted);
+					cursor: pointer;
+					display: inline-flex;
+					align-items: center;
+					justify-content: center;
+					opacity: 0.55;
+					transition: opacity 120ms ease, color 120ms ease, border-color 120ms ease;
+				}
+				.v2-phase-detail-toggle:hover {
+					opacity: 1;
+				}
+				.v2-phase-detail-toggle[data-enabled="true"] {
+					opacity: 1;
+					color: var(--v2-accent);
+					border-color: color-mix(in srgb, var(--v2-accent) 50%, transparent);
+				}
+				.v2-phase-detail-toggle svg {
+					width: 0.85rem;
+					height: 0.85rem;
+				}
+				@media (prefers-reduced-motion: reduce) {
+					.v2-phase-detail-toggle {
+						transition-duration: 0.01ms !important;
+					}
+				}
+				.v2-btn {
+					border: 1px solid var(--v2-border);
+					background: transparent;
+					color: var(--v2-fg);
+					border-radius: 0.4rem;
+					padding: 0.4rem 0.75rem;
+					font-size: 0.82rem;
+					cursor: pointer;
+				}
+				.v2-btn:hover:not([disabled]) {
+					background: color-mix(in srgb, var(--v2-fg) 6%, transparent);
+				}
+				.v2-btn[disabled] {
+					opacity: 0.5;
+					cursor: not-allowed;
+				}
+				.v2-btn-primary {
+					background: var(--v2-accent);
+					color: var(--v2-bg);
+					border-color: var(--v2-accent);
+				}
+				.v2-btn-primary:hover:not([disabled]) {
+					opacity: 0.92;
+				}
+				.v2-btn-danger {
+					color: var(--v2-error);
+					border-color: color-mix(in srgb, var(--v2-error) 50%, transparent);
+				}
+
+				.v2-feed-wrap {
+					flex: 1;
+					min-width: 0;
+					min-height: 0;
+					overflow-y: auto;
+					position: relative;
+					/* ponytail: desactivar scroll anchoring del
+					 * browser. Chrome activa `overflow-anchor: auto`
+					 * por default en contenedores con overflow-y,
+					 * intentando mantener visible el contenido que
+					 * el user está leyendo cuando se agrega/quita
+					 * texto arriba del viewport. En un chat eso es
+					 * contraproducente: cuando llega texto abajo
+					 * (típico del streaming), el browser puede
+					 * anclar la posición y dejar el nuevo
+					 * contenido fuera de vista — el user tiene que
+					 * scrollear manualmente para alcanzar el
+					 * final. Con `none`, los `scrollTop =
+					 * scrollHeight` que disparamos desde el JS
+					 * quedan donde los pusimos. */
+					overflow-anchor: none;
+				}
+				/* ponytail: wrapper row que contiene feed + panel.
+				 * Antes el feed era solo child de v2-main, asi que
+				 * el panel quedaba DEBAJO. Con este wrapper, el
+				 * panel queda a la DERECHA. flex: 1 + min-width: 0
+				 * para que el feed tome el espacio disponible y el
+				 * panel se quede con su width fijo (22rem). */
+				.v2-feed-and-panel {
+					flex: 1;
+					min-height: 0;
+					display: flex;
+					flex-direction: row;
+				}
+				.v2-feed {
+					padding: 1rem;
+					display: flex;
+					flex-direction: column;
+					gap: 0.75rem;
+					max-width: 50rem;
+					margin: 0 auto;
+				}
+				/* ponytail: botón jump-to-bottom. Posicionado
+				 * absolute abajo a la derecha del feed-wrap (no
+				 * del feed, asi no se desplaza con el scroll). El
+				 * botón aparece con transición suave cuando hay
+				 * mensajes nuevos abajo y el user subió. El hidden
+				 * attribute del HTML controla la visibilidad (el
+				 * JS lo quita/agrega segun el contexto). Fondo
+				 * sólido + shadow fuerte + tamaño generoso para
+				 * que sea inequívocamente visible. */
+				.v2-jump-bottom {
+					position: absolute;
+					bottom: 2.5rem;
+					right: 1.5rem;
+					display: inline-flex;
+					align-items: center;
+					gap: 0.5rem;
+					padding: 0.75rem 1.1rem;
+					font-size: 0.88rem;
+					font-weight: 600;
+					color: var(--v2-text);
+					background: var(--v2-bg);
+					border: 1px solid var(--v2-border);
+					border-radius: 999px;
+					cursor: pointer;
+					box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28), 0 2px 6px rgba(0, 0, 0, 0.1);
+					transition: opacity 180ms ease, transform 180ms ease, background 180ms ease;
+					opacity: 0;
+					transform: translateY(8px);
+					z-index: 10;
+				}
+				.v2-jump-bottom[hidden] {
+					display: none;
+				}
+				.v2-jump-bottom:not([hidden]) {
+					opacity: 1;
+					transform: translateY(0);
+				}
+				.v2-jump-bottom:hover {
+					background: var(--v2-surface-hover);
+					border-color: var(--v2-text-muted);
+				}
+				.v2-jump-bottom:focus-visible {
+					outline: 2px solid var(--v2-accent, var(--color-primary));
+					outline-offset: 2px;
+				}
+				.v2-jump-bottom svg {
+					width: 18px;
+					height: 18px;
+					stroke-width: 2.5;
+				}
+				.v2-jump-bottom-count {
+					font-variant-numeric: tabular-nums;
+				}
+				/* ponytail: Worktree Inspector Panel. Panel lateral
+				 * colapsable a la derecha del feed. Muestra branch
+				 * info + files changed + commits + diff. Cuando
+				 * está abierto, ocupa 22rem a la derecha y el feed
+				 * reduce su max-width para hacerle espacio. */
+				.v2-worktree-panel {
+					width: 22rem;
+					flex-shrink: 0;
+					border-left: 1px solid var(--v2-border);
+					background: var(--v2-bg);
+					overflow-y: auto;
+					padding: 1rem;
+					display: flex;
+					flex-direction: column;
+					gap: 1rem;
+				}
+				.v2-worktree-panel[hidden] {
+					display: none;
+				}
+				.v2-worktree-header {
+					display: flex;
+					align-items: center;
+					justify-content: space-between;
+					padding-bottom: 0.5rem;
+					border-bottom: 1px solid var(--v2-border);
+				}
+				.v2-worktree-title {
+					margin: 0;
+					font-size: 0.95rem;
+					font-weight: 600;
+				}
+				.v2-worktree-close {
+					background: none;
+					border: 0;
+					font-size: 1.5rem;
+					line-height: 1;
+					cursor: pointer;
+					color: var(--v2-muted);
+					padding: 0 0.25rem;
+				}
+				.v2-worktree-close:hover {
+					color: var(--v2-text);
+				}
+				.v2-worktree-section-title {
+					margin: 0 0 0.4rem;
+					font-size: 0.75rem;
+					font-weight: 600;
+					text-transform: uppercase;
+					letter-spacing: 0.05em;
+					color: var(--v2-muted);
+					display: flex;
+					justify-content: space-between;
+					align-items: baseline;
+				}
+				.v2-worktree-section-meta {
+					font-weight: 400;
+					text-transform: none;
+					letter-spacing: 0;
+					font-size: 0.72rem;
+				}
+				.v2-worktree-meta {
+					font-size: 0.82rem;
+					font-family: var(--v2-mono);
+					opacity: 0.85;
+					line-height: 1.5;
+				}
+				.v2-worktree-list {
+					list-style: none;
+					margin: 0;
+					padding: 0;
+					display: flex;
+					flex-direction: column;
+					gap: 0.3rem;
+				}
+				.v2-worktree-file,
+				.v2-worktree-commit {
+					display: flex;
+					gap: 0.4rem;
+					padding: 0.3rem 0.4rem;
+					border-radius: 0.3rem;
+					cursor: pointer;
+					font-size: 0.78rem;
+					font-family: var(--v2-mono);
+					transition: background 120ms ease;
+					align-items: baseline;
+				}
+				.v2-worktree-file:hover,
+				.v2-worktree-commit:hover {
+					background: color-mix(in srgb, var(--v2-fg) 5%, transparent);
+				}
+				.v2-worktree-file-status {
+					font-weight: 600;
+					flex-shrink: 0;
+					width: 1rem;
+					text-align: center;
+				}
+				.v2-worktree-file-status[data-status="M"] { color: oklch(70% 0.12 220); }
+				.v2-worktree-file-status[data-status="A"] { color: oklch(70% 0.18 145); }
+				.v2-worktree-file-status[data-status="D"] { color: oklch(70% 0.22 25); }
+				.v2-worktree-file-status[data-status="?"] { color: oklch(70% 0.05 280); }
+				.v2-worktree-file-stats {
+					flex-shrink: 0;
+					font-variant-numeric: tabular-nums;
+					font-size: 0.7rem;
+				}
+				.v2-worktree-file-stats .additions { color: oklch(70% 0.18 145); }
+				.v2-worktree-file-stats .deletions { color: oklch(70% 0.22 25); }
+				.v2-worktree-file-path {
+					flex: 1;
+					overflow: hidden;
+					text-overflow: ellipsis;
+					white-space: nowrap;
+					opacity: 0.92;
+				}
+				.v2-worktree-commit-hash {
+					flex-shrink: 0;
+					font-weight: 600;
+					color: var(--v2-accent);
+				}
+				.v2-worktree-commit-message {
+					flex: 1;
+					overflow: hidden;
+					text-overflow: ellipsis;
+					white-space: nowrap;
+					font-family: var(--v2-sans);
+				}
+				.v2-worktree-diff {
+					margin-top: 0.5rem;
+					border: 1px solid var(--v2-border);
+					border-radius: 0.4rem;
+					overflow: hidden;
+				}
+				.v2-worktree-diff[hidden] {
+					display: none;
+				}
+				.v2-worktree-diff-content {
+					margin: 0;
+					padding: 0.6rem;
+					font-size: 0.72rem;
+					font-family: var(--v2-mono);
+					background: color-mix(in srgb, var(--v2-fg) 4%, transparent);
+					max-height: 20rem;
+					overflow: auto;
+					white-space: pre;
+				}
+				/* ponytail: botón "Apply to main" + status. Se
+				 * deshabilita cuando no hay commits ahead. El
+				 * status muestra el resultado del merge (ok o
+				 * error con detalle del conflict). */
+				.v2-worktree-actions {
+					padding-top: 0.5rem;
+					border-top: 1px solid var(--v2-border);
+				}
+				.v2-worktree-apply {
+					width: 100%;
+					padding: 0.55rem 0.85rem;
+					font-size: 0.82rem;
+					font-weight: 600;
+					color: var(--v2-bg);
+					background: var(--v2-accent);
+					border: 0;
+					border-radius: 0.4rem;
+					cursor: pointer;
+					transition: opacity 120ms ease, background 120ms ease;
+				}
+				.v2-worktree-apply:hover:not(:disabled) {
+					opacity: 0.92;
+				}
+				.v2-worktree-apply:disabled {
+					opacity: 0.4;
+					cursor: not-allowed;
+				}
+				.v2-worktree-apply-status {
+					margin-top: 0.5rem;
+					padding: 0.5rem 0.65rem;
+					border-radius: 0.4rem;
+					font-size: 0.78rem;
+					line-height: 1.45;
+					font-family: var(--v2-mono);
+				}
+				.v2-worktree-apply-status[data-state="ok"] {
+					background: color-mix(in srgb, oklch(70% 0.18 145) 14%, transparent);
+					color: oklch(80% 0.18 145);
+					border: 1px solid color-mix(in srgb, oklch(70% 0.18 145) 40%, transparent);
+				}
+				.v2-worktree-apply-status[data-state="error"] {
+					background: color-mix(in srgb, oklch(70% 0.22 25) 14%, transparent);
+					color: oklch(80% 0.22 25);
+					border: 1px solid color-mix(in srgb, oklch(70% 0.22 25) 40%, transparent);
+				}
+				.v2-worktree-apply-status[hidden] {
+					display: none;
+				}
+				.v2-empty {
+					text-align: center;
+					padding: 4rem 1rem;
+					color: var(--v2-muted);
+				}
+				.v2-empty-headline {
+					margin: 0 0 0.5rem;
+					font-size: 1.05rem;
+				}
+				.v2-empty-sub {
+					margin: 0;
+					font-size: 0.85rem;
+				}
+
+				/* ponytail: M-B = estética + affordances de chat.
+				 * El V2 arranca con items tipo "card plana" sin
+				 * diferenciar visualmente user de assistant. Eso
+				 * es honesto pero cuesta leer quién dijo qué.
+				 * Acá rediseñamos con burbujas distintas (sin
+				 * caer en chat-bubble pesado de DaisyUI):
+				 *   - user: alineado a la derecha, fondo
+				 *     primario translucido, rail derecho de color
+				 *     accent.
+				 *   - assistant: alineado a la izquierda, fondo
+				 *     neutro, rail izquierdo sutil.
+				 *   - tool/tool_result/error: card plana
+				 *     monocromo, sin rail, para que se distingan
+				 *     del flujo conversacional.
+				 * El avatar es opcional — si el budget bar ya
+				 * está apretado, podemos quitarlo después. Por
+				 * ahora lo dejamos: una letra inicial ayuda
+				 * mucho a escanear la conversación. */
+				.v2-item {
+					padding: 0.65rem 0.85rem;
+					border-radius: 0.6rem;
+					border: 1px solid var(--v2-border);
+					max-width: 92%;
+					word-wrap: break-word;
+					position: relative;
+				}
+				/* ponytail: whitespace pre-wrap SOLO en user
+				 * (mensajes cortos sin formato). En assistant
+				 * el whitespace lo maneja el markdown. */
+				.v2-item-user {
+					white-space: pre-wrap;
+				}
+				.v2-item-user {
+					align-self: flex-end;
+					background: color-mix(in srgb, var(--v2-accent) 14%, transparent);
+					border-color: color-mix(in srgb, var(--v2-accent) 35%, transparent);
+					border-right: 3px solid color-mix(in srgb, var(--v2-accent) 70%, transparent);
+				}
+				.v2-item-assistant {
+					align-self: flex-start;
+					background: color-mix(in srgb, var(--v2-fg) 4%, transparent);
+					border-left: 3px solid color-mix(in srgb, var(--v2-accent) 50%, transparent);
+				}
+				.v2-item-assistant > p:first-child {
+					margin-top: 0;
+				}
+				.v2-item-assistant > p:last-child {
+					margin-bottom: 0;
+				}
+				.v2-item-assistant p,
+				.v2-item-assistant ul,
+				.v2-item-assistant ol,
+				.v2-item-assistant blockquote {
+					margin: 0.45rem 0;
+				}
+				.v2-item-assistant ul,
+				.v2-item-assistant ol {
+					padding-left: 1.4rem;
+				}
+				.v2-item-assistant li {
+					margin: 0.15rem 0;
+				}
+				.v2-item-assistant h1,
+				.v2-item-assistant h2,
+				.v2-item-assistant h3,
+				.v2-item-assistant h4 {
+					margin: 0.7rem 0 0.3rem;
+					font-weight: 600;
+				}
+				.v2-item-assistant h1 { font-size: 1.15rem; }
+				.v2-item-assistant h2 { font-size: 1.05rem; }
+				.v2-item-assistant h3 { font-size: 0.98rem; }
+				.v2-item-assistant h4 { font-size: 0.92rem; }
+				.v2-item-assistant a {
+					color: var(--v2-accent);
+					text-decoration: underline;
+					text-underline-offset: 2px;
+				}
+				.v2-item-assistant a:hover {
+					color: color-mix(in srgb, var(--v2-accent) 70%, var(--v2-fg));
+				}
+				.v2-item-assistant blockquote {
+					border-left: 3px solid var(--v2-border);
+					padding-left: 0.75rem;
+					color: color-mix(in srgb, var(--v2-fg) 75%, transparent);
+				}
+				/* ponytail: code inline y code block. El inline
+				 * usa fondo neutro sutil + font mono; el block
+				 * tiene padding y scroll horizontal para outputs
+				 * largos. Sin syntax highlighting (chromaprism
+				 * sería ideal pero suma 200kB de bundle) —
+				 * aceptable para M-B, lo agregamos en M-B.2. */
+				.v2-item-assistant code {
+					font-family: var(--v2-mono);
+					font-size: 0.88em;
+					background: color-mix(in srgb, var(--v2-fg) 8%, transparent);
+					padding: 0.08em 0.32em;
+					border-radius: 0.28em;
+				}
+				.v2-item-assistant pre {
+					font-family: var(--v2-mono);
+					font-size: 0.83rem;
+					background: color-mix(in srgb, var(--v2-fg) 6%, transparent);
+					border: 1px solid var(--v2-border);
+					border-radius: 0.5rem;
+					padding: 0.7rem 0.85rem;
+					margin: 0.5rem 0;
+					overflow-x: auto;
+					max-width: 100%;
+				}
+				.v2-item-assistant pre code {
+					background: transparent;
+					padding: 0;
+					border-radius: 0;
+					font-size: inherit;
+				}
+				/* ponytail: highlight.js pinta <code> con su propio
+				 * background. Para que combine con el pre (que
+				 * tiene el border y padding), sobrescribimos el
+				 * background del code interno. Tambien forzamos
+				 * que los colores del highlight se vean bien sobre
+				 * el fondo del chat (forest/ocean/sunset). */
+				.v2-item-assistant pre code.hljs {
+					background: transparent;
+				}
+				.v2-item-assistant pre code.hljs,
+				.v2-item-assistant pre code.hljs span {
+					/* el theme github-dark ya define colores
+					 * decentes; si en el futuro tenemos tema
+					 * claro, reemplazamos esta regla por la del
+					 * theme claro */
+					font-family: var(--v2-mono);
+				}
+				/* ponytail: cuando highlight.js todavía no
+				 * terminó de cargar (CDN en cold cache), los
+				 * code blocks quedan en texto plano monoespaciado
+				 * — mejor que un flash de texto sin mono. La
+				 * clase .hljs-loaded se setea desde main.js una
+				 * vez que hljs.highlightAll() terminó, y agrega
+				 * un transition suave al color de syntax. */
+				.v2-item-assistant pre code:not(.hljs) {
+					color: var(--v2-fg);
+				}
+				.v2-item-assistant table {
+					border-collapse: collapse;
+					margin: 0.5rem 0;
+					font-size: 0.88rem;
+				}
+				.v2-item-assistant th,
+				.v2-item-assistant td {
+					border: 1px solid var(--v2-border);
+					padding: 0.35rem 0.6rem;
+					text-align: left;
+				}
+				.v2-item-assistant th {
+					background: color-mix(in srgb, var(--v2-fg) 5%, transparent);
+					font-weight: 600;
+				}
+				.v2-item-tool {
+					align-self: flex-start;
+					background: color-mix(in srgb, var(--v2-fg) 3%, transparent);
+					font-family: var(--v2-mono);
+					font-size: 0.82rem;
+				}
+				.v2-tool-name {
+					font-weight: 600;
+					margin-bottom: 0.35rem;
+				}
+				.v2-tool-args {
+					margin: 0;
+					padding: 0;
+					background: transparent;
+					border-radius: 0;
+					overflow-x: auto;
+					font-size: 0.78rem;
+				}
+				/* ponytail: M-B.2 = tool args legibles. En vez de
+				 * un <pre> con JSON crudo, cada key del objeto
+				 * se imprime como una línea key: value. Las keys
+				 * van en color accent (highlight sutil), los
+				 * valores en foreground plano. Los strings van
+				 * entre comillas (estilo CLI tools). Si los args
+				 * tienen anidación, cae al fallback de JSON
+				 * formateado con un <pre> aparte. */
+				.v2-tool-arg {
+					display: flex;
+					gap: 0.4rem;
+					line-height: 1.45;
+					padding: 0.08rem 0;
+				}
+				.v2-tool-arg-key {
+					color: color-mix(in srgb, var(--v2-accent) 85%, transparent);
+					font-weight: 500;
+					flex-shrink: 0;
+				}
+				.v2-tool-arg-sep {
+					color: var(--v2-muted);
+					flex-shrink: 0;
+				}
+				.v2-tool-arg-val {
+					color: var(--v2-fg);
+					word-break: break-all;
+				}
+				.v2-tool-args-raw {
+					color: var(--v2-muted);
+					font-family: var(--v2-mono);
+					font-size: 0.72rem;
+					text-transform: uppercase;
+					letter-spacing: 0.06em;
+				}
+				.v2-tool-args-fallback {
+					margin: 0.3rem 0 0;
+					padding: 0.5rem;
+					background: color-mix(in srgb, var(--v2-fg) 5%, transparent);
+					border-radius: 0.35rem;
+					overflow-x: auto;
+					white-space: pre;
+					font-size: 0.76rem;
+				}
+				/* tool_result: output de la tool. Va como card
+				 * separada del tool (que tiene los args) para que se
+				 * vean en orden cronológico. */
+				.v2-item-tool-result {
+					align-self: flex-start;
+					background: color-mix(in srgb, var(--v2-fg) 2%, transparent);
+					font-family: var(--v2-mono);
+					font-size: 0.78rem;
+					padding: 0.5rem 0.75rem;
+				}
+				.v2-tool-result-label {
+					font-family: var(--v2-sans);
+					font-size: 0.66rem;
+					letter-spacing: 0.08em;
+					text-transform: uppercase;
+					color: var(--v2-muted);
+					margin-bottom: 0.35rem;
+				}
+				.v2-tool-output {
+					margin: 0;
+					padding: 0.5rem;
+					background: color-mix(in srgb, var(--v2-fg) 4%, transparent);
+					border-radius: 0.35rem;
+					overflow-x: auto;
+					font-size: 0.78rem;
+					max-height: 24rem;
+					overflow-y: auto;
+					white-space: pre-wrap;
+				}
+				/* ponytail: cuando highlight.js procesa el <code>
+				 * adentro del pre, le pone su propio background.
+				 * Lo hacemos transparente para que combine con el
+				 * background del pre (que ya tiene su color). */
+				.v2-tool-output code,
+				.v2-tool-output code.hljs {
+					background: transparent;
+					padding: 0;
+					font-family: var(--v2-mono);
+					font-size: inherit;
+				}
+				/* thinking: bloque colapsable. Border-left en color
+				 * muted para distinguir visualmente sin gritar. Por
+				 * default está colapsado (la mayoría del thinking no
+				 * necesita leerse). */
+				.v2-item-thinking {
+					align-self: flex-start;
+					font-family: var(--v2-mono);
+					font-size: 0.78rem;
+					padding: 0;
+					border: 1px solid var(--v2-border);
+					border-left: 3px solid color-mix(in srgb, var(--v2-muted) 60%, transparent);
+				}
+				.v2-thinking {
+					width: 100%;
+				}
+				.v2-thinking > summary {
+					list-style: none;
+					cursor: pointer;
+					padding: 0.45rem 0.75rem;
+					display: flex;
+					align-items: baseline;
+					gap: 0.6rem;
+					color: var(--v2-muted);
+					user-select: none;
+				}
+				.v2-thinking > summary::-webkit-details-marker {
+					display: none;
+				}
+				.v2-thinking > summary::before {
+					content: "▸";
+					display: inline-block;
+					font-size: 0.7rem;
+					transition: transform 120ms ease;
+				}
+				.v2-thinking[open] > summary::before {
+					transform: rotate(90deg);
+				}
+				.v2-thinking > summary:hover {
+					background: color-mix(in srgb, var(--v2-fg) 4%, transparent);
+				}
+				.v2-thinking-label {
+					font-weight: 600;
+					color: var(--v2-fg);
+				}
+				.v2-thinking-meta {
+					font-size: 0.7rem;
+					opacity: 0.7;
+				}
+				.v2-thinking-content {
+					margin: 0;
+					padding: 0.5rem 0.75rem 0.75rem;
+					border-top: 1px solid var(--v2-border);
+					white-space: pre-wrap;
+					word-wrap: break-word;
+					max-height: 30rem;
+					overflow-y: auto;
+					/* ponytail: el contenido del thinking se ve
+					 * italic + muted para distinguirlo del texto
+					 * del assistant sin gritar. Patrón estándar de
+					 * coding agents: el thinking explica el razonamiento
+					 * (qué archivos miró, qué estrategia usó), es info
+					 * valiosa que el user quiere ver. Italic + opacity
+					 * 0.78 lo hace presente pero secundario. */
+					font-style: italic;
+					opacity: 0.78;
+					line-height: 1.55;
+				}
+				.v2-item-error {
+					align-self: flex-start;
+					background: color-mix(in srgb, var(--v2-error) 12%, transparent);
+					border-color: color-mix(in srgb, var(--v2-error) 40%, transparent);
+					color: var(--v2-error);
+				}
+				/* ponytail: M-C.1 = botón Copy en cada item del chat.
+				 * Aparece al hover del item, no es intrusivo en
+				 * estado idle. Posición: esquina superior derecha
+				 * del item. El SVG es un icono de "copiar" (dos
+				 * rectángulos superpuestos). Cuando el usuario hace
+				 * click, el cliente cambia aria-label y
+				 * textContent (visual "Copiado") por 1.5s. */
+				/* ponytail: M-C.2 = wrapper de acciones. Contiene
+				 * los botones Copy y Regenerate en posición
+				 * absoluta arriba a la derecha del item. Ambos
+				 * comparten el mismo estilo base (oculto por
+				 * default, visible al hover). Regenerate se
+				 * posiciona a la izquierda de Copy para que no se
+				 * solapen. */
+				.v2-item-actions {
+					position: absolute;
+					top: 0.45rem;
+					right: 0.45rem;
+					display: inline-flex;
+					gap: 0.25rem;
+					z-index: 1;
+				}
+				.v2-item-copy,
+				.v2-item-regenerate {
+					width: 1.5rem;
+					height: 1.5rem;
+					padding: 0;
+					border: 1px solid var(--v2-border);
+					border-radius: 0.35rem;
+					background: color-mix(in srgb, var(--v2-bg) 80%, transparent);
+					color: var(--v2-muted);
+					cursor: pointer;
+					/* ponytail: SIEMPRE visibles con opacity baja para
+					 * descubribilidad. Hover sube a 1. En touch (no
+					 * hay hover) quedan en 0.7. El patrón anterior
+					 * era opacity 0 → 1 al hover, que era invisible
+					 * para usuarios que no sabían que existía el
+					 * botón. ChatGPT/Claude usan el patrón visible
+					 * siempre. */
+					opacity: 0.45;
+					pointer-events: auto;
+					transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+					display: inline-flex;
+					align-items: center;
+					justify-content: center;
+				}
+				.v2-item-copy svg,
+				.v2-item-regenerate svg {
+					width: 0.85rem;
+					height: 0.85rem;
+				}
+				/* El item necesita position:relative para que el
+				 * wrapper absoluto se posicione relativo a él. Ya
+				 * lo tiene por los estilos previos (.v2-item
+				 * tiene position:relative). */
+				.v2-item:hover .v2-item-actions,
+				.v2-item:hover .v2-item-copy,
+				.v2-item:hover .v2-item-regenerate,
+				.v2-item:focus-within .v2-item-actions,
+				.v2-item-copy:focus,
+				.v2-item-copy[data-state="copied"],
+				.v2-item-regenerate:focus,
+				.v2-item-regenerate[data-state="regenerating"] {
+					opacity: 1;
+				}
+				/* ponytail: en touch (no hay hover), los botones
+				 * quedan más visibles (0.7) para que sean
+				 * cliqueables. Sin esta regla, en mobile/tablet el
+				 * usuario nunca vería los botones. */
+				@media (hover: none) {
+					.v2-item-copy,
+					.v2-item-regenerate {
+						opacity: 0.7;
+					}
+				}
+				.v2-item-copy:hover,
+				.v2-item-regenerate:hover {
+					color: var(--v2-fg);
+					background: color-mix(in srgb, var(--v2-bg) 95%, transparent);
+				}
+				.v2-item-copy[data-state="copied"] {
+					color: var(--v2-accent);
+					border-color: color-mix(in srgb, var(--v2-accent) 40%, transparent);
+				}
+				/* Regenerate en estado "regenerating" (spinner)
+				 * mantiene opacity 1 siempre, no pointer-events
+				 * none (para evitar clicks extra). */
+				.v2-item-regenerate[data-state="regenerating"] {
+					color: var(--v2-accent);
+					border-color: color-mix(in srgb, var(--v2-accent) 40%, transparent);
+					pointer-events: none;
+				}
+				.v2-item-regenerate[data-state="regenerating"] svg {
+					animation: v2-regenerate-spin 1s linear infinite;
+				}
+				@keyframes v2-regenerate-spin {
+					from { transform: rotate(0deg); }
+					to { transform: rotate(360deg); }
+				}
+				.v2-item:hover .v2-item-copy,
+				.v2-item:focus-within .v2-item-copy,
+				.v2-item-copy:focus,
+				.v2-item-copy[data-state="copied"] {
+					opacity: 1;
+					pointer-events: auto;
+				}
+				.v2-item-copy:hover {
+					color: var(--v2-fg);
+					background: color-mix(in srgb, var(--v2-bg) 95%, transparent);
+				}
+				.v2-item-copy[data-state="copied"] {
+					color: var(--v2-accent);
+					border-color: color-mix(in srgb, var(--v2-accent) 40%, transparent);
+				}
+				@media (prefers-reduced-motion: reduce) {
+					.v2-item-copy {
+						transition: none;
+					}
+				}
+
+				.v2-composer {
+					border-top: 1px solid var(--v2-border);
+					padding: 0.75rem 1rem;
+					display: flex;
+					flex-direction: column;
+					gap: 0.5rem;
+				}
+
+				/* ponytail: composer autosize. El textarea arranca
+				 * con 2 filas y crece con el contenido hasta un
+				 * máximo de 8 filas. Si llega al máximo, hace
+				 * scroll interno en vez de seguir creciendo.
+				 *
+				 * El resize vertical del textarea lo bloqueamos
+				 * porque el JS es el dueño del tamaño (CSS resize
+				 * generaría inconsistencias con el handler de
+				 * input). */
+				.v2-input {
+					width: 100%;
+					resize: none;
+					min-height: 2.5rem;
+					max-height: 16rem;
+					padding: 0.65rem 0.85rem;
+					border: 1px solid var(--v2-border);
+					border-radius: 0.55rem;
+					background: transparent;
+					color: inherit;
+					font-family: inherit;
+					font-size: 0.92rem;
+					line-height: 1.5;
+					overflow-y: hidden;
+					/* ponytail: transition corta en height para que
+					 * el resize sea smooth, no abrupto. Sin esto,
+					 * el textarea salta de tamaño con cada línea. */
+					transition: height 80ms ease;
+				}
+				.v2-input:focus {
+					outline: 2px solid color-mix(in srgb, var(--v2-accent) 50%, transparent);
+					outline-offset: 1px;
+				}
+				.v2-input:disabled {
+					opacity: 0.6;
+					cursor: not-allowed;
+				}
+
+				/* Budget bar (balance + session cost). Compacta, sobre
+				 * el composer. Color por umbral: 70 % → warning,
+				 * 100 % → error. Los data-state los aplica el módulo
+				 * JS budget.js después de cada poll. */
+				.v2-budget-bar {
+					display: flex;
+					flex-wrap: wrap;
+					align-items: center;
+					justify-content: space-between;
+					gap: 0.25rem 0.75rem;
+					padding: 0.45rem 1rem 0.35rem;
+					font-family: var(--v2-mono);
+					font-size: 0.72rem;
+					border-top: 1px solid var(--v2-border);
+					color: var(--v2-muted);
+				}
+				.v2-budget-bar[data-state="warning"] {
+					color: color-mix(in srgb, var(--v2-warning, #f59e0b) 80%, transparent);
+				}
+				.v2-budget-bar[data-state="error"] {
+					color: var(--v2-error);
+				}
+				.v2-budget-cell {
+					display: inline-flex;
+					align-items: baseline;
+					gap: 0.35rem;
+					min-width: 0;
+				}
+				.v2-budget-cell-spacer {
+					flex: 1 1 auto;
+				}
+				.v2-budget-label {
+					text-transform: uppercase;
+					letter-spacing: 0.08em;
+					font-size: 0.62rem;
+					opacity: 0.7;
+				}
+				.v2-budget-value {
+					font-variant-numeric: tabular-nums;
+					color: var(--v2-fg);
+				}
+				.v2-budget-bar[data-state="warning"] .v2-budget-value,
+				.v2-budget-bar[data-state="error"] .v2-budget-value {
+					color: inherit;
+				}
+				.v2-budget-sep {
+					opacity: 0.4;
+					margin: 0 0.25rem;
+				}
+				.v2-budget-meta {
+					font-variant-numeric: tabular-nums;
+					opacity: 0.85;
+				}
+				/* ponytail: badge del modelo + % de contexto. Estilo
+				 consistente con el resto de la barra (texto chico,
+				 tabular-nums). El % cambia de color según data-state:
+				 ok=neutral, warning=warning, error=error. */
+				.v2-budget-cell-model {
+					font-variant-numeric: tabular-nums;
+				}
+				.v2-budget-model {
+					font-weight: 500;
+					opacity: 0.92;
+					letter-spacing: -0.01em;
+				}
+				.v2-budget-context {
+					opacity: 0.85;
+					transition: color 200ms ease;
+				}
+				.v2-budget-context[data-state="warning"] {
+					color: oklch(75% 0.16 70);
+					opacity: 1;
+				}
+				.v2-budget-context[data-state="error"] {
+					color: oklch(65% 0.22 25);
+					opacity: 1;
+					font-weight: 500;
+				}
+				.v2-budget-bar[data-state="empty"] .v2-budget-value,
+				.v2-budget-bar[data-state="empty"] .v2-budget-meta {
+					opacity: 0.6;
+				}
+				.v2-input {
+					width: 100%;
+					resize: none;
+					min-height: 2.5rem;
+					max-height: 16rem;
+					padding: 0.65rem 0.85rem;
+					border: 1px solid var(--v2-border);
+					border-radius: 0.55rem;
+					background: transparent;
+					color: inherit;
+					font-family: inherit;
+					font-size: 0.92rem;
+					line-height: 1.5;
+					overflow-y: hidden;
+					/* ponytail: transition corta en height para que
+					 * el resize sea smooth, no abrupto. Sin esto,
+					 * el textarea salta de tamaño con cada línea. */
+					transition: height 80ms ease;
+				}
+				.v2-input:focus {
+					outline: 2px solid color-mix(in srgb, var(--v2-accent) 50%, transparent);
+					outline-offset: 1px;
+				}
+				.v2-input:disabled {
+					opacity: 0.6;
+					cursor: not-allowed;
+				}
+				.v2-composer-actions {
+					display: flex;
+					align-items: center;
+					justify-content: space-between;
+				}
+				.v2-composer-meta {
+					font-family: var(--v2-mono);
+					font-size: 0.78rem;
+					color: var(--v2-muted);
+				}
+
+				/* Hamburger: visible sólo en mobile. El header lo
+				 * muestra antes del título. data-open=true indica
+				 * que el sidebar está desplegado (lo abre el JS). */
+				.v2-sidebar-open {
+					width: 2rem;
+					height: 2rem;
+					border: none;
+					border-radius: 0.4rem;
+					background: transparent;
+					color: var(--v2-fg);
+					display: none;
+					align-items: center;
+					justify-content: center;
+					cursor: pointer;
+					padding: 0;
+				}
+				.v2-sidebar-open:hover {
+					background: color-mix(in srgb, var(--v2-fg) 8%, transparent);
+				}
+				.v2-sidebar-open:focus-visible {
+					outline: 2px solid color-mix(in srgb, var(--v2-accent) 60%, transparent);
+					outline-offset: 1px;
+				}
+				.v2-sidebar-open svg {
+					width: 1.25rem;
+					height: 1.25rem;
+				}
+
+				@media (max-width: 720px) {
+					.v2-shell {
+						grid-template-columns: 1fr;
+						position: relative;
+					}
+					.v2-sidebar-open {
+						display: inline-flex;
+					}
+					/* En mobile el sidebar es un drawer fijo: oculto
+					 * por defecto (translateX(-100%)) y revelado con
+					 * data-open=true. Sin display:none para que la
+					 * animación de transición funcione. */
+					.v2-sidebar {
+						position: fixed;
+						inset: 0 auto 0 0;
+						width: min(82vw, 20rem);
+						z-index: 40;
+						transform: translateX(-100%);
+						transition: transform 180ms ease;
+						box-shadow: 0 0 24px rgba(0,0,0,0.18);
+					}
+					.v2-sidebar[data-open="true"] {
+						transform: translateX(0);
+					}
+					.v2-sidebar-backdrop {
+						position: fixed;
+						inset: 0;
+						background: color-mix(in srgb, var(--v2-fg) 50%, transparent);
+						z-index: 39;
+						opacity: 0;
+						pointer-events: none;
+						transition: opacity 180ms ease;
+					}
+					.v2-sidebar-backdrop[data-open="true"] {
+						opacity: 1;
+						pointer-events: auto;
+					}
+				}
+				@media (min-width: 721px) {
+					.v2-sidebar-backdrop {
+						display: none;
+					}
+				}
+				@media (prefers-reduced-motion: reduce) {
+					.v2-sidebar,
+					.v2-sidebar-backdrop {
+						transition-duration: 0.01ms !important;
+					}
+				}
+			</style>
+		</head>
+		<body class="v2-body">
+			@content
+			@v2StaticAssets()
+		</body>
+	</html>
+}
+
+// v2StaticAssets inyecta el módulo JS del chat V2. Lo sirve el
+// handler /agent/static/* desde el embed.FS del paquete.
+// El módulo es el único entrypoint del cliente V2 (no usamos
+// <script> inline — todo es JS real para mantener el bundle
+// medible y testeable).
+templ v2StaticAssets() {
+	<script type="module" src={ v2AssetURL("/agent/static/main.js") }></script>
+}
+
+func v2AssetURL(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "/agent/static/main.js"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return path
+}

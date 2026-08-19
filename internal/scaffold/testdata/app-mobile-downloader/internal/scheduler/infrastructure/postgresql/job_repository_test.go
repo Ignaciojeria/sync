@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	schedulerapp "fixtests1/internal/scheduler/application"
-	sharedpostgresql "fixtests1/internal/shared/infrastructure/postgresql"
+	schedulerapp "gitinittest5/internal/scheduler/application"
+	sharedpostgresql "gitinittest5/internal/shared/infrastructure/postgresql"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/jmoiron/sqlx"

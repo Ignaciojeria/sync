@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -46,6 +47,62 @@ func TestManagerMergePreview_PersistsMergedMetadata(t *testing.T) {
 	}
 	if got, want := merged.MergedCommit, "abc123"; got != want {
 		t.Fatalf("MergedCommit = %q, want %q", got, want)
+	}
+}
+
+func TestManagerMergePreview_NoChangesDoesNotPersistMergedMetadata(t *testing.T) {
+	// ponytail: cuando mergeSession devuelve NoChanges=true, el
+	// Manager trata el resultado como éxito sin integración real:
+	// NO setea MergedAt ni MergedCommit ni actualiza branches. Si
+	// no, el bar mostraría "Applied" erróneamente y la sesión
+	// quedaría inutilizable (un segundo click devolvería
+	// ErrPreviewAlreadyMerged sin haber integrado nada).
+	store := newStubStore()
+	manager := NewManager(store, &factoryRunner{})
+	manager = manager.WithSessionMerger(func(_ context.Context, session Session) (MergeResult, error) {
+		return MergeResult{
+			BaseBranch:    session.BaseBranch,
+			PreviewBranch: session.Branch,
+			NoChanges:     true,
+		}, nil
+	})
+	ctx := t.Context()
+
+	session, err := manager.Create(ctx, CreateSessionInput{Title: "merge-nochanges", CWD: t.TempDir()})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	stored, err := store.Get(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("store.Get: %v", err)
+	}
+	stored.Branch = "agent/" + session.ID
+	stored.BaseBranch = "main"
+	if err := store.Update(ctx, stored); err != nil {
+		t.Fatalf("store.Update: %v", err)
+	}
+
+	result, err := manager.MergePreview(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("MergePreview: %v", err)
+	}
+	if !result.NoChanges {
+		t.Fatalf("result.NoChanges = false, want true")
+	}
+	reloaded, err := store.Get(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("store.Get after: %v", err)
+	}
+	if reloaded.MergedAt != nil {
+		t.Fatalf("MergedAt = %v, want nil para noChanges", reloaded.MergedAt)
+	}
+	if strings.TrimSpace(reloaded.MergedCommit) != "" {
+		t.Fatalf("MergedCommit = %q, want empty para noChanges", reloaded.MergedCommit)
+	}
+	// Un segundo merge con noChanges debe seguir funcionando (la
+	// sesión no quedó inutilizable).
+	if _, err := manager.MergePreview(ctx, session.ID); err != nil {
+		t.Fatalf("second MergePreview (noChanges idempotent): %v", err)
 	}
 }
 

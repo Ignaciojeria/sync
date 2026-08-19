@@ -2,7 +2,7 @@ package agent
 
 import (
 	"encoding/base64"
-	authapp "fixtests1/internal/auth/application"
+	authapp "lastmile-agents/internal/auth/application"
 	"net/http"
 	"net/http/httptest"
 	"strings"

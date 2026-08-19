@@ -3,8 +3,8 @@ package dev
 import (
 	"context"
 	"errors"
-	"fixtests1/internal/quality/ui"
-	"fixtests1/internal/shared/server"
+	"gitinittest5/internal/quality/ui"
+	"gitinittest5/internal/shared/server"
 	"net/http"
 	"net/http/httptest"
 	"net/url"

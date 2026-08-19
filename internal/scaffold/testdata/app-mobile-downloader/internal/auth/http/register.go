@@ -1,9 +1,9 @@
 package auth
 
 import (
-	authpostgresql "fixtests1/internal/auth/infrastructure/postgresql"
-	"fixtests1/internal/shared/configuration"
-	"fixtests1/internal/shared/server"
+	authpostgresql "gitinittest5/internal/auth/infrastructure/postgresql"
+	"gitinittest5/internal/shared/configuration"
+	"gitinittest5/internal/shared/server"
 
 	"github.com/MicahParks/keyfunc/v3"
 )

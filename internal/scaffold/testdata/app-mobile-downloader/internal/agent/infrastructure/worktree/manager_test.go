@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	agentapp "fixtests1/internal/agent/application"
+	agentapp "lastmile-agents/internal/agent/application"
 )
 
 func TestPrepareCreatesSessionWorktree(t *testing.T) {
@@ -176,11 +176,122 @@ func TestMergePreview_RejectsDirtyBaseRepo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
+	// ponytail: nuevo commit en preview para que NO coincida con
+	// base; si no, el "no changes" check devolvería éxito y nunca
+	// llegaríamos al dirty check que queremos ejercitar acá.
+	if err := os.WriteFile(filepath.Join(session.WorkspacePath, "preview-only.txt"), []byte("p\n"), 0o644); err != nil {
+		t.Fatalf("preview write: %v", err)
+	}
+	mustGit(t, session.WorkspacePath, "add", "preview-only.txt")
+	mustGit(t, session.WorkspacePath, "commit", "-m", "preview change")
 	if err := os.WriteFile(filepath.Join(repoRoot, "README.md"), []byte("dirty\n"), 0o644); err != nil {
 		t.Fatalf("dirty write: %v", err)
 	}
 	if _, err := mgr.MergePreview(context.Background(), session); err == nil || !strings.Contains(err.Error(), "uncommitted changes") {
 		t.Fatalf("err = %v, want uncommitted changes", err)
+	}
+}
+
+func TestMergePreview_NoChangesWhenPreviewBranchMatchesBase(t *testing.T) {
+	// ponytail: session que nunca se despegó de base (preview HEAD
+	// == base HEAD). El merge devuelve NoChanges=true sin tocar la
+	// base ni crear commits.
+	repoRoot := initTestRepo(t)
+	workspacesDir := filepath.Join(t.TempDir(), "workspaces")
+	mgr := NewManager(repoRoot, workspacesDir)
+
+	session, err := mgr.Prepare(context.Background(), agentapp.Session{ID: "agent-merge-empty", CWD: repoRoot})
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	baseHEADBefore, err := os.ReadFile(filepath.Join(repoRoot, "README.md"))
+	if err != nil {
+		t.Fatalf("read base README before: %v", err)
+	}
+	result, err := mgr.MergePreview(context.Background(), session)
+	if err != nil {
+		t.Fatalf("MergePreview: %v", err)
+	}
+	if !result.NoChanges {
+		t.Fatalf("NoChanges = false, want true for empty session")
+	}
+	if strings.TrimSpace(result.Commit) != "" {
+		t.Fatalf("Commit = %q, want empty for no-op merge", result.Commit)
+	}
+	if result.BaseBranch != session.BaseBranch || result.PreviewBranch != session.Branch {
+		t.Fatalf("branches: base=%q preview=%q", result.BaseBranch, result.PreviewBranch)
+	}
+	baseHEADAfter, err := os.ReadFile(filepath.Join(repoRoot, "README.md"))
+	if err != nil {
+		t.Fatalf("read base README after: %v", err)
+	}
+	if string(baseHEADAfter) != string(baseHEADBefore) {
+		t.Fatalf("base README cambió tras no-op merge")
+	}
+}
+
+func TestMergePreview_NoChangesWhenPreviewIsAncestorOfBase(t *testing.T) {
+	// ponytail: si el branch de preview ya está mergeado en base
+	// (sus commits son ancestor de la base), no hay nada nuevo que
+	// integrar. Detectado via merge-base.
+	repoRoot := initTestRepo(t)
+	workspacesDir := filepath.Join(t.TempDir(), "workspaces")
+	mgr := NewManager(repoRoot, workspacesDir)
+
+	session, err := mgr.Prepare(context.Background(), agentapp.Session{ID: "agent-merge-ancestor", CWD: repoRoot})
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(session.WorkspacePath, "p.txt"), []byte("p\n"), 0o644); err != nil {
+		t.Fatalf("preview write: %v", err)
+	}
+	mustGit(t, session.WorkspacePath, "add", "p.txt")
+	mustGit(t, session.WorkspacePath, "commit", "-m", "preview commit")
+	if _, err := mgr.MergePreview(context.Background(), session); err != nil {
+		t.Fatalf("first MergePreview: %v", err)
+	}
+	// Después del primer merge, preview es ancestor de base. Una
+	// segunda llamada debería detectar "no changes" y no fallar.
+	result, err := mgr.MergePreview(context.Background(), session)
+	if err != nil {
+		t.Fatalf("second MergePreview: %v", err)
+	}
+	if !result.NoChanges {
+		t.Fatalf("NoChanges = false en segunda llamada, want true (preview ancestor)")
+	}
+}
+
+func TestMergePreview_AutoCommitsPendingWorktreeChangesBeforeMerge(t *testing.T) {
+	// ponytail: si pi dejó archivos sueltos en el worktree, los
+	// commiteamos antes del merge para no perderlos.
+	repoRoot := initTestRepo(t)
+	workspacesDir := filepath.Join(t.TempDir(), "workspaces")
+	mgr := NewManager(repoRoot, workspacesDir)
+
+	session, err := mgr.Prepare(context.Background(), agentapp.Session{ID: "agent-merge-pending", CWD: repoRoot})
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(session.WorkspacePath, "agent-loose.txt"), []byte("from agent\n"), 0o644); err != nil {
+		t.Fatalf("loose write: %v", err)
+	}
+	// No commitamos explícitamente — el manager debe hacerlo.
+	result, err := mgr.MergePreview(context.Background(), session)
+	if err != nil {
+		t.Fatalf("MergePreview: %v", err)
+	}
+	if result.NoChanges {
+		t.Fatalf("NoChanges = true, want false tras integrar loose files")
+	}
+	if strings.TrimSpace(result.Commit) == "" {
+		t.Fatal("Commit vacío tras integrar loose files")
+	}
+	merged, err := os.ReadFile(filepath.Join(repoRoot, "agent-loose.txt"))
+	if err != nil {
+		t.Fatalf("read merged file: %v", err)
+	}
+	if got := strings.ReplaceAll(string(merged), "\r\n", "\n"); got != "from agent\n" {
+		t.Fatalf("merged file = %q, want 'from agent\\n'", got)
 	}
 }
 

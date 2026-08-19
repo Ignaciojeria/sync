@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"fixtests1/internal/quality/ui"
+	"gitinittest5/internal/quality/ui"
 )
 
 func TestFilterCoverageFile(t *testing.T) {

@@ -1,0 +1,568 @@
+package v2
+
+import (
+	"regexp"
+	"strconv"
+	"strings"
+
+	agentapp "lastmile-agents/internal/agent/application"
+)
+
+// Page renderiza la shell principal del chat V2. Estructura:
+//
+//   <header>           → título de sesión + estado + abort + new
+//   <aside>            → lista de sesiones (sidebar)
+//   <main#feed>        → mensajes del chat
+//   <form#composer>    → input del usuario
+//
+// La V2 empieza deliberadamente austera (sin daisyUI chat-bubble,
+// sin glass-panel, sin emojis) porque el objetivo de M-A es
+// validar el flujo base con streaming visible, no conseguir
+// paridad visual con la V1. La estética entra en M-B junto con
+// thinking + tool cards.
+templ Page(state PageState) {
+	<div id="v2-app" class="v2-shell" data-active-session-id={ activeSessionID(state) } data-mount-prefix={ state.MountPrefix } data-user-jwt={ state.UserJWT } data-chat-state={ v2ChatState(hasConversation(state)) }>
+		<aside class="v2-sidebar">
+			<div class="v2-sidebar-header">
+				<h2 class="v2-sidebar-title">Sesiones</h2>
+				<form id="v2-new-session" class="v2-new-session-form">
+					<input type="hidden" name="title" value="Nueva sesión"/>
+					<input type="hidden" name="cwd" value={ state.DefaultCWD }/>
+					<input type="hidden" name="model" value={ state.DefaultModel }/>
+					<button type="submit" class="v2-btn-icon" title="Nueva sesión" aria-label="Nueva sesión">+</button>
+				</form>
+			</div>
+			<ul id="v2-sessions-list" class="v2-sessions-list">
+				if len(state.Sessions) == 0 {
+					<li class="v2-sessions-empty">Todavía no hay conversaciones.</li>
+				}
+				for _, session := range state.Sessions {
+					<li class={ v2SessionRowClass(state, session.ID) }>
+						<a href={ appPath(state, "/agent?session="+session.ID) } class="v2-session-link">
+							<div class="v2-session-title">{ sessionTitle(session.Title) }</div>
+							<div class="v2-session-meta">
+								<span>{ sessionStatusText(session.Status) }</span>
+								if strings.TrimSpace(session.Model) != "" {
+									<span class="v2-session-model">{ session.Model }</span>
+								}
+							</div>
+							// ponytail: preview del último mensaje del
+							// assistant. El server lo guarda en
+							// session.LastPreview cuando llega
+							// un message del assistant, un tool
+							// execution o un error. Lo truncamos
+							// a ~80 chars en sessionPreviewText
+							// para que entre en una línea del
+							// sidebar sin romper el layout.
+							//
+							// Si está vacío, no emitimos nada
+							// (la UI muestra sólo el status +
+							// model). Así sesiones nuevas sin
+							// respuesta del agent no ocupan
+							// espacio vertical extra.
+							if sessionPreviewText(session.LastPreview) != "" {
+								<div class="v2-session-preview">{ sessionPreviewText(session.LastPreview) }</div>
+							}
+						</a>
+						<button type="button" class="v2-btn-icon v2-session-delete" title="Eliminar sesión" data-session-delete={ session.ID } aria-label={ "Eliminar sesión " + sessionTitle(session.Title) }>×</button>
+					</li>
+				}
+			</ul>
+		</aside>
+
+		<main class="v2-main">
+			<header class="v2-header">
+				<button id="v2-sidebar-open" class="v2-sidebar-open" type="button" aria-label="Abrir menú de sesiones" aria-controls="v2-sidebar" aria-expanded="false">
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+				</button>
+				<h1 class="v2-title">{ shellTitle(state) }</h1>
+				<div class="v2-header-actions">
+					// ponytail: el badge primario YA NO vive en el
+					// header — se movió al budget bar, al lado del
+					// balance (estilo V1: 'Working' con dots animados).
+					// Acá dejamos sólo el toggle del badge secundario
+					// y el botón de abortar.
+					<span id="v2-phase-detail-badge" class="v2-phase-detail-badge" data-subphase="idle" aria-live="polite" aria-atomic="true" hidden></span>
+					<button id="v2-phase-detail-toggle" class="v2-phase-detail-toggle" type="button" aria-label="Mostrar detalles de la actividad del agente" aria-pressed="false" title="Mostrar/ocultar detalle de fase">
+						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+					</button>
+					// ponytail: botón "Open preview". Abre el preview
+					// del worktree en una tab nueva. Solo visible
+					// si hay un preview disponible (sesión activa
+					// + workspace path). Si no, [hidden].
+					<a id="v2-preview-open" class="v2-phase-detail-toggle" href={ templ.SafeURL(shellPreviewPath(state)) } target="_blank" rel="noopener noreferrer" title="Abrir preview en nueva tab" if shellPreviewPath(state) == "" { hidden }>
+						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
+					</a>
+					// ponytail: toggle del Worktree Inspector Panel.
+					// Icono tipo "git branch" para que sea
+					// inmediatamente reconocible.
+					<button id="v2-worktree-toggle" class="v2-phase-detail-toggle" type="button" aria-label="Mostrar panel de worktree" aria-pressed="false" title="Mostrar/ocultar worktree inspector">
+						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+					</button>
+					<button id="v2-abort" class="v2-btn v2-btn-danger" type="button" hidden>Abortar</button>
+				</div>
+			</header>
+
+			<button id="v2-sidebar-backdrop" class="v2-sidebar-backdrop" type="button" aria-label="Cerrar menú de sesiones" tabindex="-1"></button>
+
+			// ponytail: wrapper con flex-row que contiene el feed
+			// y el Worktree Inspector Panel. Antes el feed era
+			// solo child de v2-main (column), asi que el panel
+			// quedaba DEBAJO del feed. Con este wrapper row, el
+			// panel queda a la DERECHA del feed. El panel es
+			// [hidden] por default, asi que cuando esta cerrado
+			// el feed ocupa todo el ancho.
+			<div class="v2-feed-and-panel">
+				<section id="v2-feed-wrap" class="v2-feed-wrap">
+					<div id="v2-feed" class="v2-feed">					if !hasConversation(state) {
+						<div class="v2-empty">
+							<p class="v2-empty-headline">Mandá un mensaje para arrancar.</p>
+							<p class="v2-empty-sub">El stream del assistant va a aparecer acá en vivo.</p>
+						</div>
+					}
+					for _, item := range state.ConversationItems {
+						@RenderItem(item)
+					}
+				</div>
+				// ponytail: botón jump-to-bottom. Aparece cuando el
+				// user sube a leer mensajes anteriores y el chat
+				// sigue generando contenido abajo. Click → scroll
+				// al fondo + ocultar. Sigue el patrón estándar de
+				// GPT/Claude: scroll sticky + jump button.
+				<button id="v2-jump-bottom" class="v2-jump-bottom" type="button" aria-label="Bajar al último mensaje" title="Bajar al último mensaje" hidden>
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<polyline points="6 9 12 15 18 9"></polyline>
+					</svg>
+					<span id="v2-jump-bottom-count" class="v2-jump-bottom-count"></span>
+				</button>
+			</section>
+
+			// ponytail: Worktree Inspector Panel. Panel lateral
+			// colapsable a la derecha del feed que muestra:
+			// - Branch info (nombre, commits ahead/behind).
+			// - Files changed (lista con +/- stats).
+			// - Commits (lista con hash + message).
+			// - Botón "Apply to main" (merge).
+			// El user lo abre/cierra con el botón #v2-worktree-toggle
+			// en el header. Por default está oculto. Cuando se
+			// abre, el feed reduce su ancho max-width para hacer
+			// espacio (panel = 22rem).
+			<aside id="v2-worktree-panel" class="v2-worktree-panel" aria-label="Worktree inspector" hidden>
+				<header class="v2-worktree-header">
+					<h3 class="v2-worktree-title">Worktree</h3>
+					<button id="v2-worktree-close" type="button" class="v2-worktree-close" aria-label="Cerrar panel de worktree" title="Cerrar panel">×</button>
+				</header>
+				<div class="v2-worktree-body">
+					<section class="v2-worktree-section">
+						<h4 class="v2-worktree-section-title">Branch</h4>
+						<div id="v2-worktree-branch-info" class="v2-worktree-meta">—</div>
+					</section>
+					<section class="v2-worktree-section">
+						<h4 class="v2-worktree-section-title">Files changed <span id="v2-worktree-files-count" class="v2-worktree-section-meta"></span></h4>
+						<ul id="v2-worktree-files" class="v2-worktree-list"></ul>
+					</section>
+					<section class="v2-worktree-section">
+						<h4 class="v2-worktree-section-title">Commits <span id="v2-worktree-commits-count" class="v2-worktree-section-meta"></span></h4>
+						<ul id="v2-worktree-commits" class="v2-worktree-list"></ul>
+					</section>
+					// ponytail: botón "Apply to main" para mergear
+					// el worktree a la rama principal. Se deshabilita
+					// si no hay commits ahead. El click confirma
+					// (modal nativo) porque el merge puede causar
+					// conflictos que requieren intervencion manual.
+					<div class="v2-worktree-actions">
+						<button id="v2-worktree-apply" type="button" class="v2-worktree-apply" disabled title="Merge del worktree a la rama principal">
+							Aplicar a { v2WorktreeBaseBranch(state) }
+						</button>
+					</div>
+					<div id="v2-worktree-apply-status" class="v2-worktree-apply-status" hidden></div>
+					<div id="v2-worktree-diff" class="v2-worktree-diff" hidden>
+						<pre id="v2-worktree-diff-content" class="v2-worktree-diff-content"></pre>
+					</div>
+				</div>
+			</aside>
+			</div>
+
+			@v2BudgetBar(state)
+
+			<form id="v2-composer" class="v2-composer" autocomplete="off">
+				<textarea
+					id="v2-input"
+					name="message"
+					class="v2-input"
+					placeholder={ v2ComposerPlaceholder(activeSessionID(state)) }
+					rows="1"
+					if activeSessionID(state) == "" {
+						disabled
+					}
+				></textarea>
+				<div class="v2-composer-actions">
+					<span class="v2-composer-meta">{ shellModel(state) }</span>
+					<button id="v2-send" type="submit" class="v2-btn v2-btn-primary" disabled>Enviar</button>
+				</div>
+			</form>
+		</main>
+	</div>
+}
+
+// sessionTitle devuelve el título saneado (trim + fallback).
+func sessionTitle(title string) string {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return "Nueva sesión"
+	}
+	return title
+}
+
+// sessionStatusText devuelve el texto del badge de estado.
+func sessionStatusText(status agentapp.SessionStatus) string {
+	text := strings.TrimSpace(string(status))
+	if text == "" {
+		return "idle"
+	}
+	return text
+}
+
+// sessionPreviewText devuelve un preview corto del último
+// mensaje del assistant para mostrar en el sidebar. Si no hay
+// preview, retorna string vacío (la UI lo esconde).
+//
+// El server trunca el texto a 600 caracteres en LastPreview
+// (ver application/manager.go:setSessionPreview). Acá lo
+// truncamos a ~80 chars para que entre en una línea del sidebar
+// sin romper el layout. Si el preview empieza con tags de
+// thinking (<think>...</think>) los removemos — el sidebar no
+// debería mostrar razonamiento crudo.
+func sessionPreviewText(preview string) string {
+	clean := strings.TrimSpace(preview)
+	if clean == "" {
+		return ""
+	}
+	// ponytail: strip <think>...</think> que pi podría haber
+	// dejado inline en el text_delta. Regex non-greedy para
+	// tags anidados (pi a veces los emite recursivos cuando
+	// re-razona sobre su propia salida).
+	thinkRE := regexp.MustCompile(`<think>.*?</think>`)
+	clean = thinkRE.ReplaceAllString(clean, "")
+	// Si quedó un <think> sin cierre (regex no lo matchea),
+	// cortamos desde ahí — el resto es reasoning que no debería
+	// aparecer en el sidebar.
+	if idx := strings.Index(clean, "<think>"); idx >= 0 {
+		clean = clean[:idx]
+	}
+	// ponytail: normalizamos whitespace. El preview puede
+	// tener newlines del text_delta del LLM — para una sola
+	// línea en el sidebar, los colapsamos a espacios.
+	clean = strings.Join(strings.Fields(clean), " ")
+	clean = strings.TrimSpace(clean)
+	if clean == "" {
+		return ""
+	}
+	const max = 80
+	runes := []rune(clean)
+	if len(runes) > max {
+		return strings.TrimSpace(string(runes[:max-1])) + "…"
+	}
+	return clean
+}
+
+func v2SessionRowClass(state PageState, id string) string {
+	if strings.TrimSpace(activeSessionID(state)) == strings.TrimSpace(id) {
+		return "v2-session-row v2-session-row-active"
+	}
+	return "v2-session-row"
+}
+
+func v2ChatState(hasConversation bool) string {
+	if hasConversation {
+		return "conversation"
+	}
+	return "empty"
+}
+
+func v2ComposerPlaceholder(sessionID string) string {
+	if strings.TrimSpace(sessionID) == "" {
+		return "Carga o crea una sesión para empezar…"
+	}
+	return "Escribe un mensaje. Enter envía, Shift+Enter nueva línea."
+}
+
+// v2BudgetBar renderiza la barra de presupuesto sobre el composer.
+// Misma información que la V1 (balance global + gasto de la sesión
+// + request count) pero en formato V2: layout horizontal compacto,
+// tokens JetBrains Mono, coloreado por umbral.
+//
+// Los valores iniciales vienen del server-rendered snapshot en
+// PageState (state.SessionCostUSD/Ready/Reqs + state.BalanceUSD).
+// El módulo JS budget.js los refresca cada 15s (cost) y 60s
+// (balance). Si el snapshot es nil/empty, la barra arranca con
+// "—" y el cliente hace el primer poll al boot.
+templ v2BudgetBar(state PageState) {
+	<div id="v2-budget-bar" class="v2-budget-bar" data-state={ v2BudgetState(state) }>
+		<div class="v2-budget-cell">
+			<span class="v2-budget-label">balance</span>
+			<span id="v2-balance" class="v2-budget-value">{ v2BalanceText(state) }</span>
+		</div>
+		// ponytail: badge primario 'Working' al lado del
+		// balance, con 3 dots animados estilo V1. Igual que
+		// en V1, el texto se mantiene en inglés para
+		// consistencia visual con el resto del header.
+		// Arranca VACÍO (sin texto 'idle') para evitar el
+		// flash al cargar la página. El JS lo llena con
+		// 'Working' + dots cuando hay un turno activo. La
+		// animación de los dots vive en el CSS (keyframe
+		// pi-working) — no la maneja JS. Cuando termina el
+		// turno, JS pone texto vacío y oculta los dots con
+		// opacity 0 (transición suave de 120ms).
+		<span id="v2-phase-badge" class="v2-phase-badge" data-state="idle" aria-live="polite" aria-atomic="true">
+			<span class="v2-phase-badge-text"></span>
+			<span class="v2-phase-badge-dots" aria-hidden="true">
+				<span class="v2-working-dot"></span>
+				<span class="v2-working-dot"></span>
+				<span class="v2-working-dot"></span>
+			</span>
+		</span>
+		// ponytail: badge del modelo activo + display del uso del
+		// contexto. Se muestra al lado del Working badge (cerca
+		// del balance) porque el modelo y el context window son
+		// info del estado global del chat, no de la sesión
+		// específica. Muestra el model_alias (ej. "minimax/m3")
+		// y el % del context window consumido (ej. "19k/1M
+		// (2%)"). Se llena server-side desde el response del
+		// gateway para evitar el flash inicial, y el cliente lo
+		// refresca cada 15s junto con el session-cost. El color
+		// del % cambia según umbrales (verde < 50%, amarillo
+		// 50-80%, rojo > 80%).
+		if state.SessionModelAlias != "" || state.SessionContextWindow > 0 {
+			<span class="v2-budget-sep">·</span>
+			<span id="v2-session-model" class="v2-budget-model">{ v2SessionModelText(state) }</span>
+			if state.SessionContextWindow > 0 {
+				<span class="v2-budget-sep">·</span>
+				<span id="v2-context-pct" class="v2-budget-context" data-state={ v2ContextState(state) } title={ v2ContextTooltip(state) }>{ v2ContextText(state) }</span>
+			}
+		}
+		<div class="v2-budget-cell v2-budget-cell-spacer"></div>
+		<div class="v2-budget-cell">
+			<span class="v2-budget-label">esta sesión</span>
+			<span id="v2-session-spent" class="v2-budget-value">{ v2SessionSpentText(state) }</span>
+			<span class="v2-budget-sep">·</span>
+			<span id="v2-session-requests" class="v2-budget-meta">{ v2SessionRequestsText(state) }</span>
+		</div>
+	</div>
+}
+
+// v2BalanceText devuelve el texto del balance global. Si el
+// snapshot no llegó (gateway caído), muestra "—".
+func v2BalanceText(state PageState) string {
+	if state.BalanceUSD == nil {
+		return "—"
+	}
+	return v2FormatUSD(*state.BalanceUSD)
+}
+
+// v2SessionSpentText devuelve el texto del gasto de la sesión
+// activa. Si el gateway no devolvió datos, muestra "—".
+func v2SessionSpentText(state PageState) string {
+	if !state.SessionCostReady {
+		return "—"
+	}
+	return v2FormatUSD(state.SessionCostUSD)
+}
+
+// v2SessionRequestsText devuelve el contador de requests formateado.
+func v2SessionRequestsText(state PageState) string {
+	if !state.SessionCostReady {
+		return "0 req"
+	}
+	return v2FormatInt(int64(state.SessionCostReqs)) + " req"
+}
+
+// v2BudgetState replica la lógica de V1: si ninguna lectura
+// llegó, "empty"; si todo OK, "ok". El cliente agrega los
+// estados "warning"/"error" via data-state cuando el % consumido
+// pasa los umbrales.
+func v2BudgetState(state PageState) string {
+	if state.BalanceUSD == nil && !state.SessionCostReady {
+		return "empty"
+	}
+	return "ok"
+}
+
+// ponytail: helpers para el badge del modelo + uso del contexto.
+// El badge del modelo es el model_alias devuelto por el gateway
+// (ej. "minimax/m3"). El % de contexto es el total_tokens
+// dividido por el context_window, con colores que cambian según
+// umbrales (verde < 50%, amarillo 50-80%, rojo > 80%).
+func v2SessionModelText(state PageState) string {
+	return state.SessionModelAlias
+}
+
+// ponytail: v2WorktreeBaseBranch devuelve la base branch default
+// para mostrar en el botón "Aplicar a X". Usado en el panel del
+// worktree. Si la sesión activa tiene una base branch custom, la
+// usamos; sino caemos a "main".
+func v2WorktreeBaseBranch(state PageState) string {
+	if state.ActiveSession != nil && strings.TrimSpace(state.ActiveSession.BaseBranch) != "" {
+		return state.ActiveSession.BaseBranch
+	}
+	return "main"
+}
+
+// v2ContextText devuelve "19k/1M (2%)" o "—" si no hay datos.
+// Formato compacto estilo pi CLI: el context_window en M (mega)
+// si es >= 1M, en k si es >= 1k, sin sufijo si es < 1k.
+func v2ContextText(state PageState) string {
+	if state.SessionContextWindow <= 0 {
+		return "—"
+	}
+	window := state.SessionContextWindow
+	tokens := state.SessionCurrentPromptTokens
+	if tokens <= 0 {
+		// ponytail: fallback defensivo. Si el gateway no devuelve
+		// current_prompt_tokens (versión vieja), usamos el
+		// promedio (prompt_tokens / request_count). Nunca
+		// mostramos el total acumulado porque distorsionaba el %
+		// (ej. 60% cuando el context real era 3%).
+		if state.RequestCountProxy() > 0 {
+			tokens = state.SessionPromptTokens / int64(state.RequestCountProxy())
+		} else {
+			tokens = state.SessionPromptTokens
+		}
+	}
+	pct := 0
+	if window > 0 {
+		pct = int(float64(tokens) / float64(window) * 100)
+	}
+	if pct < 0 {
+		pct = 0
+	}
+	if pct > 100 {
+		pct = 100
+	}
+	return formatTokensCompact(tokens) + "/" + formatTokensCompact(window) + " (" + v2FormatInt(int64(pct)) + "%)"
+}
+
+// v2ContextState devuelve "ok" (< 50%), "warning" (50-80%) o
+// "error" (> 80%). Se aplica como data-state al span del %.
+func v2ContextState(state PageState) string {
+	if state.SessionContextWindow <= 0 {
+		return "ok"
+	}
+	var pct float64
+	if state.SessionCurrentPromptTokens > 0 {
+		pct = float64(state.SessionCurrentPromptTokens) / float64(state.SessionContextWindow) * 100
+	} else if state.RequestCountProxy() > 0 {
+		// ponytail: fallback al promedio mientras el gateway no
+		// devuelva current_prompt_tokens. Nunca usamos
+		// SessionTotalTokens (acumulado) porque daba 60%+ cuando
+		// el context real era <5%.
+		avg := state.SessionPromptTokens / int64(state.RequestCountProxy())
+		pct = float64(avg) / float64(state.SessionContextWindow) * 100
+	}
+	if pct >= 80 {
+		return "error"
+	}
+	if pct >= 50 {
+		return "warning"
+	}
+	return "ok"
+}
+
+// v2ContextTooltip devuelve un texto detallado para el tooltip
+// del % de contexto: prompt vs completion tokens. Útil para
+// debugging ("por qué el contexto está al 80%?").
+func v2ContextTooltip(state PageState) string {
+	if state.SessionContextWindow <= 0 {
+		return ""
+	}
+	// ponytail: mostramos el current_prompt_tokens (última
+	// llamada) en vez del acumulado, para que el tooltip
+	// refleje el state real del context window.
+	prompt := state.SessionCurrentPromptTokens
+	if prompt <= 0 && state.RequestCountProxy() > 0 {
+		prompt = state.SessionPromptTokens / int64(state.RequestCountProxy())
+	}
+	return "prompt: " + v2FormatInt(prompt) + " · completion: " + v2FormatInt(state.SessionCompletionTokens)
+}
+
+// formatTokensCompact formatea un número de tokens de forma
+// compacta. < 1000 → "847", >= 1000 < 1M → "19k", >= 1M → "1.0M".
+func formatTokensCompact(n int64) string {
+	if n < 1000 {
+		return v2FormatInt(n)
+	}
+	if n < 1_000_000 {
+		// Mostrar "19k" sin decimales si es múltiplo de 1000.
+		k := float64(n) / 1000
+		if n%1000 == 0 {
+			return v2FormatInt(n/1000) + "k"
+		}
+		return strings.TrimRight(strings.TrimRight(strconv.FormatFloat(k, 'f', 1, 64), "0"), ".") + "k"
+	}
+	m := float64(n) / 1_000_000
+	return strings.TrimRight(strings.TrimRight(strconv.FormatFloat(m, 'f', 1, 64), "0"), ".") + "M"
+}
+
+// v2FormatUSD formatea un número como USD. < 0.01 → 4 decimales
+// (para que el costo real no aparezca como $0.00).
+func v2FormatUSD(value float64) string {
+	if value == 0 {
+		return "$0.00"
+	}
+	if value < 0.01 {
+		return v2FormatFloat(value, 4)
+	}
+	return v2FormatFloat(value, 2)
+}
+
+func v2FormatFloat(value float64, decimals int) string {
+	if decimals == 0 {
+		return v2FormatInt(int64(value))
+	}
+	// Format manual sin importar "strconv" para mantener el archivo
+	// chico. Suficiente para los valores que vemos en el chat
+	// (siempre positivos, < 1M USD).
+	whole := int64(value)
+	frac := value - float64(whole)
+	if frac < 0 {
+		frac = -frac
+	}
+	multiplier := 1.0
+	for i := 0; i < decimals; i++ {
+		multiplier *= 10
+	}
+	fracInt := int64(frac*multiplier + 0.5)
+	if fracInt >= int64(multiplier) {
+		whole++
+		fracInt -= int64(multiplier)
+	}
+	pad := ""
+	padLen := decimals - len(v2FormatInt(fracInt))
+	for i := 0; i < padLen; i++ {
+		pad += "0"
+	}
+	return "$" + v2FormatInt(whole) + "." + pad + v2FormatInt(fracInt)
+}
+
+func v2FormatInt(value int64) string {
+	if value == 0 {
+		return "0"
+	}
+	negative := value < 0
+	if negative {
+		value = -value
+	}
+	digits := ""
+	for value > 0 {
+		digits = string(rune('0'+value%10)) + digits
+		value /= 10
+	}
+	if negative {
+		return "-" + digits
+	}
+	return digits
+}
+
+func v2FormatIntFromInt(value int) string {
+	return v2FormatInt(int64(value))
+}

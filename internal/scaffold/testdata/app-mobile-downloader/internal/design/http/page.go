@@ -1,10 +1,10 @@
 package design
 
 import (
-	designapp "fixtests1/internal/design/application"
-	designui "fixtests1/internal/design/ui"
-	"fixtests1/internal/shared/server"
-	"fixtests1/internal/ui/layout"
+	designapp "gitinittest5/internal/design/application"
+	designui "gitinittest5/internal/design/ui"
+	"gitinittest5/internal/shared/server"
+	"gitinittest5/internal/ui/layout"
 )
 
 func registerPageHandler(s *server.Server, catalog designapp.Catalog) {

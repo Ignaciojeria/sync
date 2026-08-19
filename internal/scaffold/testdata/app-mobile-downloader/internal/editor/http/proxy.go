@@ -1,7 +1,7 @@
 package editor
 
 import (
-	"fixtests1/internal/shared/server"
+	"gitinittest5/internal/shared/server"
 	"log"
 	"net/http"
 	"net/http/httputil"

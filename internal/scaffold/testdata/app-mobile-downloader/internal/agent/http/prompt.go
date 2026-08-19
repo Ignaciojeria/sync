@@ -1,10 +1,10 @@
 package agent
 
 import (
-	agentapp "fixtests1/internal/agent/application"
-	"fixtests1/internal/shared/server"
+	"log"
+	agentapp "lastmile-agents/internal/agent/application"
+	"lastmile-agents/internal/shared/server"
 	"net/http"
-	"strconv"
 	"strings"
 )
 
@@ -16,22 +16,65 @@ func promptHandler(s *server.Server, manager agentapp.AgentService, requireEdito
 func sendPrompt(manager agentapp.AgentService) http.HandlerFunc {
 	return sendMessage(manager, func(r *http.Request, id string, body messageRequest) error {
 		input := agentapp.PromptInput{
-			Message: body.Message,
-			Action:  agentapp.PromptAction(strings.TrimSpace(body.Action)),
-			TurnID:  strings.TrimSpace(body.TurnID),
+			Message:   body.Message,
+			Action:    agentapp.PromptAction(strings.TrimSpace(body.Action)),
+			TurnID:    strings.TrimSpace(body.TurnID),
+			UserEmail: emailFromContext(r),
 		}
+		// ponytail: persistimos el user_prompt ANTES de mandar al
+		// runtime. Si PromptRequest falla (timeout, ya procesando,
+		// runtime caído, queuePendingInput), el user prompt
+		// igualmente queda en el transcript + journal. Antes
+		// la persistencia estaba acoplada al success path:
+		// PromptRequest llamaba MaterializeUserPrompt al FINAL,
+		// después de runtime.Prompt. Si runtime.Prompt fallaba,
+		// el user prompt se perdía (transcript vacío, journal
+		// vacío) y el chat mostraba sólo la respuesta anterior
+		// del assistant sin la pregunta que la disparó. Por eso
+		// reportabas "se pierden mis mensajes más que la respuesta
+		// del agente" — la respuesta se persistía reactivamente
+		// por el SSE handler, el user prompt no.
+		//
+		// ponytail2: dedup en appendTranscriptItem via
+		// readLastTranscriptLine evita escribir dos veces el mismo
+		// user prompt si PromptRequest también lo materializa
+		// después (byte-exact match), así que el doble path
+		// (sendPrompt + PromptRequest's success path) es seguro.
+		agentapp.MaterializeUserPrompt(id, body.Message)
+		if err := journalPersistUserPrompt(r.Context(), id, body.Message); err != nil {
+			log.Printf("agent prompt: failed to persist user_prompt to journal for session %s: %v", truncate(id, 8), err)
+			return &journalPersistError{cause: err}
+		}
+		// Ahora intentamos mandarlo al runtime. Si falla, el user
+		// prompt YA está persistido y aparecerá en el transcript
+		// en el próximo LoadConversationHistory (sea inmediato o
+		// tras un refresh).
 		if err := manager.PromptRequest(r.Context(), id, input); err != nil {
-			return err
-		}
-		if runtimeEventsStore != nil {
-			event := agentapp.Event{SessionID: id, Type: "user_prompt", Payload: []byte(`{"text":` + strconv.Quote(strings.TrimSpace(body.Message)) + `}`)}
-			if _, err := runtimeEventsStore.Append(r.Context(), id, "pi", event); err != nil {
-				// ponytail: user prompt still persists in legacy transcript; postgres append is best-effort until legacy is removed.
-			}
+			// No removemos el item ya escrito — el user prompt es
+			// la intención del usuario, debe quedar registrada
+			// aunque el runtime no pueda procesarlo.
+			log.Printf("agent prompt: runtime.Prompt failed for session %s: %v (user prompt already persisted)", truncate(id, 8), err)
+			return nil
 		}
 		return nil
 	})
 }
+
+// journalPersistError envuelve un fallo de journal write para
+// que mapSessionError (en support.go) lo traduzca a 503 sin
+// filtrar detalles internos al cliente. El handler lo devuelve
+// antes del writeJSON(200) de sendMessage, así que el cliente ve
+// el status correcto.
+type journalPersistError struct{ cause error }
+
+func (e *journalPersistError) Error() string {
+	if e.cause == nil {
+		return "failed to persist prompt to journal"
+	}
+	return e.cause.Error()
+}
+
+func (e *journalPersistError) Unwrap() error { return e.cause }
 
 func sendSteer(manager agentapp.AgentService) http.HandlerFunc {
 	return sendMessage(manager, func(r *http.Request, id string, body messageRequest) error {

@@ -1,10 +1,10 @@
 package auth
 
 import (
-	authui "fixtests1/internal/auth/ui"
-	mounted "fixtests1/internal/shared/mounted"
-	"fixtests1/internal/shared/server"
-	"fixtests1/internal/ui/layout"
+	authui "gitinittest5/internal/auth/ui"
+	mounted "gitinittest5/internal/shared/mounted"
+	"gitinittest5/internal/shared/server"
+	"gitinittest5/internal/ui/layout"
 )
 
 func registerAuthLoginPage(s *server.Server) {

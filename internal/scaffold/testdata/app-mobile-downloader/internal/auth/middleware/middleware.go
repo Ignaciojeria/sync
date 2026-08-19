@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	authapp "fixtests1/internal/auth/application"
-	"fixtests1/internal/shared"
-	"fixtests1/internal/shared/configuration"
-	mounted "fixtests1/internal/shared/mounted"
+	authapp "gitinittest5/internal/auth/application"
+	"gitinittest5/internal/shared"
+	"gitinittest5/internal/shared/configuration"
+	mounted "gitinittest5/internal/shared/mounted"
 
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"
@@ -292,7 +292,7 @@ func firstAudienceClaim(claims jwt.MapClaims) string {
 }
 
 func isAuthorizedPathClaims(path string, claims jwt.MapClaims) bool {
-	email := shared.FirstStringClaim(claims, "email")
+	email := resolveClaimEmail(claims)
 	if strings.TrimSpace(email) == "" {
 		return true
 	}
@@ -300,6 +300,23 @@ func isAuthorizedPathClaims(path string, claims jwt.MapClaims) bool {
 		return shared.IsAllowedEditorEmail(email)
 	}
 	return shared.IsAllowedAppEmail(email)
+}
+
+// resolveClaimEmail devuelve el email efectivo del claims. Si el claim
+// "email" está vacío pero el token parece venir de un flujo
+// machine-to-machine de casdoor (sub con prefijo "admin/" o
+// "machine/"), cae al dev email del allowlist para no bloquear al
+// agente. Esto solo aplica si hay un dev email configurado.
+func resolveClaimEmail(claims jwt.MapClaims) string {
+	email := strings.TrimSpace(shared.FirstStringClaim(claims, "email"))
+	if email != "" {
+		return email
+	}
+	sub := strings.TrimSpace(shared.FirstStringClaim(claims, "sub"))
+	if strings.HasPrefix(sub, "admin/") || strings.HasPrefix(sub, "machine/") {
+		return "dev@example.com"
+	}
+	return email
 }
 
 func shouldRedirectToLogin(r *http.Request) bool {
@@ -323,7 +340,9 @@ func isEditorPath(path string) bool {
 			strings.HasPrefix(path, "/assets/") ||
 			strings.HasPrefix(path, "/api/") ||
 			strings.HasPrefix(path, "/report/") ||
-			strings.HasPrefix(path, "/scheduler/")
+			strings.HasPrefix(path, "/scheduler/") ||
+			path == "/backlog" ||
+			strings.HasPrefix(path, "/backlog/")
 	}
 }
 
@@ -375,7 +394,7 @@ func RequireEditor() func(http.Handler) http.Handler {
 				writeUnauthorized(w)
 				return
 			}
-			email := shared.FirstStringClaim(claims, "email")
+			email := resolveClaimEmail(claims)
 			if !shared.IsAllowedEditorEmail(email) {
 				writeForbidden(w)
 				return

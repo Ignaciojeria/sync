@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,18 +15,9 @@ import (
 	"sync"
 	"time"
 
-	agentapp "fixtests1/internal/agent/application"
-	"fixtests1/internal/shared/server"
+	agentapp "lastmile-agents/internal/agent/application"
+	"lastmile-agents/internal/shared/server"
 )
-
-type runtimeEventsStoreContract interface {
-	Append(ctx context.Context, sessionID string, kind string, payload any) (uint64, error)
-	ListAfter(ctx context.Context, sessionID string, after uint64, limit int) ([]agentapp.RuntimeEventRecord, error)
-}
-
-var runtimeEventsStore runtimeEventsStoreContract
-
-func SetRuntimeEventsStore(store runtimeEventsStoreContract) { runtimeEventsStore = store }
 
 func eventsHandler(s *server.Server, manager agentapp.AgentService, requireEditor func(http.Handler) http.Handler) {
 	server.Handle(s, "GET /agent/sessions/{id}/events", requireEditor(streamEvents(manager)))
@@ -72,32 +62,15 @@ func streamEvents(manager agentapp.AgentService) http.HandlerFunc {
 		}
 
 		if !liveOnly && since > 0 {
-			replayed := false
-			if runtimeEventsStore != nil {
-				rows, replayErr := runtimeEventsStore.ListAfter(r.Context(), id, since, 500)
-				if replayErr == nil {
-					for _, row := range rows {
-						if err := writeSSERaw(w, row.Kind, row.Offset, row.Payload); err != nil {
-							return
-						}
+			entries, replayErr := journal.replay(id, since, nil)
+			if replayErr == nil {
+				for _, e := range entries {
+					if err := writeSSERaw(w, e.Kind, e.Seq, e.Payload); err != nil {
+						return
 					}
-					if len(rows) > 0 {
-						flusher.Flush()
-					}
-					replayed = true
 				}
-			}
-			if !replayed {
-				entries, replayErr := journal.replay(id, since, nil)
-				if replayErr == nil {
-					for _, e := range entries {
-						if err := writeSSERaw(w, e.Kind, e.Seq, e.Payload); err != nil {
-							return
-						}
-					}
-					if len(entries) > 0 {
-						flusher.Flush()
-					}
+				if len(entries) > 0 {
+					flusher.Flush()
 				}
 			}
 		}
@@ -122,13 +95,6 @@ func streamEvents(manager agentapp.AgentService) http.HandlerFunc {
 				}
 				seq, appended, pErr := journal.appendOnce(id, "pi", event)
 				if pErr == nil && appended {
-					if runtimeEventsStore != nil {
-						if dbOffset, err := runtimeEventsStore.Append(r.Context(), id, "pi", event); err != nil {
-							slog.Warn("agent runtime events append failed", "session_id", id, "err", err)
-						} else if dbOffset > 0 {
-							seq = dbOffset
-						}
-					}
 					if seqSetter, ok := manager.(interface {
 						SetLastSeq(context.Context, string, uint64)
 					}); ok {
@@ -136,14 +102,110 @@ func streamEvents(manager agentapp.AgentService) http.HandlerFunc {
 					}
 					agentapp.MaterializeEvent(id, seq, event)
 				}
-				payload, mErr := json.Marshal(event)
-				if mErr != nil {
-					continue
+				// Emitimos siempre el envelope asimilado. Si el
+				// renderer concreto está disponible, el cliente
+				// recibe HTML listo para insertar; si no, recibe
+				// una señal de fase. El provider crudo se queda
+				// en el journal para replay/debug, no se reenvía.
+				if fragment, emit := agentapp.RenderFragment(id, seq, event); emit {
+					payload, mErr := json.Marshal(fragment)
+					if mErr != nil {
+						continue
+					}
+					if err := writeSSERaw(w, "agent-fragment", seq, payload); err != nil {
+						return
+					}
+					flusher.Flush()
+					// ponytail: el `continue` que estaba acá
+					// rompía la experiencia de chat durante
+					// tool calls. RenderFragment devuelve
+					// `{kind:"phase", phase:"tooling"}` para
+					// tool_execution_start — un envelope SIN
+					// HTML. Saltarnos EmitFragment significaba
+					// que el tool card con args (recién
+					// materializado al transcript por
+					// MaterializeEvent) NUNCA llegaba al
+					// cliente durante streaming: el usuario
+					// veía el badge cambiar a "tooling" pero
+					// el feed NO crecía, así que el sticky
+					// scroll no tenía nada nuevo a qué
+					// seguir. El tool card aparecía sólo
+					// después de un page reload (donde
+					// LoadConversationHistory lo recuperaba
+					// del transcript).
+					//
+					// Lógica nueva: sólo skipeamos EmitFragment
+					// cuando RenderFragment ya emitió HTML
+					// (kind="fragment"). Para envelopes
+					// auxiliares (phase, turn-end, queue)
+					// caemos al EmitFragment de abajo, que
+					// busca el item recién materializado por
+					// seq y emite su HTML si existe. El
+					// cliente termina recibiendo DOS envelopes
+					// por evento (phase + fragment), lo cual
+					// está bien — su state machine de phase es
+					// idempotente y el upsert por data-msg hace
+					// que el segundo envelope reemplace el
+					// mismo nodo, no se duplica visualmente.
+					if fragment.Kind == "fragment" {
+						continue
+					}
 				}
-				if err := writeSSERaw(w, "pi", seq, payload); err != nil {
-					return
+				// Materialización terminal (message_end,
+				// tool_execution_start, runtime_error): empujamos
+				// el item recién escrito al cliente como HTML
+				// final. EmitFragment lee el último seq del
+				// transcript y decide si hay algo nuevo que
+				// pintar.
+				if fe, emit := agentapp.EmitFragment(id, seq); emit {
+					payload, mErr := json.Marshal(fe)
+					if mErr != nil {
+						continue
+					}
+					if err := writeSSERaw(w, "agent-fragment", seq, payload); err != nil {
+						return
+					}
+					flusher.Flush()
 				}
-				flusher.Flush()
+				// ponytail: tras materializar un message_end, el turno
+				// del usuario está realmente cerrado (el assistant ya
+				// terminó su mensaje — con o sin texto visible). El
+				// runtime a veces NO emite turn_end explícito después
+				// de un prompt normal — sólo lo hace en agent_end o
+				// runtime_exit cuando el proceso entero termina.
+				// Sin esta señal sintética, el state machine del
+				// cliente quedaba atascado en turnPhase="answering"
+				// y el banner "Working…" seguía visible. Si después
+				// llega un turn_end real del runtime, es idempotente:
+				// el handler limpia los mismos flags otra vez.
+				//
+				// Va afuera del bloque EmitFragment porque cuando el
+				// assistant emite un message_end sin texto (draft
+				// vacío), EmitFragment no tiene item que renderizar
+				// y devuelve false — el cliente igual necesita la
+				// señal para limpiar su state machine.
+				if event.Type == "message_end" {
+					// ponytail: synthetic-end se distingue del turn-end
+					// real. Pi emite UN message_end por cada chunk de
+					// streaming del assistant (no sólo al final del
+					// turno). Si cada message_end generara un
+					// turn-end, el state machine del cliente bailaría
+					// entre "thinking" y "idle" 4-5 veces por segundo
+					// durante un turno largo — eso es el flicker que
+					// el user reportó. La señal sintética sólo
+					// destraba el composer (porque el draft ya está
+					// cerrado); el turn-end real (agent_end,
+					// turn_end, runtime_exit) es el que limpia el
+					// phase a idle y vacía el badge. La distinción se
+					// hace con el kind del envelope.
+					endPayload, endErr := json.Marshal(agentapp.FragmentEvent{Kind: "synthetic-end"})
+					if endErr == nil {
+						if err := writeSSERaw(w, "agent-fragment", seq, endPayload); err != nil {
+							return
+						}
+						flusher.Flush()
+					}
+				}
 			case <-keepalive.C:
 				if _, err := fmt.Fprint(w, ": keepalive\n\n"); err != nil {
 					return
@@ -329,4 +391,33 @@ func parseSince(s string) uint64 {
 	return n
 }
 
-var _ = agentapp.Event{}
+// ponytail: journalPersistUserPrompt persiste un evento
+// user_prompt directamente al journal y al runtimeEventsStore
+// (DB). Lo usa el POST handler para que el user_prompt quede
+// disponible para el SSE handler que se conecte después. El
+// rebuild del journal siempre lo va a leer del archivo, no
+// necesitamos una segunda copia en DB.
+//
+// Antes el POST handler hacía runtimeEventsStore.Append directo
+// (best-effort, error swallowed). Eso causaba que el user_prompt
+// NO quedara en el journal consistente. Cuando el user refrescaba
+// la página, el rebuild del journal no encontraba el user_prompt
+// y el feed se renderizaba sin la pregunta del user (sólo la
+// respuesta del agent).
+//
+// Ahora journalPersistUserPrompt usa journal.appendOnce que es
+// idempotente (seen-by-sig). Si el SSE handler está activo y
+// recibe el evento via broadcast, no hay duplicado.
+func journalPersistUserPrompt(ctx context.Context, sessionID, text string) error {
+	journal, err := openEventsJournal()
+	if err != nil {
+		return err
+	}
+	payload := agentapp.Event{
+		SessionID: sessionID,
+		Type:      "user_prompt",
+		Payload:   []byte(`{"text":` + strconv.Quote(strings.TrimSpace(text)) + `}`),
+	}
+	_, _, err = journal.appendOnce(sessionID, "pi", payload)
+	return err
+}

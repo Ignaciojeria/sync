@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"fixtests1/internal/shared"
-	"fixtests1/internal/shared/configuration"
+	"gitinittest5/internal/shared"
+	"gitinittest5/internal/shared/configuration"
 )
 
 type fakeRunner struct {

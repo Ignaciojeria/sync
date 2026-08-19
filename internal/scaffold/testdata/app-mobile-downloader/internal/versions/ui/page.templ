@@ -1,0 +1,209 @@
+package ui
+
+import (
+	"fmt"
+	"strings"
+
+	versionsapp "gitinittest5/internal/versions/application"
+)
+
+// ListPage renderiza la lista de versiones. Sigue la convención del
+// proyecto: el handler llama a layout.RenderPage y este componente
+// solo emite el contenido interior (sin <html>/<body>).
+templ ListPage(state ListState, previewPrefix string) {
+	<div class="space-y-6">
+		<section class="hero rounded-box border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card)] backdrop-blur overflow-hidden">
+			<div class="hero-content w-full max-w-none flex-col gap-4 px-6 py-7 lg:px-9 lg:py-8">
+				<div class="flex w-full flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+					<div class="max-w-3xl space-y-3">
+						<div class="flex flex-wrap items-center gap-2">
+							<span class="badge badge-ghost badge-lg uppercase tracking-[0.24em]">Versiones</span>
+							if count := len(state.Versions); count > 0 {
+								<span class="badge badge-outline badge-lg">{ fmt.Sprintf("%d merges", count) }</span>
+							}
+						</div>
+						<h1 class="text-3xl font-bold tracking-tight lg:text-4xl">Versiones desplegadas</h1>
+						<p class="max-w-2xl text-sm leading-7 opacity-72 lg:text-base">
+							Historial de merges de worktrees en la rama principal. Cada merge dispara un redeploy con air, por eso cada entrada equivale a una versión corriendo de la app.
+						</p>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		if state.Error != "" {
+			<div class="alert alert-error rounded-box">
+				<span>{ state.Error }</span>
+			</div>
+		}
+
+		if len(state.Versions) == 0 && state.Error == "" {
+			<div class="rounded-box border border-base-300/70 bg-base-100/80 p-8 text-center shadow-sm">
+				<p class="text-base font-semibold">Aún no hay versiones</p>
+				<p class="mt-2 text-sm opacity-65">Cuando aceptes un merge de un worktree, aparecerá acá como nueva versión.</p>
+			</div>
+		} else {
+			<section class="space-y-3">
+				for _, v := range state.Versions {
+					@versionCard(v, previewPrefix)
+				}
+			</section>
+		}
+	</div>
+}
+
+// versionCard es un item de la lista. Mantener el markup en un
+// sub-componente reduce ruido en ListPage y permite reusarlo
+// desde DetailPage si en el futuro queremos mostrar el "anterior"
+// al final del detalle.
+templ versionCard(v versionsapp.Version, previewPrefix string) {
+	<a
+		href={ templ.SafeURL(appPath(previewPrefix, "/versions/" + v.ShortSHA)) }
+		class="card border border-base-300/70 bg-base-100/90 shadow-sm transition hover:border-primary/50 hover:shadow-md"
+	>
+		<div class="card-body gap-2 p-4">
+			<div class="flex items-start justify-between gap-3">
+				<div class="min-w-0 flex-1">
+					<div class="flex items-center gap-2">
+						if v.IsCurrent {
+							<span class="badge badge-success badge-sm">● actual</span>
+						}
+						<code class="font-mono text-xs opacity-70">{ v.ShortSHA }</code>
+						if v.Branch != "" {
+							<span class="badge badge-ghost badge-sm">← { v.Branch }</span>
+						}
+					</div>
+					<p class="mt-1.5 text-sm font-semibold">{ firstLine(v.Message) }</p>
+					if body := commitBody(v.Message); body != "" {
+						<p class="mt-1 text-xs opacity-65 whitespace-pre-line line-clamp-3">{ body }</p>
+					}
+					<p class="mt-1 truncate text-xs opacity-60">{ v.Author } · { RelativeTime(v.When) }</p>
+				</div>
+				<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+			</div>
+		</div>
+	</a>
+}
+
+// DetailPage renderiza el detalle de una versión: metadata arriba,
+// diff contra HEAD debajo (un card por archivo).
+templ DetailPage(state DetailState, previewPrefix string) {
+	<div class="space-y-6">
+		<section class="hero rounded-box border border-base-300/70 bg-base-100/80 shadow-[var(--pi-shadow-card)] backdrop-blur overflow-hidden">
+			<div class="hero-content w-full max-w-none flex-col gap-4 px-6 py-7 lg:px-9 lg:py-8">
+				<div class="flex w-full flex-col gap-4">
+					<div class="flex items-center gap-2">
+						<a class="btn btn-ghost btn-sm" href={ templ.SafeURL(appPath(previewPrefix, "/versions")) }>
+							← Versiones
+						</a>
+						if state.Version.IsCurrent {
+							<span class="badge badge-success">● actual</span>
+						}
+					</div>
+					<div>
+						<code class="font-mono text-xs opacity-60">{ state.Version.SHA }</code>
+						<h1 class="mt-2 text-2xl font-bold tracking-tight lg:text-3xl">{ firstLine(state.Version.Message) }</h1>
+						<p class="mt-2 text-sm opacity-70">
+							{ state.Version.Author }
+							if state.Version.AuthorEmail != "" {
+								<span class="opacity-50"> · { state.Version.AuthorEmail }</span>
+							}
+							· { RelativeTime(state.Version.When) }
+						</p>
+						if state.Version.Branch != "" {
+							<p class="mt-1 text-xs opacity-55">Mergeado desde <code class="font-mono">{ state.Version.Branch }</code></p>
+						}
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<section class="rounded-box border border-base-300/70 bg-base-100/80 p-5 shadow-sm lg:p-6">
+			<div class="mb-4 flex items-center justify-between gap-3">
+				<div>
+					<h2 class="text-lg font-semibold">Cambios vs HEAD</h2>
+					<p class="text-sm opacity-65">Diff entre esta versión y el estado actual del workspace.</p>
+				</div>
+				if count := len(state.Files); count > 0 {
+					<span class="badge badge-ghost">{ fmt.Sprintf("%d archivos", count) }</span>
+				}
+			</div>
+
+			if len(state.Files) == 0 {
+				<div class="alert alert-soft">
+					<span>No se pudo calcular el diff (¿merge sin cambios o binario?).</span>
+				</div>
+			} else {
+				<div class="space-y-2">
+					for _, f := range state.Files {
+						@fileDiff(f)
+					}
+				</div>
+			}
+		</section>
+	</div>
+}
+
+// fileDiff muestra un archivo cambiado: path + adds/dels + preview.
+// El preview se trunca en application; acá solo lo renderizamos.
+templ fileDiff(f versionsapp.VersionFile) {
+	<div class="rounded-box border border-base-300/60 bg-base-100 p-3">
+		<div class="flex items-center justify-between gap-3">
+			<code class="truncate font-mono text-xs">{ f.Path }</code>
+			<div class="flex items-center gap-1.5 text-[11px] font-mono">
+				if f.Binary {
+					<span class="badge badge-warning badge-xs">binario</span>
+				} else {
+					<span class="text-success">+{ fmt.Sprint(f.Adds) }</span>
+					<span class="text-error">-{ fmt.Sprint(f.Dels) }</span>
+				}
+			</div>
+		</div>
+		if f.Preview != "" {
+			<pre class="mt-2 max-h-48 overflow-auto rounded bg-base-200/60 p-2 text-[11px] leading-snug"><code>{ f.Preview }</code></pre>
+		}
+	</div>
+}
+
+// appPath aplica el mount prefix a un path. Misma lógica que en
+// otros módulos de UI: si no hay prefix, devuelve path tal cual.
+func appPath(prefix, path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		path = "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	prefix = strings.TrimSpace(prefix)
+	prefix = strings.TrimRight(prefix, "/")
+	if prefix == "" {
+		return path
+	}
+	if path == "/" {
+		return prefix + "/"
+	}
+	return prefix + path
+}
+
+// firstLine toma solo la primera línea de un mensaje de merge para
+// mostrarla como título en la card. Evita títulos multilínea raros.
+func firstLine(s string) string {
+	if i := strings.IndexAny(s, "\r\n"); i >= 0 {
+		return s[:i]
+	}
+	return s
+}
+
+// commitBody devuelve el cuerpo del mensaje (todo lo que viene
+// después de la primera línea no vacía), sin espacios al borde.
+// Se usa en la card para mostrar la descripción humana del merge,
+// al estilo del cuerpo de un pull request.
+func commitBody(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	lines := strings.SplitN(s, "\n", 2)
+	if len(lines) < 2 {
+		return ""
+	}
+	return strings.TrimSpace(lines[1])
+}

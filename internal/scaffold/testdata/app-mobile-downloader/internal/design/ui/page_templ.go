@@ -9,7 +9,7 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import (
-	designapp "fixtests1/internal/design/application"
+	designapp "gitinittest5/internal/design/application"
 	"strings"
 )
 

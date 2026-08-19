@@ -1,10 +1,10 @@
 package auth
 
 import (
-	authapp "fixtests1/internal/auth/application"
-	"fixtests1/internal/shared/configuration"
-	mounted "fixtests1/internal/shared/mounted"
-	"fixtests1/internal/shared/server"
+	authapp "gitinittest5/internal/auth/application"
+	"gitinittest5/internal/shared/configuration"
+	mounted "gitinittest5/internal/shared/mounted"
+	"gitinittest5/internal/shared/server"
 	"net/http"
 	"strings"
 )

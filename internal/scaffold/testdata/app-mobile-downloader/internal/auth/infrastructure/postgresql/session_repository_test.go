@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	authapp "fixtests1/internal/auth/application"
-	sharedpostgresql "fixtests1/internal/shared/infrastructure/postgresql"
+	authapp "gitinittest5/internal/auth/application"
+	sharedpostgresql "gitinittest5/internal/shared/infrastructure/postgresql"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/jmoiron/sqlx"
